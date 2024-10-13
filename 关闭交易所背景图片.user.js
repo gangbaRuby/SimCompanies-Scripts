@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         关闭交易所背景图片
 // @namespace    http://tampermonkey.net/
-// @version      0.1
-// @description  Hide Market Background Image with CSS
+// @version      0.2
+// @description  通过判断css名字删除
 // @author       Rabbit House
 // @match        https://www.simcompanies.com/*
 // @grant        none
