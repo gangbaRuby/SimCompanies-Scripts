@@ -13,6 +13,6 @@
 
     // Add a style tag to the document head to hide the images with the specified class
     const style = document.createElement('style');
-    style.innerHTML = 'img.css-1io2n3s { display: none !important; }';
+    style.innerHTML = 'img.css-8ugz72 { display: none !important; }';
     document.head.appendChild(style);
 })();
