@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         关闭交易所背景图片
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  通过判断css名字删除
 // @author       Rabbit House
 // @match        https://www.simcompanies.com/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
 // @grant        none
 // ==/UserScript==
 
