@@ -7,7 +7,7 @@
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
 // @updateURL    https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
-// @downloadURL  https://cdn.jsdelivr.net/gh/SimCompanies-Scripts@main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
+// @downloadURL  https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
