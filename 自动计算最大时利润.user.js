@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -16,6 +16,44 @@
 
 (function () {
     'use strict';
+
+    // ======================
+    // 计算用到的函数
+    // ======================
+    let zn, lwe; //使用SimcompaniesConstantsData内数据
+    let size, acceleration, economyState, resource,
+        salesModifierWithRecreationBonus, skillCMO, skillCOO,
+        saturation, administrationOverhead, wages,
+        buildingKind, forceQuality, cogs, quality, quantity
+    const Ul = (overhead, skillCOO) => {
+        const r = overhead || 1;
+        return r - (r - 1) * skillCOO / 100;
+    };
+    const wv = (e, t, r) => {
+        return r === null ? lwe[e][t] : lwe[e][t].quality[r]
+    }
+    const Upt = (e, t, r, n) => t + (e + n) / r;
+    const Hpt = (e, t, r, n, a) => {
+        const o = (n + e) / ((t - a) * (t - a));
+        return e - (r - t) * (r - t) * o;
+    };
+    const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
+    const Bpt = (e, t, r, n, a, o) => {
+        const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+        const s = Math.min(Math.max(2 - n, 0), 2), l = s / 2 + 0.5, c = r / 12;
+        const d = zn.PROFIT_PER_BUILDING_LEVEL * (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) * g * (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) + (t.modeledStoreWages ?? 0);
+        // console.log(`t.buildingLevelsNeededPerUnitPerHour:${t.buildingLevelsNeededPerUnitPerHour}, t.modeledUnitsSoldAnHour:${t.modeledUnitsSoldAnHour}, t.modeledStoreWages:${t.modeledStoreWages} , s:${s} , c:${c}, g:${g}`)
+        const h = t.modeledUnitsSoldAnHour * l;
+        const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
+        const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
+        return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
+    };
+    const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size) => {
+        const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
+        if (u <= 0) return NaN;
+        const d = u / acc / size;
+        return d - d * salesModifier / 100;
+    };
 
     // ======================
     // 模块1：网络请求模块
@@ -83,7 +121,8 @@
                 realmId: data.authCompany?.realmId,
                 company: data.authCompany?.company,
                 salesModifier: data.authCompany?.salesModifier,
-                economyState: data.temporals?.economyState
+                economyState: data.temporals?.economyState,
+                acceleration: data.levelInfo?.acceleration?.multiplier
             };
         };
 
@@ -603,99 +642,67 @@
     // ======================
     // 模块6：商店内的最大时利润 本模块只使用了SimcompaniesConstantsData
     // ======================
-
-    // setInput: 输入并触发 input 事件
-    function setInput(inputNode, value, count = 3) {
-        let lastValue = inputNode.value;
-        inputNode.value = value;
-        let event = new Event("input", { bubbles: true });
-        event.simulated = true;
-        if (inputNode._valueTracker) inputNode._valueTracker.setValue(lastValue);
-        inputNode.dispatchEvent(event);
-        if (count >= 0) return setInput(inputNode, value, --count);
-    }
-
-    // 获取 React 组件
-    function findReactComponent(element) {
-        // 动态匹配所有可能的 React 内部属性
-        const reactKeys = Object.keys(element).filter(key =>
-            key.startsWith('__reactInternalInstance') ||
-            key.startsWith('__reactFiber')
-        );
-
-        for (const key of reactKeys) {
-            let fiberNode = element[key];
-            while (fiberNode) {
-                if (fiberNode.stateNode?.updateProfitPerUnit) {
-                    return fiberNode.stateNode;
-                }
-                fiberNode = fiberNode.return;
-            }
+    (function () {
+        // setInput: 输入并触发 input 事件
+        function setInput(inputNode, value, count = 3) {
+            let lastValue = inputNode.value;
+            inputNode.value = value;
+            let event = new Event("input", { bubbles: true });
+            event.simulated = true;
+            if (inputNode._valueTracker) inputNode._valueTracker.setValue(lastValue);
+            inputNode.dispatchEvent(event);
+            if (count >= 0) return setInput(inputNode, value, --count);
         }
-        return null;
-    }
 
-    // 计算函数
-    let zn, lwe;
-    const Ul = (overhead, skillCOO) => {
-        const r = overhead || 1;
-        return r - (r - 1) * skillCOO / 100;
-    };
-    const wv = (e, t, r) => {
-        return r === null ? lwe[e][t] : lwe[e][t].quality[r]
-    }
-    const Upt = (e, t, r, n) => t + (e + n) / r;
-    const Hpt = (e, t, r, n, a) => {
-        const o = (n + e) / ((t - a) * (t - a));
-        return e - (r - t) * (r - t) * o;
-    };
-    const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
-    const Bpt = (e, t, r, n, a, o) => {
-        const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
-        const s = Math.min(Math.max(2 - n, 0), 2), l = s / 2 + 0.5, c = r / 12;
-        const d = zn.PROFIT_PER_BUILDING_LEVEL * (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) * g * (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) + (t.modeledStoreWages ?? 0);
-        // console.log(`t.buildingLevelsNeededPerUnitPerHour:${t.buildingLevelsNeededPerUnitPerHour}, t.modeledUnitsSoldAnHour:${t.modeledUnitsSoldAnHour}, t.modeledStoreWages:${t.modeledStoreWages} , s:${s} , c:${c}, g:${g}`)
-        const h = t.modeledUnitsSoldAnHour * l;
-        const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
-        const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
-        return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
-    };
-    const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size) => {
-        const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
-        if (u <= 0) return NaN;
-        const d = u / acc / size;
-        return d - d * salesModifier / 100;
-    };
+        // 获取 React 组件
+        function findReactComponent(element) {
+            // 动态匹配所有可能的 React 内部属性
+            const reactKeys = Object.keys(element).filter(key =>
+                key.startsWith('__reactInternalInstance') ||
+                key.startsWith('__reactFiber')
+            );
 
-    // 主功能
-    function initAutoPricing() {
-        try {
-            const input = document.querySelector('input[name="price"]');
-            if (!input) {
-                // console.warn("[AutoPricing] Price input not found!");
-                return;
+            for (const key of reactKeys) {
+                let fiberNode = element[key];
+                while (fiberNode) {
+                    if (fiberNode.stateNode?.updateProfitPerUnit) {
+                        return fiberNode.stateNode;
+                    }
+                    fiberNode = fiberNode.return;
+                }
             }
+            return null;
+        }
 
-            const reactInstance = findReactComponent(input);
-            if (!reactInstance) {
-                console.warn("[AutoPricing] React component not found!", Object.keys(input));
-                return;
-            }
-            const cards = document.querySelectorAll('div[style="overflow: visible;"]');
+        // 主功能
+        function initAutoPricing() {
+            try {
+                const input = document.querySelector('input[name="price"]');
+                if (!input) {
+                    // console.warn("[AutoPricing] Price input not found!");
+                    return;
+                }
 
-            cards.forEach(card => {
-                if (card.dataset.autoPricingAdded) return;
+                const reactInstance = findReactComponent(input);
+                if (!reactInstance) {
+                    console.warn("[AutoPricing] React component not found!", Object.keys(input));
+                    return;
+                }
+                const cards = document.querySelectorAll('div[style="overflow: visible;"]');
 
-                const priceInput = card.querySelector('input[name="price"]');
-                if (!priceInput) return;
+                cards.forEach(card => {
+                    if (card.dataset.autoPricingAdded) return;
 
-                const comp = findReactComponent(priceInput);
-                if (!comp) return;
+                    const priceInput = card.querySelector('input[name="price"]');
+                    if (!priceInput) return;
 
-                const btn = document.createElement('button');
-                btn.textContent = '最大时利润';
-                btn.type = 'button';
-                btn.style = `
+                    const comp = findReactComponent(priceInput);
+                    if (!comp) return;
+
+                    const btn = document.createElement('button');
+                    btn.textContent = '最大时利润';
+                    btn.type = 'button';
+                    btn.style = `
                 margin-top: 5px;
                 background: #2196F3;
                 color: white;
@@ -706,116 +713,413 @@
                 width: 100%;
             `;
 
-                btn.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
+                    btn.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
 
-                    if (localStorage.getItem('SimcompaniesConstantsData') == null) {
-                        alert("请尝试更新基本数据（左下角按钮）");
-                        return;
-                    }
-                    lwe = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).retailInfo;
-                    zn = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
-                    const {
-                        size, acceleration, economyState, resource,
-                        salesModifierWithRecreationBonus, skillCMO, skillCOO,
-                        saturation, administrationOverhead, wages,
-                        buildingKind, forceQuality
-                    } = comp.props;
-                    const { cogs, quality, quantity } = comp.state
-
-                    // console.log(`size:${size}, acceleration:${acceleration}, economyState：${economyState},
-                    // resource：${resource},salesModifierWithRecreationBonus:${salesModifierWithRecreationBonus},
-                    // skillCMO：${skillCMO}, skillCOO:${skillCOO},
-                    // saturation:${saturation}, administrationOverhead:${administrationOverhead}, wages:${wages},
-                    // buildingKind:${buildingKind}, forceQuality:${forceQuality}，cogs:${cogs}, quality:${quality}, quantity:${quantity}`)
-                    // console.log(`zn.PROFIT_PER_BUILDING_LEVEL: ${zn.PROFIT_PER_BUILDING_LEVEL}`)
-
-                    let currentPrice = Math.floor(cogs / quantity) || 1;
-                    let bestPrice = currentPrice;
-                    let maxProfit = -Infinity;
-                    let _, v, b, w, revenue, wagesTotal, secondsToFinish, currentWagesTotal = 0;
-                    // console.log(`currentPrice：${currentPrice}, bestPrice：${bestPrice}， maxProfit：${maxProfit}`)
-
-                    // setInput(input, currentPrice.toFixed(2));
-
-                    // 以下两个不受currentPrice影响 可不参与循环
-                    v = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
-                    b = Ul(administrationOverhead, skillCOO);
-
-                    while (currentPrice > 0) {
-
-
-                        w = zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size);
-
-                        // console.log(`v:${v}, b:${b}, w:${w}`)
-
-                        revenue = currentPrice * quantity;
-                        wagesTotal = Math.ceil(w * wages * acceleration * b / 60 / 60);
-                        secondsToFinish = w;
-
-                        // console.log(`revenue:${revenue}, wagesTotal:${wagesTotal}, secondsToFinish:${secondsToFinish}`)
-                        if (!secondsToFinish || secondsToFinish <= 0) break;
-
-                        let profit = (revenue - cogs - wagesTotal) / secondsToFinish;
-                        if (profit > maxProfit) {
-                            maxProfit = profit;
-                            bestPrice = currentPrice;
-                        } else if (maxProfit > 0 && profit < 0) { //有正利润后出现负利润提前终端循环
-                            break;
+                        if (localStorage.getItem('SimcompaniesConstantsData') == null) {
+                            alert("请尝试更新基本数据（左下角按钮）");
+                            return;
                         }
-                        // console.log(`当前定价：${bestPrice}, 当前最大秒利润：${maxProfit}`)
-                        if (currentPrice < 8) {
-                            currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-                        } else if (currentPrice < 2001) {
-                            currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
-                        } else {
-                            currentPrice = Math.round(currentPrice + 1);
+                        lwe = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).retailInfo;
+                        zn = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
+
+                        // 直接从comp.props赋值
+                        size = comp.props.size;
+                        acceleration = comp.props.acceleration;
+                        economyState = comp.props.economyState;
+                        resource = comp.props.resource;
+                        salesModifierWithRecreationBonus = comp.props.salesModifierWithRecreationBonus;
+                        skillCMO = comp.props.skillCMO;
+                        skillCOO = comp.props.skillCOO;
+                        saturation = comp.props.saturation;
+                        administrationOverhead = comp.props.administrationOverhead;
+                        wages = comp.props.wages;
+                        buildingKind = comp.props.buildingKind;
+                        forceQuality = comp.props.forceQuality;
+
+                        // 直接从comp.state赋值
+                        cogs = comp.state.cogs;
+                        quality = comp.state.quality;
+                        quantity = comp.state.quantity;
+
+                        // console.log(`size:${size}, acceleration:${acceleration}, economyState：${economyState},
+                        // resource：${resource},salesModifierWithRecreationBonus:${salesModifierWithRecreationBonus},
+                        // skillCMO：${skillCMO}, skillCOO:${skillCOO},
+                        // saturation:${saturation}, administrationOverhead:${administrationOverhead}, wages:${wages},
+                        // buildingKind:${buildingKind}, forceQuality:${forceQuality}，cogs:${cogs}, quality:${quality}, quantity:${quantity}`)
+                        // console.log(`zn.PROFIT_PER_BUILDING_LEVEL: ${zn.PROFIT_PER_BUILDING_LEVEL}`)
+
+                        let currentPrice = Math.floor(cogs / quantity) || 1;
+                        let bestPrice = currentPrice;
+                        let maxProfit = -Infinity;
+                        let _, v, b, w, revenue, wagesTotal, secondsToFinish, currentWagesTotal = 0;
+                        // console.log(`currentPrice：${currentPrice}, bestPrice：${bestPrice}， maxProfit：${maxProfit}`)
+
+                        // setInput(input, currentPrice.toFixed(2));
+
+                        // 以下两个不受currentPrice影响 可不参与循环
+                        v = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
+                        b = Ul(administrationOverhead, skillCOO);
+
+                        while (currentPrice > 0) {
+
+
+                            w = zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size);
+
+                            // console.log(`v:${v}, b:${b}, w:${w}`)
+
+                            revenue = currentPrice * quantity;
+                            wagesTotal = Math.ceil(w * wages * acceleration * b / 60 / 60);
+                            secondsToFinish = w;
+
+                            // console.log(`revenue:${revenue}, wagesTotal:${wagesTotal}, secondsToFinish:${secondsToFinish}`)
+                            if (!secondsToFinish || secondsToFinish <= 0) break;
+
+                            let profit = (revenue - cogs - wagesTotal) / secondsToFinish;
+                            if (profit > maxProfit) {
+                                maxProfit = profit;
+                                bestPrice = currentPrice;
+                            } else if (maxProfit > 0 && profit < 0) { //有正利润后出现负利润提前终端循环
+                                break;
+                            }
+                            // console.log(`当前定价：${bestPrice}, 当前最大秒利润：${maxProfit}`)
+                            if (currentPrice < 8) {
+                                currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                            } else if (currentPrice < 2001) {
+                                currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                            } else {
+                                currentPrice = Math.round(currentPrice + 1);
+                            }
                         }
-                    }
 
-                    setInput(priceInput, bestPrice.toFixed(2));
+                        setInput(priceInput, bestPrice.toFixed(2));
 
 
-                    // 校验用 如果误差大则提示用户尝试更新数据
-                    currentWagesTotal = Math.ceil(zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, bestPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size) * wages * acceleration * b / 60 / 60);
-                    // console.log(`currentWagesTotal:${currentWagesTotal}, comp.state.wagesTotal: ${comp.state.wagesTotal}`)
-                    if (currentWagesTotal !== comp.state.wagesTotal) {
-                        alert("先输入数量或请尝试更新基本数据（左下角按钮）");
-                    }
+                        // 校验用 如果误差大则提示用户尝试更新数据
+                        currentWagesTotal = Math.ceil(zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, bestPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size) * wages * acceleration * b / 60 / 60);
+                        // console.log(`currentWagesTotal:${currentWagesTotal}, comp.state.wagesTotal: ${comp.state.wagesTotal}`)
+                        if (currentWagesTotal !== comp.state.wagesTotal) {
+                            alert("先输入数量或请尝试更新基本数据（左下角按钮）");
+                        }
 
-                };
+                    };
 
-                priceInput.parentNode.insertBefore(btn, priceInput.nextSibling);
-                card.dataset.autoPricingAdded = 'true';
-            });
-        } catch (err) {
-            // console.error("[AutoPricing] Critical error:", err);
+                    priceInput.parentNode.insertBefore(btn, priceInput.nextSibling);
+                    card.dataset.autoPricingAdded = 'true';
+                });
+            } catch (err) {
+                // console.error("[AutoPricing] Critical error:", err);
+            }
         }
-    }
 
-    // 启动观察器，只在商品卡片变化时运行自动定价逻辑
-    function observeCardsForAutoPricing() {
-        const observer = new MutationObserver((mutationsList) => {
-            for (const mutation of mutationsList) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                    initAutoPricing();
-                    break;
+        // 启动观察器，只在商品卡片变化时运行自动定价逻辑
+        function observeCardsForAutoPricing() {
+            // 防抖计时器
+            let debounceTimer;
+
+            // 目标容器 - 改为更具体的容器选择器（如果能确定的话）
+            const targetNode = document.body; // 或者更具体的容器如 '#shop-container'
+
+            // 优化后的观察器配置
+            const observer = new MutationObserver((mutationsList) => {
+                // 使用防抖避免频繁触发
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    // 检查是否有新增的卡片节点
+                    const hasNewCards = mutationsList.some(mutation => {
+                        return mutation.type === 'childList' &&
+                            mutation.addedNodes.length > 0 &&
+                            Array.from(mutation.addedNodes).some(node => {
+                                return node.nodeType === 1 && // 元素节点
+                                    (node.matches('div[style="overflow: visible;"]') ||
+                                        node.querySelector('div[style="overflow: visible;"]'));
+                            });
+                    });
+
+                    if (hasNewCards) {
+                        initAutoPricing();
+                    }
+                }, 100); // 100ms防抖延迟
+            });
+
+            // 优化观察配置
+            observer.observe(targetNode, {
+                childList: true,   // 观察直接子节点的添加/删除
+                subtree: true,     // 观察所有后代节点
+                attributes: false, // 不需要观察属性变化
+                characterData: false // 不需要观察文本变化
+            });
+
+            // 初始执行（使用requestAnimationFrame确保DOM已加载）
+            requestAnimationFrame(() => {
+                initAutoPricing();
+            });
+        }
+
+        observeCardsForAutoPricing();
+    })();
+
+    // ======================
+    // 模块7：交易所计算时利润 使用SimcompaniesRetailCalculation_{realmId} SimcompaniesConstantsData
+    // ======================
+    const ResourceMarketHandler = (function () {
+        let currentResourceId = null;
+        let currentRealmId = null;
+
+        function findValidTbody() {
+            return [...document.querySelectorAll('tbody')].find(tbody => {
+                const firstRow = tbody.querySelector('tr');
+                return firstRow &&
+                    firstRow.children.length >= 4 &&
+                    firstRow.querySelector('td > div > div > a[href*="/company/"]');
+            });
+        }
+
+        function extractNumbersFromAriaLabel(label) {
+            const cleanedLabel = label.replace(/,/g, ''); // 去除千位分隔符
+            const nums = cleanedLabel.match(/[\d.]+/g);
+            if (!nums || nums.length < 3) return null;
+            const lastThree = nums.slice(-3).map(x => Number(x));
+            const [price, quantity, quality] = lastThree;
+            if ([price, quantity, quality].some(n => isNaN(n))) return null;
+            return { price, quantity, quality };
+        }
+
+
+        function extractRealmIdOnce(tbody) {
+            if (currentRealmId) return;
+            const row = tbody.querySelector('tr');
+            const link = row?.querySelector('a[href*="/company/"]');
+            const match = link?.getAttribute('href')?.match(/\/company\/(\d+)\//);
+            if (match) {
+                currentRealmId = match[1];
+                console.log('区域ID：', currentRealmId);
+            }
+        }
+
+        function formatSeconds(seconds) {
+            const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+            const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
+
+        function processNewRows(tbody) {
+            const rows = tbody.querySelectorAll('tr');
+
+            rows.forEach(row => {
+                if (row.querySelector('span[data-profit-info]')) return;
+                const ariaData = extractNumbersFromAriaLabel(row.getAttribute('aria-label') || '');
+                if (!ariaData) return;
+
+                const order = {
+                    resourceId: currentResourceId,
+                    realmId: currentRealmId,
+                    price: ariaData.price,
+                    quantity: ariaData.quantity,
+                    quality: ariaData.quality,
+                    rowElement: row
+                };
+                // console.log('订单内容：', order);
+
+                let SCD = JSON.parse(localStorage.getItem("SimcompaniesConstantsData"))
+                let SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${order.realmId}`))
+
+                lwe = SCD.retailInfo;
+                zn = SCD.data;
+
+                // 直接从comp.props赋值
+                size = 1; //建筑等级 设为1即每级时利润
+                acceleration = SRC.acceleration;
+                economyState = SRC.economyState;
+                resource = order.resourceId;
+                salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus;
+                skillCMO = SRC.saleBonus;
+                skillCOO = SRC.adminBonus;
+
+                function getSaturation(realmId, quality) {
+                    const infoList = SRC.ResourcesRetailInfo;
+
+                    let match = infoList.find(item =>
+                        item.dbLetter === realmId &&
+                        (realmId !== 150 || item.quality === quality)
+                    );
+
+                    return match?.saturation;
+                }
+                let saturation = getSaturation(parseInt(resource), order.quality);
+                // console.log(saturation)
+                administrationOverhead = SRC.administration;
+                let buildingKind = Object.entries(SCD.data.SALES).find(([kind, idList]) =>
+                    idList.includes(parseInt(resource))
+                )?.[0];
+                // console.log(buildingKind)
+                let salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+                // console.log(salaryModifier)
+                let averageSalary = SCD.data.AVERAGE_SALARY;
+                // console.log(averageSalary)
+                let wages = averageSalary * salaryModifier;
+                let forceQuality = (parseInt(resource) === 150) ? quality : undefined;
+
+
+
+                // 直接从comp.state赋值
+                cogs = order.price * order.quantity;
+                quality = order.quality;
+                quantity = order.quantity;
+
+                /*
+                console.log(`size:${size}, acceleration:${acceleration}, economyState：${economyState},
+                 resource：${resource},salesModifierWithRecreationBonus:${salesModifierWithRecreationBonus},
+                 skillCMO：${skillCMO}, skillCOO:${skillCOO},
+                 saturation:${saturation}, administrationOverhead:${administrationOverhead}, wages:${wages},
+                 buildingKind:${buildingKind}, forceQuality:${forceQuality}，cogs:${cogs}, quality:${quality}, quantity:${quantity}`)
+                console.log(`zn.PROFIT_PER_BUILDING_LEVEL: ${zn.PROFIT_PER_BUILDING_LEVEL}`)
+                */
+
+                let currentPrice = order.price;
+                //let bestPrice = currentPrice;
+                let maxProfit = -Infinity;
+                let _, v, b, w, revenue, wagesTotal, secondsToFinish;
+                // console.log(`currentPrice：${currentPrice}, bestPrice：${bestPrice}， maxProfit：${maxProfit}`)
+
+                // setInput(input, currentPrice.toFixed(2));
+
+                // 以下两个不受currentPrice影响 可不参与循环
+                v = salesModifierWithRecreationBonus + skillCMO;
+                b = Ul(administrationOverhead, skillCOO);
+
+                // let saleTime = null;
+
+                while (currentPrice > 0) {
+
+
+                    w = zL(buildingKind, wv(economyState, resource, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size);
+
+                    // console.log(`v:${v}, b:${b}, w:${w}`)
+
+                    revenue = currentPrice * quantity;
+                    wagesTotal = Math.ceil(w * wages * acceleration * b / 60 / 60);
+                    secondsToFinish = w;
+
+                    // console.log(`revenue:${revenue}, wagesTotal:${wagesTotal}, secondsToFinish:${secondsToFinish}`)
+                    if (!secondsToFinish || secondsToFinish <= 0) break;
+
+                    let profit = (revenue - cogs - wagesTotal) / secondsToFinish;
+                    if (profit > maxProfit) {
+                        maxProfit = profit;
+                        // bestPrice = currentPrice;
+                        // saleTime = secondsToFinish
+                    } else if (maxProfit > 0 && profit < 0) { //有正利润后出现负利润提前终端循环
+                        break;
+                    }
+                    // console.log(`当前定价：${bestPrice}, 当前最大秒利润：${maxProfit}`)
+                    if (currentPrice < 8) {
+                        currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                    } else if (currentPrice < 2001) {
+                        currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                    } else {
+                        currentPrice = Math.round(currentPrice + 1);
+                    }
+                }
+
+                const actionCell = row.insertCell(-1);
+                const infoSpan = document.createElement('span');
+                // infoSpan.textContent = `|时利润：${(maxProfit * 3600).toFixed(2)},耗时：${formatSeconds(saleTime)}`;
+                infoSpan.textContent = `|时利润：${(maxProfit * 3600).toFixed(2)}`;
+                infoSpan.dataset.profitInfo = 'true';
+                infoSpan.style.fontSize = '14px';
+                infoSpan.style.color = 'white';
+                actionCell.appendChild(infoSpan);
+
+                // 你可在这里继续处理订单对象
+
+
+            });
+        }
+
+        return {
+            init: function (resourceId) {
+                currentResourceId = resourceId;
+                currentRealmId = null;
+                let observer;
+
+                function tryInit() {
+                    const tbody = findValidTbody();
+                    if (tbody) {
+                        if (observer) observer.disconnect();
+
+                        // 👉 在tbody上方插入一行文字
+                        const table = tbody.closest('table');
+                        if (table && !table.previousElementSibling?.dataset?.customNotice) {
+                            const infoText = document.createElement('div');
+                            infoText.textContent = '展示时利润为一级时利润，如未看到或未计算，请更新数据（左下按钮），请注意销售所需时间不要盲目进货';
+                            infoText.style.color = 'white';
+                            infoText.style.fontSize = '15px';
+                            infoText.style.fontWeight = 'bold';
+                            infoText.style.margin = '8px 0';
+                            infoText.dataset.customNotice = 'true'; // 避免重复插入
+                            table.parentElement.insertBefore(infoText, table);
+                        }
+
+                        extractRealmIdOnce(tbody);
+                        processNewRows(tbody);
+                        const rowObserver = new MutationObserver(() => processNewRows(tbody));
+                        rowObserver.observe(tbody, { childList: true, subtree: true });
+                    }
+                }
+
+                tryInit();
+                observer = new MutationObserver(tryInit);
+                observer.observe(document, { childList: true, subtree: true });
+            }
+        };
+    })();
+
+
+
+
+
+    // ======================
+    // 模块9：判断当前页面
+    // ======================
+    (function () {
+        const PAGE_ACTIONS = {
+            marketPage: {
+                pattern: /^https:\/\/www\.simcompanies\.com\/[^\/]+\/market\/resource\/(\d+)\/?$/,
+                action: (url) => {
+                    const match = url.match(/\/resource\/(\d+)\/?/);
+                    const resourceId = match ? match[1] : null;
+                    if (resourceId) {
+                        console.log('进入 market 页面，资源ID：', resourceId);
+                        ResourceMarketHandler.init(resourceId);
+                    }
                 }
             }
+        };
+
+        function handlePage() {
+            const url = location.href;
+            for (const { pattern, action } of Object.values(PAGE_ACTIONS)) {
+                if (pattern.test(url)) {
+                    action(url);
+                    return;
+                }
+            }
+        }
+
+        let lastUrl = '';
+        const observer = new MutationObserver(() => {
+            if (lastUrl !== location.href) {
+                lastUrl = location.href;
+                handlePage();
+            }
         });
+        observer.observe(document, { subtree: true, childList: true });
 
-        // 监听整个页面 body 的变化
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        handlePage();
+    })();
 
-        // 页面初始加载时执行一次
-        initAutoPricing();
-    }
 
-    observeCardsForAutoPricing();
 })();
-
-
