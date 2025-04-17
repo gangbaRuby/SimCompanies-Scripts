@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @updateURL    https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
-// @downloadURL  https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
+// @updateURL    https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
+// @downloadURL  https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -20,6 +20,7 @@
     // ======================
     // 计算用到的函数
     // ======================
+    let GLOBAL_REALM_ID = null;
     let zn, lwe; //使用SimcompaniesConstantsData内数据
     let size, acceleration, economyState, resource,
         salesModifierWithRecreationBonus, skillCMO, skillCOO,
@@ -374,7 +375,6 @@
             getData: () => _processedData
         };
     })();
-
 
     // ======================
     // 模块4：数据存储模块
@@ -813,7 +813,7 @@
                         // 创建新的 maxProfit 显示元素
                         const profitDisplay = document.createElement('div');
                         profitDisplay.className = 'auto-profit-display';
-                        profitDisplay.textContent = `每级时利润: ${((maxProfit/size)*3600).toFixed(2)}`;
+                        profitDisplay.textContent = `每级时利润: ${((maxProfit / size) * 3600).toFixed(2)}`;
                         profitDisplay.style = `
                             margin-top: 5px;
                             font-size: 14px;
@@ -1082,11 +1082,14 @@
                     if (tbody) {
                         if (observer) observer.disconnect();
 
+
+
+
                         // 👉 在tbody上方插入一行文字
                         const table = tbody.closest('table');
                         if (table && !table.previousElementSibling?.dataset?.customNotice) {
                             const infoText = document.createElement('div');
-                            infoText.textContent = '展示每级时利润，如未看到或未计算，请更新数据（左下按钮），本页面计算没有校验如不放心请少量进货';
+                            infoText.innerHTML = '目前进入树页面会严重卡顿,当高管发生变化后请手动更新<br>展示每级时利润，如未看到或未计算，请更新数据（左下按钮）,本页面计算没有校验如不放心请少量进货';
                             infoText.style.color = 'white';
                             infoText.style.fontSize = '15px';
                             infoText.style.fontWeight = 'bold';
@@ -1095,8 +1098,46 @@
                             table.parentElement.insertBefore(infoText, table);
                         }
 
-                        extractRealmIdOnce(tbody);
-                        processNewRows(tbody);
+
+                        if (localStorage.getItem("SimcompaniesConstantsData") === null || localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`) === null) { // 如果基本数据不存在则自动更新
+                            constantsData.initialize()
+                                .then(data => {
+                                    Storage.save('constants', data); // 同步完成
+                                    extractRealmIdOnce(tbody);       // 继续后续操作
+                                    if (!Object.values(JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES).some(list => list.includes(parseInt(currentResourceId)))) {
+                                        return;
+                                    }
+
+                                    // 检查是否需要更新区域数据
+                                    if (!localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`)) {
+                                        // 如果区域数据不存在，调用 fetchFullRegionData 获取数据
+                                        return RegionData.fetchFullRegionData();
+                                    } else {
+                                        processNewRows(tbody); 
+                                    }
+                                })
+                                .then(regionData => {
+                                    // 如果区域数据存在且成功获取，保存区域数据
+                                    if (regionData) {
+                                        Storage.save('region', regionData); // 保存区域数据
+                                        console.log('[RegionAutoUpdater] 区域数据已更新');
+                                    }
+                        
+                                    processNewRows(tbody); // 继续处理新行
+                                })
+                                .catch(err => {
+                                    console.error("基本数据初始化或区域数据更新失败", err);
+                                });
+
+                        } else {
+                            extractRealmIdOnce(tbody);
+                            if (!Object.values(JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES).some(list => list.includes(parseInt(currentResourceId)))) {
+                                return;
+                            }
+                            processNewRows(tbody);
+                        }
+
+
                         const rowObserver = new MutationObserver(() => processNewRows(tbody));
                         rowObserver.observe(tbody, { childList: true, subtree: true });
                     }
@@ -1109,9 +1150,9 @@
         };
     })();
 
-
-
-
+    // ======================
+    // 模块8：合同计算时利润 使用SimcompaniesRetailCalculation_{realmId} SimcompaniesConstantsData
+    // ======================
 
     // ======================
     // 模块9：判断当前页面
@@ -1152,6 +1193,165 @@
 
         handlePage();
     })();
+
+
+    // ======================
+    // 模块10：自动或定时更新数据 SimcompaniesConstantsData SimcompaniesRetailCalculation超过一小时就更新
+    // ======================
+
+    // 使用 MutationObserver 监听 DOM 变化并提取 realmId
+    const observer = new MutationObserver(() => {
+        const realmId = getRealmIdFromLink();
+        if (realmId !== null) {
+            console.log('[RegionAutoUpdater] 获取到 realmId:', realmId);
+            // 停止监听，因为已经找到了 realmId
+            observer.disconnect();
+
+            // 存到全局变量里
+            GLOBAL_REALM_ID = realmId;
+
+            // 首先执行 ConstantsAutoUpdater 的检查和更新
+            ConstantsAutoUpdater.checkAndUpdate();
+
+            // 然后执行 RegionAutoUpdater 的检查和更新
+            RegionAutoUpdater.checkAndUpdate(realmId);
+        }
+    });
+
+    // 提取 realmId 的函数
+    function getRealmIdFromLink() {
+        const link = document.querySelector('a[href*="/company/"]'); // 选择第一个符合条件的 <a> 标签
+        if (link) {
+            const match = link.href.match(/\/company\/(\d+)\//); // 提取 href 中的 realmId
+            return match ? parseInt(match[1], 10) : null; // 如果匹配到 realmId，返回
+        }
+        return null; // 如果没有找到符合条件的链接，返回 null
+    }
+
+    // ConstantsAutoUpdater 用于更新常量数据
+    const ConstantsAutoUpdater = (() => {
+        const STORAGE_KEY = 'SimcompaniesConstantsData';
+        const ONE_HOUR = 60 * 60 * 1000;
+
+        const needsUpdate = () => {
+            const dataStr = localStorage.getItem(STORAGE_KEY);
+            if (!dataStr) return true;
+
+            try {
+                const data = JSON.parse(dataStr);
+                const lastTime = new Date(data.timestamp).getTime();
+                const now = Date.now();
+                return now - lastTime > ONE_HOUR;
+            } catch (e) {
+                return true;
+            }
+        };
+
+        const update = async () => {
+            try {
+                const data = await constantsData.initialize();
+                Storage.save('constants', data);
+                console.log('[ConstantsAutoUpdater] 基本数据已更新');
+            } catch (err) {
+                console.error('[ConstantsAutoUpdater] 基本数据更新失败', err);
+            }
+        };
+
+        const checkAndUpdate = () => {
+            if (needsUpdate()) {
+                console.log('[ConstantsAutoUpdater] 开始更新基本数据...');
+                update();
+            } else {
+                console.log('[ConstantsAutoUpdater] 基本数据是最新的');
+            }
+        };
+
+        return { checkAndUpdate };
+    })();
+
+    // RegionAutoUpdater 用于更新区域数据
+    const RegionAutoUpdater = (() => {
+        const getStorageKey = realmId => `SimcompaniesRetailCalculation_${realmId}`;
+        const ONE_HOUR = 60 * 60 * 1000;
+
+        const needsUpdate = (realmId) => {
+            const key = `SimcompaniesRetailCalculation_${realmId}`;
+            const dataStr = localStorage.getItem(key);
+            if (!dataStr) return true;
+
+            try {
+                const data = JSON.parse(dataStr);
+                const lastTime = new Date(data.timestamp).getTime();
+                const now = Date.now();
+
+                const ONE_HOUR = 60 * 60 * 1000;
+                if (now - lastTime > ONE_HOUR) return true;
+
+                // 当前北京时间
+                const nowInBeijing = new Date(now + 8 * 60 * 60 * 1000);
+
+                // 早上 7:45 的北京时间戳
+                const todayBeijing = new Date(nowInBeijing.toISOString().slice(0, 10)); // 北京当天 0点
+                const morning745 = new Date(todayBeijing.getTime() + 7 * 60 * 60 * 1000 + 45 * 60 * 1000).getTime();
+
+                // 本周五 23:01 的北京时间戳
+                const currentWeekday = nowInBeijing.getUTCDay(); // 周日是 0
+                const daysUntilFriday = (5 - currentWeekday + 7) % 7;
+                const fridayDate = new Date(todayBeijing.getTime() + daysUntilFriday * 24 * 60 * 60 * 1000);
+                const friday2301 = new Date(fridayDate.getTime() + 23 * 60 * 60 * 1000 + 1 * 60 * 1000).getTime();
+
+                const lastTimeInBeijing = lastTime + 8 * 60 * 60 * 1000;
+
+                // 触发早上 7:45 的更新
+                if (now >= morning745 && lastTimeInBeijing < morning745) {
+                    return true;
+                }
+
+                // 触发周五 23:01 的更新
+                if (now >= friday2301 && lastTimeInBeijing < friday2301) {
+                    return true;
+                }
+
+                return false;
+            } catch (e) {
+                return true;
+            }
+        };
+
+
+        const update = async (realmId) => {
+            try {
+                let data;
+                data = await RegionData.fetchFullRegionData();
+                Storage.save('region', data);
+                console.log(`[RegionAutoUpdater] 区域数据（${realmId}）已更新`);
+            } catch (err) {
+                console.error(`[RegionAutoUpdater] 区域数据（${realmId}）更新失败`, err);
+            }
+        };
+
+        const checkAndUpdate = (realmId) => {
+            if (realmId === null) {
+                console.warn('[RegionAutoUpdater] 页面上无法识别 realmId');
+                return;
+            }
+
+            if (needsUpdate(realmId)) {
+                console.log(`[RegionAutoUpdater] 开始更新区域数据（${realmId}）...`);
+                update(realmId);
+            } else {
+                console.log(`[RegionAutoUpdater] 区域数据（${realmId}）是最新的`);
+            }
+        };
+
+        return { checkAndUpdate };
+    })();
+
+    // 监听页面加载完成后执行，但不再在 onload 直接提取 realmId
+    window.onload = () => {
+        // 开始监听 DOM 变化，直到提取到 realmId
+        observer.observe(document.body, { childList: true, subtree: true });
+    };
 
 
 })();
