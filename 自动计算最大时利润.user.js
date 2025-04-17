@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -190,13 +190,24 @@
                     return acc;
                 }, {});
 
+                const safeSkill = (position, skillName) => skills[position]?.[skillName] || 0;
+
                 return {
-                    saleBonus: Math.floor((skills.cmo.cmo + Math.floor(
-                        (skills.coo.cmo + skills.cfo.cmo + skills.cto.cmo) / 4
-                    )) / 3),
-                    adminBonus: skills.coo.coo + Math.floor(
-                        (skills.cfo.coo + skills.cmo.coo + skills.cto.coo) / 4
-                    )
+                    saleBonus: Math.floor((
+                        safeSkill('cmo', 'cmo') +
+                        Math.floor((
+                            safeSkill('coo', 'cmo') +
+                            safeSkill('cfo', 'cmo') +
+                            safeSkill('cto', 'cmo')
+                        ) / 4)
+                    ) / 3),
+                    adminBonus:
+                        safeSkill('coo', 'coo') +
+                        Math.floor((
+                            safeSkill('fco', 'coo') +
+                            safeSkill('cmo', 'coo') +
+                            safeSkill('cto', 'coo')
+                        ) / 4)
                 };
             };
 
@@ -703,15 +714,15 @@
                     btn.textContent = '最大时利润';
                     btn.type = 'button';
                     btn.style = `
-                margin-top: 5px;
-                background: #2196F3;
-                color: white;
-                border: none;
-                padding: 5px 10px;
-                border-radius: 4px;
-                cursor: pointer;
-                width: 100%;
-            `;
+                        margin-top: 5px;
+                        background: #2196F3;
+                        color: white;
+                        border: none;
+                        padding: 5px 10px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        width: 100%;
+                     `;
 
                     btn.onclick = (e) => {
                         e.preventDefault();
@@ -795,6 +806,25 @@
 
                         setInput(priceInput, bestPrice.toFixed(2));
 
+                        // 先移除旧的 maxProfit 显示（避免重复）
+                        const oldProfit = card.querySelector('.auto-profit-display');
+                        if (oldProfit) oldProfit.remove();
+
+                        // 创建新的 maxProfit 显示元素
+                        const profitDisplay = document.createElement('div');
+                        profitDisplay.className = 'auto-profit-display';
+                        profitDisplay.textContent = `每级时利润: ${((maxProfit/size)*3600).toFixed(2)}`;
+                        profitDisplay.style = `
+                            margin-top: 5px;
+                            font-size: 14px;
+                            color: white;
+                            background: gray;
+                            padding: 4px 8px;
+                            text-align: center;
+                        `;
+
+                        // 插入按钮下方
+                        btn.parentNode.insertBefore(profitDisplay, btn.nextSibling);
 
                         // 校验用 如果误差大则提示用户尝试更新数据
                         currentWagesTotal = Math.ceil(zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, bestPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size) * wages * acceleration * b / 60 / 60);
@@ -894,7 +924,7 @@
             const match = link?.getAttribute('href')?.match(/\/company\/(\d+)\//);
             if (match) {
                 currentRealmId = match[1];
-                console.log('区域ID：', currentRealmId);
+                // console.log('区域ID：', currentRealmId);
             }
         }
 
@@ -1027,10 +1057,12 @@
                 const actionCell = row.insertCell(-1);
                 const infoSpan = document.createElement('span');
                 // infoSpan.textContent = `|时利润：${(maxProfit * 3600).toFixed(2)},耗时：${formatSeconds(saleTime)}`;
-                infoSpan.textContent = `|时利润：${(maxProfit * 3600).toFixed(2)}`;
+                infoSpan.textContent = `时利润：${(maxProfit * 3600).toFixed(2)}`;
                 infoSpan.dataset.profitInfo = 'true';
                 infoSpan.style.fontSize = '14px';
                 infoSpan.style.color = 'white';
+                infoSpan.style.background = 'gray';
+                infoSpan.style.padding = '4px 8px';
                 actionCell.appendChild(infoSpan);
 
                 // 你可在这里继续处理订单对象
@@ -1054,7 +1086,7 @@
                         const table = tbody.closest('table');
                         if (table && !table.previousElementSibling?.dataset?.customNotice) {
                             const infoText = document.createElement('div');
-                            infoText.textContent = '展示时利润为一级时利润，如未看到或未计算，请更新数据（左下按钮），请注意销售所需时间不要盲目进货';
+                            infoText.textContent = '展示每级时利润，如未看到或未计算，请更新数据（左下按钮），本页面计算没有校验如不放心请少量进货';
                             infoText.style.color = 'white';
                             infoText.style.fontSize = '15px';
                             infoText.style.fontWeight = 'bold';
@@ -1092,7 +1124,7 @@
                     const match = url.match(/\/resource\/(\d+)\/?/);
                     const resourceId = match ? match[1] : null;
                     if (resourceId) {
-                        console.log('进入 market 页面，资源ID：', resourceId);
+                        // console.log('进入 market 页面，资源ID：', resourceId);
                         ResourceMarketHandler.init(resourceId);
                     }
                 }
