@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -111,7 +111,7 @@
     })();
 
     // ======================
-    // 模块2：区域数据模块
+    // 模块2：领域数据模块
     // ======================
 
     const RegionData = (() => {
@@ -174,7 +174,7 @@
         }
 
 
-        // 完整区域数据获取
+        // 完整领域数据获取
         const fetchFullRegionData = async () => {
             const auth = await getAuthInfo();
             const [recreation, executives, administration, resourcesRetailInfo] = await Promise.all([
@@ -205,7 +205,7 @@
                     adminBonus:
                         safeSkill('coo', 'coo') +
                         Math.floor((
-                            safeSkill('fco', 'coo') +
+                            safeSkill('cfo', 'coo') +
                             safeSkill('cmo', 'coo') +
                             safeSkill('cto', 'coo')
                         ) / 4)
@@ -566,7 +566,7 @@
             const btnGroup = document.createElement('div');
             btnGroup.className = 'SimcompaniesRetailCalculation-btn-group';
             btnGroup.append(
-                createActionButton('更新区域数据', 'region'),
+                createActionButton('更新领域数据', 'region'),
                 createActionButton('更新基本数据', 'constants')
             );
             content.appendChild(btnGroup);
@@ -616,7 +616,7 @@
                 statusElements[type === 'region' ? 'r1' : 'constants'].className = 'SimcompaniesRetailCalculation-region-status SimcompaniesRetailCalculation-no-data';
             } finally {
                 button.disabled = false;
-                button.textContent = type === 'region' ? '更新区域数据' : '更新基本数据';
+                button.textContent = type === 'region' ? '更新领域数据' : '更新基本数据';
             }
         };
 
@@ -924,7 +924,7 @@
             const match = link?.getAttribute('href')?.match(/\/company\/(\d+)\//);
             if (match) {
                 currentRealmId = match[1];
-                // console.log('区域ID：', currentRealmId);
+                // console.log('领域ID：', currentRealmId);
             }
         }
 
@@ -934,6 +934,8 @@
             const s = Math.floor(seconds % 60).toString().padStart(2, '0');
             return `${h}:${m}:${s}`;
         }
+
+        let count = 0;
 
         function processNewRows(tbody) {
             const rows = tbody.querySelectorAll('tr');
@@ -968,12 +970,12 @@
                 skillCMO = SRC.saleBonus;
                 skillCOO = SRC.adminBonus;
 
-                function getSaturation(realmId, quality) {
+                function getSaturation(resourceId, quality) {
                     const infoList = SRC.ResourcesRetailInfo;
 
                     let match = infoList.find(item =>
-                        item.dbLetter === realmId &&
-                        (realmId !== 150 || item.quality === quality)
+                        item.dbLetter === resourceId &&
+                        (resourceId !== 150 || item.quality === quality)
                     );
 
                     return match?.saturation;
@@ -990,7 +992,7 @@
                 let averageSalary = SCD.data.AVERAGE_SALARY;
                 // console.log(averageSalary)
                 let wages = averageSalary * salaryModifier;
-                let forceQuality = (parseInt(resource) === 150) ? quality : undefined;
+                let forceQuality = (parseInt(resource) === 150) ? order.quality : undefined;
 
 
 
@@ -1001,10 +1003,10 @@
 
                 /*
                 console.log(`size:${size}, acceleration:${acceleration}, economyState：${economyState},
-                 resource：${resource},salesModifierWithRecreationBonus:${salesModifierWithRecreationBonus},
-                 skillCMO：${skillCMO}, skillCOO:${skillCOO},
-                 saturation:${saturation}, administrationOverhead:${administrationOverhead}, wages:${wages},
-                 buildingKind:${buildingKind}, forceQuality:${forceQuality}，cogs:${cogs}, quality:${quality}, quantity:${quantity}`)
+                resource：${resource},salesModifierWithRecreationBonus:${salesModifierWithRecreationBonus},
+                skillCMO：${skillCMO}, skillCOO:${skillCOO},
+                saturation:${saturation}, administrationOverhead:${administrationOverhead}, wages:${wages},
+                buildingKind:${buildingKind}, forceQuality:${forceQuality}，cogs:${cogs}, quality:${quality}, quantity:${quantity}`)
                 console.log(`zn.PROFIT_PER_BUILDING_LEVEL: ${zn.PROFIT_PER_BUILDING_LEVEL}`)
                 */
 
@@ -1019,9 +1021,10 @@
                 // 以下两个不受currentPrice影响 可不参与循环
                 v = salesModifierWithRecreationBonus + skillCMO;
                 b = Ul(administrationOverhead, skillCOO);
+                // console.log(`v:${v}, b:${b}`)
 
                 // let saleTime = null;
-
+                count = count + 1
                 while (currentPrice > 0) {
 
 
@@ -1108,25 +1111,25 @@
                                         return;
                                     }
 
-                                    // 检查是否需要更新区域数据
+                                    // 检查是否需要更新领域数据
                                     if (!localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`)) {
-                                        // 如果区域数据不存在，调用 fetchFullRegionData 获取数据
+                                        // 如果领域数据不存在，调用 fetchFullRegionData 获取数据
                                         return RegionData.fetchFullRegionData();
                                     } else {
-                                        processNewRows(tbody); 
+                                        processNewRows(tbody);
                                     }
                                 })
                                 .then(regionData => {
-                                    // 如果区域数据存在且成功获取，保存区域数据
+                                    // 如果领域数据存在且成功获取，保存领域数据
                                     if (regionData) {
-                                        Storage.save('region', regionData); // 保存区域数据
-                                        console.log('[RegionAutoUpdater] 区域数据已更新');
+                                        Storage.save('region', regionData); // 保存领域数据
+                                        console.log('[RegionAutoUpdater] 领域数据已更新');
                                     }
-                        
+
                                     processNewRows(tbody); // 继续处理新行
                                 })
                                 .catch(err => {
-                                    console.error("基本数据初始化或区域数据更新失败", err);
+                                    console.error("基本数据初始化或领域数据更新失败", err);
                                 });
 
                         } else {
@@ -1197,6 +1200,7 @@
 
     // ======================
     // 模块10：自动或定时更新数据 SimcompaniesConstantsData SimcompaniesRetailCalculation超过一小时就更新
+    // 只在打开新标签页和切换领域是才会判断时间更新 更新数据无锁
     // ======================
 
     // 使用 MutationObserver 监听 DOM 变化并提取 realmId
@@ -1269,7 +1273,7 @@
         return { checkAndUpdate };
     })();
 
-    // RegionAutoUpdater 用于更新区域数据
+    // RegionAutoUpdater 用于更新领域数据
     const RegionAutoUpdater = (() => {
         const getStorageKey = realmId => `SimcompaniesRetailCalculation_${realmId}`;
         const ONE_HOUR = 60 * 60 * 1000;
@@ -1290,9 +1294,13 @@
                 // 当前北京时间
                 const nowInBeijing = new Date(now + 8 * 60 * 60 * 1000);
 
-                // 早上 7:45 的北京时间戳
+                // 早上 7:45 的北京时间戳 7:30开始更新饱和度 保险起见7:45更新 也是保证新的一天的第一次更新
                 const todayBeijing = new Date(nowInBeijing.toISOString().slice(0, 10)); // 北京当天 0点
                 const morning745 = new Date(todayBeijing.getTime() + 7 * 60 * 60 * 1000 + 45 * 60 * 1000).getTime();
+
+                // 早上 22:01 的北京时间戳 高管获得经验的更新
+                const todayBeijing1 = new Date(nowInBeijing.toISOString().slice(0, 10)); // 北京当天 0点
+                const executives2201 = new Date(todayBeijing1.getTime() + 22 * 60 * 60 * 1000 + 1 * 60 * 1000).getTime();
 
                 // 本周五 23:01 的北京时间戳
                 const currentWeekday = nowInBeijing.getUTCDay(); // 周日是 0
@@ -1304,6 +1312,11 @@
 
                 // 触发早上 7:45 的更新
                 if (now >= morning745 && lastTimeInBeijing < morning745) {
+                    return true;
+                }
+
+                // 触发晚上 22:01 的更新
+                if (now >= executives2201 && lastTimeInBeijing < executives2201) {
                     return true;
                 }
 
@@ -1324,9 +1337,9 @@
                 let data;
                 data = await RegionData.fetchFullRegionData();
                 Storage.save('region', data);
-                console.log(`[RegionAutoUpdater] 区域数据（${realmId}）已更新`);
+                console.log(`[RegionAutoUpdater] 领域数据（${realmId}）已更新`);
             } catch (err) {
-                console.error(`[RegionAutoUpdater] 区域数据（${realmId}）更新失败`, err);
+                console.error(`[RegionAutoUpdater] 领域数据（${realmId}）更新失败`, err);
             }
         };
 
@@ -1337,10 +1350,10 @@
             }
 
             if (needsUpdate(realmId)) {
-                console.log(`[RegionAutoUpdater] 开始更新区域数据（${realmId}）...`);
+                console.log(`[RegionAutoUpdater] 开始更新领域数据（${realmId}）...`);
                 update(realmId);
             } else {
-                console.log(`[RegionAutoUpdater] 区域数据（${realmId}）是最新的`);
+                console.log(`[RegionAutoUpdater] 领域数据（${realmId}）是最新的`);
             }
         };
 
