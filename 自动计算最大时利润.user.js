@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -896,6 +896,145 @@
     const ResourceMarketHandler = (function () {
         let currentResourceId = null;
         let currentRealmId = null;
+        let rowIdCounter = 0;
+        const pendingRows = new Map(); // rowId -> <tr> element
+
+        // Create worker blob: calculations move into worker's onmessage
+        const workerCode = `
+    self.onmessage = function(e) {
+        const { rowId, order, SCD, SRC } = e.data;
+        const { price, quantity, quality, resourceId: resource } = order;
+        // bring constants into worker scope
+        const lwe = SCD.retailInfo;
+        const zn = SCD.data;
+
+        // Utility functions defined inside to use local lwe and zn
+        const Ul = (overhead, skillCOO) => {
+            const r = overhead || 1;
+            return r - (r - 1) * skillCOO / 100;
+        };
+        const wv = (e, t, r) => {
+            return r === null ? lwe[e][t] : lwe[e][t].quality[r];
+        };
+        const Upt = (e, t, r, n) => t + (e + n) / r;
+        const Hpt = (e, t, r, n, a) => {
+            const o = (n + e) / ((t - a) * (t - a));
+            return e - (r - t) * (r - t) * o;
+        };
+        const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
+        const Bpt = (e, t, r, n, a, o) => {
+            const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+            const s = Math.min(Math.max(2 - n, 0), 2),
+                  l = s / 2 + 0.5,
+                  c = r / 12;
+            const d = zn.PROFIT_PER_BUILDING_LEVEL *
+                (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
+                g *
+                (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
+                (t.modeledStoreWages ?? 0);
+            const h = t.modeledUnitsSoldAnHour * l;
+            const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
+            const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
+            return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
+        };
+        const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size) => {
+            const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
+            if (u <= 0) return NaN;
+            const d = u / acc / size;
+            return d - d * salesModifier / 100;
+        };
+
+        // Initial debug log
+
+        // profit calculation loop
+        let currentPrice = price,
+            maxProfit = -Infinity,
+            size = 1,
+            acceleration = SRC.acceleration,
+            economyState = SRC.economyState,
+            salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
+            skillCMO = SRC.saleBonus,
+            skillCOO = SRC.adminBonus;
+
+        // compute saturation locally
+        const saturation = (() => {
+            const list = SRC.ResourcesRetailInfo;
+            const m = list.find(item =>
+                item.dbLetter === parseInt(resource) &&
+                (parseInt(resource) !== 150 || item.quality === quality)
+            );
+            return m?.saturation;
+        })();
+
+        const administrationOverhead = SRC.administration;
+        const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
+            ids.includes(parseInt(resource))
+        )?.[0];
+        const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+        const averageSalary = zn.AVERAGE_SALARY;
+        const wages = averageSalary * salaryModifier;
+        const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
+
+        const v = salesModifierWithRecreationBonus + skillCMO;
+        const b = Ul(administrationOverhead, skillCOO);
+
+        while (currentPrice > 0) {
+            const modeledData = wv(economyState, resource, forceQuality ?? null);
+            const w = zL(
+                buildingKind,
+                modeledData,
+                quantity,
+                v,
+                currentPrice,
+                forceQuality === void 0 ? quality : 0,
+                saturation,
+                acceleration,
+                size
+            );
+            const revenue = currentPrice * quantity;
+            const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
+            const secondsToFinish = w;
+            const profit = (!secondsToFinish || secondsToFinish <= 0)
+                ? NaN
+                : (revenue - price * quantity - wagesTotal) / secondsToFinish;
+
+            if (!secondsToFinish || secondsToFinish <= 0) break;
+            if (profit > maxProfit) {
+                maxProfit = profit;
+            } else if (maxProfit > 0 && profit < 0) {
+                break;
+            }
+            // price increment
+            if (currentPrice < 8) {
+                currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+            } else if (currentPrice < 2001) {
+                currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+            } else {
+                currentPrice = Math.round(currentPrice + 1);
+            }
+
+        }
+
+        self.postMessage({ rowId, maxProfit });
+    };
+    `;
+        const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+
+        profitWorker.onmessage = function (e) {
+            const { rowId, maxProfit } = e.data;
+            const row = pendingRows.get(rowId);
+            if (!row) return;
+            pendingRows.delete(rowId);
+            if (!row.querySelector('td.auto-profit-info')) {
+                const td = document.createElement('td');
+                td.classList.add('auto-profit-info');
+                const span = document.createElement('span');
+                span.textContent = `时利润：${(maxProfit * 3600).toFixed(2)}`;
+                span.style.cssText = 'font-size:14px;color:white;background:gray;padding:4px 8px';
+                td.appendChild(span);
+                row.appendChild(td);
+            }
+        };
 
         function findValidTbody() {
             return [...document.querySelectorAll('tbody')].find(tbody => {
@@ -935,198 +1074,76 @@
             return `${h}:${m}:${s}`;
         }
 
-        let count = 0;
-
-        function processNewRows(tbody) {
-            const rows = tbody.querySelectorAll('tr');
-
+        async function processNewRows(tbody) {
+            const salesMap = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES;
+            const rows = Array.from(tbody.querySelectorAll('tr'))
+                .filter(r => !r.querySelector('td.auto-profit-info') && !r.hasAttribute('data-profit-calculated'));
             rows.forEach(row => {
-                if (row.querySelector('span[data-profit-info]')) return;
                 const ariaData = extractNumbersFromAriaLabel(row.getAttribute('aria-label') || '');
                 if (!ariaData) return;
-
-                const order = {
-                    resourceId: currentResourceId,
-                    realmId: currentRealmId,
-                    price: ariaData.price,
-                    quantity: ariaData.quantity,
-                    quality: ariaData.quality,
-                    rowElement: row
-                };
-                // console.log('订单内容：', order);
-
-                let SCD = JSON.parse(localStorage.getItem("SimcompaniesConstantsData"))
-                let SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${order.realmId}`))
-
-                lwe = SCD.retailInfo;
-                zn = SCD.data;
-
-                // 直接从comp.props赋值
-                size = 1; //建筑等级 设为1即每级时利润
-                acceleration = SRC.acceleration;
-                economyState = SRC.economyState;
-                resource = order.resourceId;
-                salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus;
-                skillCMO = SRC.saleBonus;
-                skillCOO = SRC.adminBonus;
-
-                function getSaturation(resourceId, quality) {
-                    const infoList = SRC.ResourcesRetailInfo;
-
-                    let match = infoList.find(item =>
-                        item.dbLetter === resourceId &&
-                        (resourceId !== 150 || item.quality === quality)
-                    );
-
-                    return match?.saturation;
-                }
-                let saturation = getSaturation(parseInt(resource), order.quality);
-                // console.log(saturation)
-                administrationOverhead = SRC.administration;
-                let buildingKind = Object.entries(SCD.data.SALES).find(([kind, idList]) =>
-                    idList.includes(parseInt(resource))
-                )?.[0];
-                // console.log(buildingKind)
-                let salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
-                // console.log(salaryModifier)
-                let averageSalary = SCD.data.AVERAGE_SALARY;
-                // console.log(averageSalary)
-                let wages = averageSalary * salaryModifier;
-                let forceQuality = (parseInt(resource) === 150) ? order.quality : undefined;
-
-
-
-                // 直接从comp.state赋值
-                cogs = order.price * order.quantity;
-                quality = order.quality;
-                quantity = order.quantity;
-
-                /*
-                console.log(`size:${size}, acceleration:${acceleration}, economyState：${economyState},
-                resource：${resource},salesModifierWithRecreationBonus:${salesModifierWithRecreationBonus},
-                skillCMO：${skillCMO}, skillCOO:${skillCOO},
-                saturation:${saturation}, administrationOverhead:${administrationOverhead}, wages:${wages},
-                buildingKind:${buildingKind}, forceQuality:${forceQuality}，cogs:${cogs}, quality:${quality}, quantity:${quantity}`)
-                console.log(`zn.PROFIT_PER_BUILDING_LEVEL: ${zn.PROFIT_PER_BUILDING_LEVEL}`)
-                */
-
-                let currentPrice = order.price;
-                //let bestPrice = currentPrice;
-                let maxProfit = -Infinity;
-                let _, v, b, w, revenue, wagesTotal, secondsToFinish;
-                // console.log(`currentPrice：${currentPrice}, bestPrice：${bestPrice}， maxProfit：${maxProfit}`)
-
-                // setInput(input, currentPrice.toFixed(2));
-
-                // 以下两个不受currentPrice影响 可不参与循环
-                v = salesModifierWithRecreationBonus + skillCMO;
-                b = Ul(administrationOverhead, skillCOO);
-                // console.log(`v:${v}, b:${b}`)
-
-                // let saleTime = null;
-                count = count + 1
-                while (currentPrice > 0) {
-
-
-                    w = zL(buildingKind, wv(economyState, resource, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size);
-
-                    // console.log(`v:${v}, b:${b}, w:${w}`)
-
-                    revenue = currentPrice * quantity;
-                    wagesTotal = Math.ceil(w * wages * acceleration * b / 60 / 60);
-                    secondsToFinish = w;
-
-                    // console.log(`revenue:${revenue}, wagesTotal:${wagesTotal}, secondsToFinish:${secondsToFinish}`)
-                    if (!secondsToFinish || secondsToFinish <= 0) break;
-
-                    let profit = (revenue - cogs - wagesTotal) / secondsToFinish;
-                    if (profit > maxProfit) {
-                        maxProfit = profit;
-                        // bestPrice = currentPrice;
-                        // saleTime = secondsToFinish
-                    } else if (maxProfit > 0 && profit < 0) { //有正利润后出现负利润提前终端循环
-                        break;
-                    }
-                    // console.log(`当前定价：${bestPrice}, 当前最大秒利润：${maxProfit}`)
-                    if (currentPrice < 8) {
-                        currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-                    } else if (currentPrice < 2001) {
-                        currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
-                    } else {
-                        currentPrice = Math.round(currentPrice + 1);
-                    }
-                }
-
-                const actionCell = row.insertCell(-1);
-                const infoSpan = document.createElement('span');
-                // infoSpan.textContent = `|时利润：${(maxProfit * 3600).toFixed(2)},耗时：${formatSeconds(saleTime)}`;
-                infoSpan.textContent = `时利润：${(maxProfit * 3600).toFixed(2)}`;
-                infoSpan.dataset.profitInfo = 'true';
-                infoSpan.style.fontSize = '14px';
-                infoSpan.style.color = 'white';
-                infoSpan.style.background = 'gray';
-                infoSpan.style.padding = '4px 8px';
-                actionCell.appendChild(infoSpan);
-
-                // 你可在这里继续处理订单对象
-
-
+                // 过滤非零售商品
+                const isRetail = Object.values(salesMap).some(list => list.includes(parseInt(currentResourceId)));
+                if (!isRetail) return;
+                const order = { resourceId: currentResourceId, realmId: currentRealmId, ...ariaData };
+                const SCD = JSON.parse(localStorage.getItem("SimcompaniesConstantsData"));
+                const SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${order.realmId}`));
+                if (!SCD || !SRC) return;
+                if (rowIdCounter > 99999) rowIdCounter = 0;
+                const rowId = rowIdCounter++;
+                pendingRows.set(rowId, row);
+                row.setAttribute('data-profit-calculated', '1'); // 防止重复处理
+                profitWorker.postMessage({ rowId, order, SCD, SRC });
             });
         }
 
         return {
-            init: function (resourceId) {
+            init(resourceId) {
                 currentResourceId = resourceId;
                 currentRealmId = null;
                 let observer;
-
                 function tryInit() {
                     const tbody = findValidTbody();
-                    if (tbody) {
-                        if (observer) observer.disconnect();
+                    if (!tbody) return;
+                    if (observer) observer.disconnect();
 
+                    // 👉 在tbody上方插入一行文字
+                    const table = tbody.closest('table');
+                    if (table && !table.previousElementSibling?.dataset?.customNotice) {
+                        const infoText = document.createElement('div');
+                        infoText.innerHTML = '当高管发生变化后请手动更新<br>展示每级时利润，如未看到或未计算，请更新数据（左下按钮）,本页面计算没有校验如不放心请少量进货';
+                        infoText.style.color = 'white';
+                        infoText.style.fontSize = '15px';
+                        infoText.style.fontWeight = 'bold';
+                        infoText.style.margin = '8px 0';
+                        infoText.dataset.customNotice = 'true'; // 避免重复插入
+                        table.parentElement.insertBefore(infoText, table);
+                    }
 
-
-
-                        // 👉 在tbody上方插入一行文字
-                        const table = tbody.closest('table');
-                        if (table && !table.previousElementSibling?.dataset?.customNotice) {
-                            const infoText = document.createElement('div');
-                            infoText.innerHTML = '目前进入树页面会严重卡顿,当高管发生变化后请手动更新<br>展示每级时利润，如未看到或未计算，请更新数据（左下按钮）,本页面计算没有校验如不放心请少量进货';
-                            infoText.style.color = 'white';
-                            infoText.style.fontSize = '15px';
-                            infoText.style.fontWeight = 'bold';
-                            infoText.style.margin = '8px 0';
-                            infoText.dataset.customNotice = 'true'; // 避免重复插入
-                            table.parentElement.insertBefore(infoText, table);
-                        }
-
-
-                        if (localStorage.getItem("SimcompaniesConstantsData") === null || localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`) === null) { // 如果基本数据不存在则自动更新
-                            constantsData.initialize()
+                    const initPromise = (() => {
+                        // console.log('[Check] currentResourceId:', currentResourceId, typeof currentResourceId);
+                        if (!localStorage.getItem("SimcompaniesConstantsData") || !localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`)) {
+                            return constantsData.initialize()
                                 .then(data => {
-                                    Storage.save('constants', data); // 同步完成
-                                    extractRealmIdOnce(tbody);       // 继续后续操作
-                                    if (!Object.values(JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES).some(list => list.includes(parseInt(currentResourceId)))) {
-                                        return;
-                                    }
+                                    Storage.save('constants', data);
+                                    extractRealmIdOnce(tbody);
 
-                                    // 检查是否需要更新领域数据
+                                    const salesMap = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES;
+                                    const isRetail = Object.values(salesMap).some(list => list.includes(parseInt(currentResourceId)));
+                                    if (!isRetail) return Promise.resolve();  // 如果不是零售商品，跳过处理
+
                                     if (!localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`)) {
-                                        // 如果领域数据不存在，调用 fetchFullRegionData 获取数据
                                         return RegionData.fetchFullRegionData();
                                     } else {
-                                        processNewRows(tbody);
+                                        return processNewRows(tbody);  // 只有零售商品才处理新行
                                     }
                                 })
                                 .then(regionData => {
-                                    // 如果领域数据存在且成功获取，保存领域数据
                                     if (regionData) {
-                                        Storage.save('region', regionData); // 保存领域数据
+                                        Storage.save('region', regionData);
                                         console.log('[RegionAutoUpdater] 领域数据已更新');
                                     }
-
-                                    processNewRows(tbody); // 继续处理新行
+                                    // 不管是否获取了领域数据，都继续处理新行
+                                    return processNewRows(tbody);
                                 })
                                 .catch(err => {
                                     console.error("基本数据初始化或领域数据更新失败", err);
@@ -1134,18 +1151,23 @@
 
                         } else {
                             extractRealmIdOnce(tbody);
-                            if (!Object.values(JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES).some(list => list.includes(parseInt(currentResourceId)))) {
-                                return;
-                            }
-                            processNewRows(tbody);
+                            const salesMap = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES;
+                            const isRetail = Object.values(salesMap).some(list => list.includes(parseInt(currentResourceId)));
+                            if (!isRetail) return Promise.resolve();  // 如果不是零售商品，跳过处理
+                            return processNewRows(tbody);  // 只有零售商品才处理新行
                         }
+                    })();
 
 
-                        const rowObserver = new MutationObserver(() => processNewRows(tbody));
-                        rowObserver.observe(tbody, { childList: true, subtree: true });
-                    }
+                    initPromise
+                        .then(() => {
+                            // 不需要重复调用 extract 和 process，如果上面处理过了
+                        })
+                        .catch(console.error);
+
+                    const rowObserver = new MutationObserver(() => processNewRows(tbody));
+                    rowObserver.observe(tbody, { childList: true, subtree: true });
                 }
-
                 tryInit();
                 observer = new MutationObserver(tryInit);
                 observer.observe(document, { childList: true, subtree: true });
@@ -1365,6 +1387,5 @@
         // 开始监听 DOM 变化，直到提取到 realmId
         observer.observe(document.body, { childList: true, subtree: true });
     };
-
 
 })();
