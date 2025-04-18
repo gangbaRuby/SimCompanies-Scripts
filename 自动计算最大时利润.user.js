@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.6.1
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -415,12 +415,18 @@
                     const parsedData = data ? JSON.parse(data) : null;
                     return {
                         text: parsedData ? formatTime(parsedData.timestamp) : '无数据',
-                        className: parsedData ? 'has-data' : 'no-data'
+                        className: parsedData
+                            ? 'SimcompaniesRetailCalculation-has-data'
+                            : 'SimcompaniesRetailCalculation-no-data'
                     };
                 } catch (error) {
-                    return { text: '数据损坏', className: 'no-data' };
+                    return {
+                        text: '数据损坏',
+                        className: 'SimcompaniesRetailCalculation-no-data'
+                    };
                 }
             }
+
         };
     })();
 
@@ -1111,7 +1117,6 @@
                     if (table && !table.previousElementSibling?.dataset?.customNotice) {
                         const infoText = document.createElement('div');
                         infoText.innerHTML = '当高管发生变化后请手动更新<br>展示每级时利润，如未看到或未计算，请更新数据（左下按钮）,本页面计算没有校验如不放心请少量进货';
-                        infoText.style.color = 'white';
                         infoText.style.fontSize = '15px';
                         infoText.style.fontWeight = 'bold';
                         infoText.style.margin = '8px 0';
