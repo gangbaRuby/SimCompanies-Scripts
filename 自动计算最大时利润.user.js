@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.6.1
+// @version      1.7
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -354,12 +354,47 @@
                 }
                 const retailInfo = extractJSONData(rawContent);
 
-                console.groupEnd();
+                //提取物品基本数据
+                const extractMntFromRaw = (str) => {
+                    const assignPattern = /(\w+)\s*=\s*{/g;
+                    let match;
+
+                    while ((match = assignPattern.exec(rawContent)) !== null) {
+                        const startIndex = match.index + match[0].indexOf('{');
+                        let braceCount = 1;
+                        let endIndex = startIndex + 1;
+
+                        while (braceCount > 0 && endIndex < rawContent.length) {
+                            const char = rawContent[endIndex];
+                            if (char === '{') braceCount++;
+                            else if (char === '}') braceCount--;
+                            endIndex++;
+                        }
+
+                        if (braceCount === 0) {
+                            const objectString = rawContent.slice(startIndex, endIndex);
+                            try {
+                                const obj = eval('(' + objectString + ')');
+                                if (
+                                    obj[1] && obj[1].dbLetter !== undefined &&
+                                    obj[150] && obj[150].producedFrom &&
+                                    obj[150].image?.includes("tree.png")
+                                ) {
+                                    return obj;
+                                }
+                            } catch (e) { }
+                        }
+                    }
+
+                    return null;
+                }
+                const constantsResources = JSON.parse(JSON.stringify(extractMntFromRaw(rawContent)));
 
                 return {
                     data: data,
                     buildingsSalaryModifier: buildingsSalaryModifier,
                     retailInfo: retailInfo,
+                    constantsResources: constantsResources,
                     timestamp: new Date().toISOString()
                 };
 
@@ -907,7 +942,7 @@
 
         // Create worker blob: calculations move into worker's onmessage
         const workerCode = `
-    self.onmessage = function(e) {
+        self.onmessage = function(e) {
         const { rowId, order, SCD, SRC } = e.data;
         const { price, quantity, quality, resourceId: resource } = order;
         // bring constants into worker scope
@@ -1112,16 +1147,18 @@
                     if (!tbody) return;
                     if (observer) observer.disconnect();
 
-                    // 👉 在tbody上方插入一行文字
-                    const table = tbody.closest('table');
-                    if (table && !table.previousElementSibling?.dataset?.customNotice) {
-                        const infoText = document.createElement('div');
-                        infoText.innerHTML = '当高管发生变化后请手动更新<br>展示每级时利润，如未看到或未计算，请更新数据（左下按钮）,本页面计算没有校验如不放心请少量进货';
-                        infoText.style.fontSize = '15px';
-                        infoText.style.fontWeight = 'bold';
-                        infoText.style.margin = '8px 0';
-                        infoText.dataset.customNotice = 'true'; // 避免重复插入
-                        table.parentElement.insertBefore(infoText, table);
+                    // 👉 插入到form中
+                    const form = document.querySelector('form');
+                    if (form) {
+                        const parentDiv = form.parentElement; // form 的直接父级 <div>
+                        const container = parentDiv?.parentElement?.parentElement; // css-rnlot4 的容器
+
+                        if (container && !container.querySelector('[data-custom-notice]')) {
+                            const infoText = document.createElement('div');
+                            infoText.textContent = '高管若变动，时利润会有误差，点左下更新。';
+                            infoText.dataset.customNotice = 'true'; // 避免重复添加
+                            container.appendChild(infoText); // 插入在 form 所在 div 的后面
+                        }
                     }
 
                     const initPromise = (() => {
@@ -1183,6 +1220,323 @@
     // ======================
     // 模块8：合同计算时利润 使用SimcompaniesRetailCalculation_{realmId} SimcompaniesConstantsData
     // ======================
+    const incomingContractsHandler = (function () {
+        let cardIdCounter = 0;
+        const pendingCards = new Map(); // cardId -> DOM element
+
+        // Worker 代码
+        const workerCode = `
+        self.onmessage = function(e) {
+            const { cardId, order, SCD, SRC } = e.data;
+            const { price, quantity, quality, resourceId: resource } = order;
+            const lwe = SCD.retailInfo;
+            const zn = SCD.data;
+            const Ul = (overhead, skillCOO) => overhead - (overhead - 1) * skillCOO / 100;
+            const wv = (e, t, r) => r === null ? lwe[e][t] : lwe[e][t].quality[r];
+            const Upt = (e, t, r, n) => t + (e + n) / r;
+            const Hpt = (e, t, r, n, a) => {
+                const o = (n + e) / ((t - a) * (t - a));
+                return e - (r - t) * (r - t) * o;
+            };
+            const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
+            const Bpt = (e, t, r, n, a, o) => {
+                const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+                const s = Math.min(Math.max(2 - n, 0), 2),
+                      l = s / 2 + 0.5,
+                      c = r / 12;
+                const d = zn.PROFIT_PER_BUILDING_LEVEL *
+                    (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
+                    g *
+                    (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
+                    (t.modeledStoreWages ?? 0);
+                const h = t.modeledUnitsSoldAnHour * l;
+                const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
+                const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
+                return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
+            };
+            const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size) => {
+                const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
+                if (u <= 0) return NaN;
+                const d = u / acc / size;
+                return d - d * salesModifier / 100;
+            };
+    
+            let currentPrice = price,
+                maxProfit = -Infinity,
+                size = 1,
+                acceleration = SRC.acceleration,
+                economyState = SRC.economyState,
+                salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
+                skillCMO = SRC.saleBonus,
+                skillCOO = SRC.adminBonus;
+    
+            const saturation = (() => {
+                const list = SRC.ResourcesRetailInfo;
+                const m = list.find(item =>
+                    item.dbLetter === parseInt(resource) &&
+                    (parseInt(resource) !== 150 || item.quality === quality)
+                );
+                return m?.saturation;
+            })();
+    
+            const administrationOverhead = SRC.administration;
+            const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
+                ids.includes(parseInt(resource))
+            )?.[0];
+            const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+            const averageSalary = zn.AVERAGE_SALARY;
+            const wages = averageSalary * salaryModifier;
+            const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
+    
+            const v = salesModifierWithRecreationBonus + skillCMO;
+            const b = Ul(administrationOverhead, skillCOO);
+    
+            while (currentPrice > 0) {
+                const modeledData = wv(economyState, resource, forceQuality ?? null);
+                const w = zL(
+                    buildingKind,
+                    modeledData,
+                    quantity,
+                    v,
+                    currentPrice,
+                    forceQuality === void 0 ? quality : 0,
+                    saturation,
+                    acceleration,
+                    size
+                );
+                const revenue = currentPrice * quantity;
+                const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
+                const secondsToFinish = w;
+                const profit = (!secondsToFinish || secondsToFinish <= 0)
+                    ? NaN
+                    : (revenue - price * quantity - wagesTotal) / secondsToFinish;
+    
+                if (!secondsToFinish || secondsToFinish <= 0) break;
+                if (profit > maxProfit) {
+                    maxProfit = profit;
+                } else if (maxProfit > 0 && profit < 0) {
+                    break;
+                }
+
+                if (currentPrice < 8) {
+                    currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                } else if (currentPrice < 2001) {
+                    currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                } else {
+                    currentPrice = Math.round(currentPrice + 1);
+                }
+            }
+    
+            self.postMessage({ cardId, maxProfit });
+        };
+        `;
+        const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+        profitWorker.onmessage = function (e) {
+            const { cardId, maxProfit } = e.data;
+            const card = pendingCards.get(cardId);
+            if (!card) return;
+            pendingCards.delete(cardId);
+            injectHourlyProfit(card, maxProfit * 3600);
+        };
+
+        function init() {
+            console.log('[合同页面处理] 初始化合同页面处理逻辑');
+
+            const checkPageLoaded = setInterval(() => {
+                const isOnTargetPage = /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
+
+                if (!isOnTargetPage) {
+                    console.log('[合同页面处理] 用户已离开页面，停止轮询');
+                    clearInterval(checkPageLoaded);
+                    removeWarningNotice(); // 🔄 页面离开时清理提示
+                    return;
+                }
+
+                const contractCards = document.querySelectorAll('div[tabindex="0"]');
+                if (contractCards.length > 0) {
+                    console.log('[合同页面处理] 合同卡片已加载');
+                    clearInterval(checkPageLoaded);
+                    insertWarningNotice(); // ✅ 卡片加载后插入提示
+                    contractCards.forEach(handleCard);
+                    startMutationObserver();
+                } else {
+                    console.log('[合同页面处理] 等待合同卡片加载...');
+                }
+            }, 500);
+        }
+
+        function startMutationObserver() {
+            const targetNode = document.querySelectorAll('.row')[1];
+            if (!targetNode) {
+                console.error('[合同页面处理] 未找到目标容器');
+                return;
+            }
+
+            const observer = new MutationObserver((mutationsList) => {
+                for (const mutation of mutationsList) {
+                    if (mutation.type === 'childList') {
+                        const contractCards = document.querySelectorAll('div[tabindex="0"]');
+                        contractCards.forEach(handleCard);
+                    }
+                }
+            });
+
+            observer.observe(targetNode, { childList: true, subtree: true });
+        }
+
+        function getRealmIdFromLink() {
+            const link = document.querySelector('a[href*="/company/"]'); // 选择第一个符合条件的 <a> 标签
+            if (link) {
+                const match = link.href.match(/\/company\/(\d+)\//); // 提取 href 中的 realmId
+                return match ? parseInt(match[1], 10) : null; // 如果匹配到 realmId，返回
+            }
+            return null; // 如果没有找到符合条件的链接，返回 null
+        }
+
+        function handleCard(card) {
+            // ✅ 提前返回条件改成：
+            if (card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) return;
+
+            const data = parseContractCard(card);
+            if (!data || !data.dbLetter) return;
+
+            const realmId = getRealmIdFromLink();
+            const constantsKey = 'SimcompaniesConstantsData';
+            const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
+
+            if (!localStorage.getItem(constantsKey) || !localStorage.getItem(regionKey)) {
+                console.log('[合同卡片] 缺少数据，尝试初始化...');
+                card.setAttribute('data-retry', 'true'); // 👈 表明后续还要再处理
+                constantsData.initialize()
+                    .then(data => {
+                        Storage.save('constants', data);
+                        return RegionData.fetchFullRegionData();
+                    })
+                    .then(regionData => {
+                        Storage.save('region', regionData);
+                        console.log('[合同卡片] 数据初始化完成，重新处理卡片');
+                        handleCard(card); // ✅ 数据准备好再重试
+                    })
+                    .catch(err => {
+                        console.error('[合同卡片] 数据初始化失败:', err);
+                    });
+                return;
+            }
+
+            card.setAttribute('data-found', 'true'); // ✅ 仅在数据准备好后设置
+            card.removeAttribute('data-retry');
+
+            const SCD = JSON.parse(localStorage.getItem(constantsKey));
+            const SRC = JSON.parse(localStorage.getItem(regionKey));
+
+            const isRetail = Object.values(SCD.data.SALES).some(arr =>
+                arr.includes(parseInt(data.dbLetter))
+            );
+            if (!isRetail) {
+                console.log(`[合同卡片] 非零售商品，跳过处理: dbLetter=${data.dbLetter}`);
+                return;
+            }
+
+            const cardId = cardIdCounter++;
+            pendingCards.set(cardId, card);
+
+            profitWorker.postMessage({
+                cardId,
+                order: {
+                    resourceId: data.dbLetter,
+                    price: data.unitPrice,
+                    quantity: data.quantity,
+                    quality: data.quality
+                },
+                SCD,
+                SRC
+            });
+        }
+
+        function parseContractCard(card) {
+            const result = {
+                quantity: null,
+                quality: null,
+                unitPrice: null,
+                totalPrice: null,
+                imageSrc: null,
+                resourcePath: null,
+                dbLetter: null,
+            };
+
+            const label = card.getAttribute('aria-label') || '';
+            const numberMatches = [...label.matchAll(/[\d,]+(?:\.\d+)?/g)];
+            const qMatch = label.match(/Q(\d+)/);
+
+            if (numberMatches.length >= 3 && qMatch) {
+                result.totalPrice = parseFloat(numberMatches[numberMatches.length - 1][0].replace(/,/g, ''));
+                result.unitPrice = parseFloat(numberMatches[numberMatches.length - 2][0].replace(/,/g, ''));
+                result.quantity = parseInt(numberMatches[numberMatches.length - 4][0].replace(/,/g, ''));
+                result.quality = parseInt(qMatch[1]);
+            } else {
+                console.warn('[合同卡片] aria-label 数字匹配失败:', label);
+            }
+
+            const img = card.querySelector('img[src^="/static/images/resources/"]');
+            if (img) {
+                result.imageSrc = img.getAttribute('src');
+                result.resourcePath = result.imageSrc.replace(/^\/static\//, '');
+
+                const constants = JSON.parse(localStorage.getItem('SimcompaniesConstantsData') || '{}');
+                const resources = Object.values(constants?.constantsResources || {});
+                const matched = resources.find(r => r.image === result.resourcePath);
+                if (matched) result.dbLetter = matched.dbLetter;
+            }
+
+            return result;
+        }
+
+        function injectHourlyProfit(card, profitValue) {
+            const infoDiv = Array.from(card.querySelectorAll('div'))
+                .find(div => div.textContent?.includes('@') && div.querySelector('b'));
+
+            const priceBox = infoDiv?.querySelector('b');
+            if (!priceBox) return;
+
+            if (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
+                priceBox.nextSibling.textContent?.includes('时利润')) return;
+
+            const profitDisplay = document.createElement('b');
+            profitDisplay.textContent = ` 时利润：${profitValue.toFixed(2)}`;
+            profitDisplay.style.marginLeft = '8px';
+            priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
+        }
+
+        function insertWarningNotice() {
+            if (document.querySelector('[data-warning-text]')) return;
+
+            const cards = document.querySelectorAll('div[tabindex="0"]');
+
+            cards.forEach(card => {
+                let parent = card.parentElement;
+                if (!parent) return;
+
+                let grandParent = parent.parentElement;
+                if (!grandParent || grandParent.querySelector('[data-warning-text]')) return;
+
+                const insertTarget = grandParent.firstElementChild;
+                if (!insertTarget || insertTarget === parent) return;
+
+                const tip = document.createElement('div');
+                tip.textContent = '高管若变动，时利润会有误差，点左下更新。';
+                tip.dataset.warningText = 'true';
+
+                insertTarget.appendChild(tip);
+            });
+        }
+
+        function removeWarningNotice() {
+            const oldNotice = document.querySelector('[data-warning-text]');
+            if (oldNotice) oldNotice.remove();
+        }
+
+        return { init };
+    })();
 
     // ======================
     // 模块9：判断当前页面
@@ -1198,6 +1552,13 @@
                         // console.log('进入 market 页面，资源ID：', resourceId);
                         ResourceMarketHandler.init(resourceId);
                     }
+                }
+            },
+            contractPage: {
+                pattern: /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/,
+                action: (url) => {
+                    console.log('[合同页面识别] 已进入合同页面');
+                    incomingContractsHandler.init();
                 }
             }
         };
