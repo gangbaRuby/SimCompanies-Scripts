@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.7.1
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -258,55 +258,46 @@
                     'RETAIL_ADJUSTMENT'
                 ];
 
-                // 根据键值找赋值
+                // 提取变量值（支持数字 / 布尔 / 对象）
                 const extractValue = (variableName) => {
-                    // 严格匹配变量声明（防止误匹配注释等内容）
                     const varRegex = new RegExp(
-                        '\\b' + variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*=\\s*([^,]+),'
+                        variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*=\\s*([^,;\\n\\r]+)'
                     );
-
                     const match = rawContent.match(varRegex);
                     if (!match) {
                         console.warn(`变量未找到: ${variableName}`);
                         return null;
                     }
 
-                    // 尝试解析值（支持数字/布尔/对象等类型）
                     try {
-
-                        if (match[1].trim().startsWith('{')) {
-                            // 增强对象匹配正则（关键修改点）
+                        const value = match[1].trim();
+                        if (value.startsWith('{')) {
                             const objectRegex = new RegExp(
-                                '\\b' + variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*=\\s*(\\{[^}]*\\})'
+                                variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*=\\s*(\\{[^}]*\\})'
                             );
-
                             const matchAgain = rawContent.match(objectRegex);
-                            // console.log(matchAgain[1])
                             if (matchAgain) {
                                 return JSON.parse(matchAgain[1]
                                     .replace(/([{,]\s*|\{\s*)([^\s":,{}]+)(?=\s*:)/g, '$1"$2"')
-                                    .replace(/:(\s*)\.(\d+)/g, ':$10.$2'));
+                                    .replace(/:(\s*)\.(\d+)/g, ':$10.$2')
+                                );
                             }
                         }
-                        // console.log(match[1])
-                        return JSON.parse(match[1]
-                            .replace(/^\.(\d+)/, '0.$1'));
+                        return JSON.parse(value.replace(/^\.(\d+)/, '0.$1'));
                     } catch {
-                        return match[1].trim(); // 保留原始字符串
+                        return match[1].trim();
                     }
                 };
 
-
-                // 循环处理每个键提取键值
+                // 遍历 targetKeys，从 rawContent 中提取变量名并解析值
                 targetKeys.forEach(key => {
                     const keyMatch = rawContent.match(
-                        new RegExp(`\\b${key}\\s*:\\s*([\\w$]+)\\b`)
+                        new RegExp(`\\b${key}\\s*:\\s*([\\w$]+)`, 'm')
                     );
 
                     if (keyMatch) {
                         const varName = keyMatch[1];
                         data[key] = extractValue(varName);
-                        // console.log(`${key} 解析结果:`, data[key]);
                     } else {
                         console.warn(`${key} 未找到`);
                     }
