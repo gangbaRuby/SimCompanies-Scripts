@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.7.1
+// @version      1.7.2
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -144,6 +144,7 @@
             return data.filter(exec =>
                 ['coo', 'cfo', 'cmo', 'cto'].includes(exec.position) &&
                 !exec.currentTraining &&
+                !exec.strikeUntil &&
                 new Date(exec.start) < threeHoursAgo
             );
         };
