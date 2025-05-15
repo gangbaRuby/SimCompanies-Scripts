@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.7.3
+// @version      1.8
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -548,6 +548,232 @@
             document.head.appendChild(style);
         };
 
+        // 饱和度表格功能
+        let saturationTableElement = null;
+
+        const showSaturationTable = () => {
+            if (saturationTableElement) {
+                saturationTableElement.remove();
+                saturationTableElement = null;
+                return;
+            }
+
+            const realmId = getRealmIdFromLink();
+            if (realmId === null) {
+                alert("未识别到 realmId！");
+                return;
+            }
+
+            const dataStr = localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`);
+            if (!dataStr) {
+                alert(`没有找到领域 ${realmId} 数据，请先更新！`);
+                return;
+            }
+            const data = JSON.parse(dataStr);
+            const list = data.ResourcesRetailInfo;
+
+            // 映射表
+            const resourceIdNameMap = {
+                1: "电力",
+                2: "水",
+                3: "苹果",
+                4: "橘子",
+                5: "葡萄",
+                6: "谷物",
+                7: "牛排",
+                8: "香肠",
+                9: "鸡蛋",
+                10: "原油",
+                11: "汽油",
+                12: "柴油",
+                13: "运输单位",
+                14: "矿物",
+                15: "铝土矿",
+                16: "硅材",
+                17: "化合物",
+                18: "铝材",
+                19: "塑料",
+                20: "处理器",
+                21: "电子元件",
+                22: "电池",
+                23: "显示屏",
+                24: "智能手机",
+                25: "平板电脑",
+                26: "笔记本电脑",
+                27: "显示器",
+                28: "电视机",
+                29: "作物研究",
+                30: "能源研究",
+                31: "采矿研究",
+                32: "电器研究",
+                33: "畜牧研究",
+                34: "化学研究",
+                35: "软件",
+                36: "undefined",
+                37: "undefined",
+                38: "undefined",
+                39: "undefined",
+                40: "棉花",
+                41: "棉布",
+                42: "铁矿石",
+                43: "钢材",
+                44: "沙子",
+                45: "玻璃",
+                46: "皮革",
+                47: "车载电脑",
+                48: "电动马达",
+                49: "豪华车内饰",
+                50: "基本内饰",
+                51: "车身",
+                52: "内燃机",
+                53: "经济电动车",
+                54: "豪华电动车",
+                55: "经济燃油车",
+                56: "豪华燃油车",
+                57: "卡车",
+                58: "汽车研究",
+                59: "时装研究",
+                60: "内衣",
+                61: "手套",
+                62: "裙子",
+                63: "高跟鞋",
+                64: "手袋",
+                65: "运动鞋",
+                66: "种子",
+                67: "圣诞爆竹",
+                68: "金矿石",
+                69: "金条",
+                70: "名牌手表",
+                71: "项链",
+                72: "甘蔗",
+                73: "乙醇",
+                74: "甲烷",
+                75: "碳纤维",
+                76: "碳纤复合材",
+                77: "机身",
+                78: "机翼",
+                79: "精密电子元件",
+                80: "飞行计算机",
+                81: "座舱",
+                82: "姿态控制器",
+                83: "火箭燃料",
+                84: "燃料储罐",
+                85: "固体燃料助推器",
+                86: "火箭发动机",
+                87: "隔热板",
+                88: "离子推进器",
+                89: "喷气发动机",
+                90: "亚轨道二级火箭",
+                91: "亚轨道火箭",
+                92: "轨道助推器",
+                93: "星际飞船",
+                94: "BFR",
+                95: "喷气客机",
+                96: "豪华飞机",
+                97: "单引擎飞机",
+                98: "无人机",
+                99: "人造卫星",
+                100: "航空航天研究",
+                101: "钢筋混凝土",
+                102: "砖块",
+                103: "水泥",
+                104: "黏土",
+                105: "石灰石",
+                106: "木材",
+                107: "钢筋",
+                108: "木板",
+                109: "窗户",
+                110: "工具",
+                111: "建筑预构件",
+                112: "推土机",
+                113: "材料研究",
+                114: "机器人",
+                115: "牛",
+                116: "猪",
+                117: "牛奶",
+                118: "咖啡豆",
+                119: "咖啡粉",
+                120: "蔬菜",
+                121: "面包",
+                122: "芝士",
+                123: "苹果派",
+                124: "橙汁",
+                125: "苹果汁",
+                126: "姜汁汽水",
+                127: "披萨",
+                128: "面条",
+                129: "汉堡包",
+                130: "千层面",
+                131: "肉丸",
+                132: "混合果汁",
+                133: "面粉",
+                134: "黄油",
+                135: "糖",
+                136: "可可",
+                137: "面团",
+                138: "酱汁",
+                139: "动物饲料",
+                140: "巧克力",
+                141: "植物油",
+                142: "沙拉",
+                143: "咖喱角",
+                144: "圣诞装饰品",
+                145: "食谱",
+                146: "南瓜",
+                147: "杰克灯笼",
+                148: "女巫服",
+                149: "南瓜汤",
+                150: "树",
+                151: "复活节兔兔",
+                152: "斋月糖果"
+            };
+
+            // 表格
+            const table = document.createElement("table");
+            table.style.cssText = "border-collapse:collapse;margin:10px 0;background:#333;color:white;font-size:13px;";
+            const thead = document.createElement("thead");
+            const headerRow = document.createElement("tr");
+            ["物品", "质量", "饱和度"].forEach(text => {
+                const th = document.createElement("th");
+                th.textContent = text;
+                th.style.cssText = "border:1px solid #666;padding:4px 8px;";
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement("tbody");
+            list.forEach(item => {
+                const row = document.createElement("tr");
+                const name = resourceIdNameMap[item.dbLetter] || `未知(${item.dbLetter})`;
+                [name, item.quality ?? "-", String(item.saturation)].forEach(text => {
+                    const td = document.createElement("td");
+                    td.textContent = text;
+                    td.style.cssText = "border:1px solid #666;padding:4px 8px;text-align:center;";
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+
+            // 容器
+            saturationTableElement = document.createElement("div");
+            saturationTableElement.style.cssText = "position:fixed;left:10px;top:50px;z-index:9999;background:#222;padding:6px;border-radius:4px;max-height:400px;overflow:auto;";
+            saturationTableElement.appendChild(table);
+
+            // 关闭按钮
+            const closeBtn = document.createElement("button");
+            closeBtn.textContent = "关闭";
+            closeBtn.style.cssText = "margin-top:6px;padding:4px 8px;background:#c00;color:white;border:none;border-radius:3px;cursor:pointer;";
+            closeBtn.onclick = () => {
+                saturationTableElement.remove();
+                saturationTableElement = null;
+            };
+            saturationTableElement.appendChild(closeBtn);
+
+            document.body.appendChild(saturationTableElement);
+        };
+
         // 创建界面元素
         const createPanel = () => {
             const panel = document.createElement('div');
@@ -600,8 +826,16 @@
             btnGroup.className = 'SimcompaniesRetailCalculation-btn-group';
             btnGroup.append(
                 createActionButton('更新领域数据', 'region'),
-                createActionButton('更新基本数据', 'constants')
+                createActionButton('更新基本数据', 'constants'),
+                (() => {
+                    const btn = document.createElement('button');
+                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
+                    btn.textContent = '当前领域饱和度表';
+                    btn.onclick = showSaturationTable;
+                    return btn;
+                })()
             );
+
             content.appendChild(btnGroup);
 
             panel.append(trigger, content);
