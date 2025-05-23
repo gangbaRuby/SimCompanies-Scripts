@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.8.1
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -261,9 +261,7 @@
 
                 // 提取变量值（支持数字 / 布尔 / 对象）
                 const extractValue = (variableName) => {
-                    const varRegex = new RegExp(
-                        variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*=\\s*([^,;\\n\\r]+)'
-                    );
+                    const varRegex = new RegExp(`[,{\\s]${variableName}\\s*=\\s*([^,;\\n\\r]+)`);
                     const match = rawContent.match(varRegex);
                     if (!match) {
                         console.warn(`变量未找到: ${variableName}`);
@@ -273,9 +271,7 @@
                     try {
                         const value = match[1].trim();
                         if (value.startsWith('{')) {
-                            const objectRegex = new RegExp(
-                                variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*=\\s*(\\{[^}]*\\})'
-                            );
+                            const objectRegex = new RegExp(`[,{\\s]${variableName}\\s*=\\s*(\\{[^}]*\\})`);
                             const matchAgain = rawContent.match(objectRegex);
                             if (matchAgain) {
                                 return JSON.parse(matchAgain[1]
@@ -289,6 +285,7 @@
                         return match[1].trim();
                     }
                 };
+
 
                 // 遍历 targetKeys，从 rawContent 中提取变量名并解析值
                 targetKeys.forEach(key => {
@@ -1486,7 +1483,7 @@
                 const d = u / acc / size;
                 return d - d * salesModifier / 100;
             };
-    
+
             let currentPrice = price,
                 maxProfit = -Infinity,
                 size = 1,
@@ -1495,7 +1492,7 @@
                 salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
                 skillCMO = SRC.saleBonus,
                 skillCOO = SRC.adminBonus;
-    
+
             const saturation = (() => {
                 const list = SRC.ResourcesRetailInfo;
                 const m = list.find(item =>
@@ -1504,7 +1501,7 @@
                 );
                 return m?.saturation;
             })();
-    
+
             const administrationOverhead = SRC.administration;
             const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
                 ids.includes(parseInt(resource))
@@ -1513,10 +1510,10 @@
             const averageSalary = zn.AVERAGE_SALARY;
             const wages = averageSalary * salaryModifier;
             const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
-    
+
             const v = salesModifierWithRecreationBonus + skillCMO;
             const b = Ul(administrationOverhead, skillCOO);
-    
+
             while (currentPrice > 0) {
                 const modeledData = wv(economyState, resource, forceQuality ?? null);
                 const w = zL(
@@ -1536,7 +1533,7 @@
                 const profit = (!secondsToFinish || secondsToFinish <= 0)
                     ? NaN
                     : (revenue - price * quantity - wagesTotal) / secondsToFinish;
-    
+
                 if (!secondsToFinish || secondsToFinish <= 0) break;
                 if (profit > maxProfit) {
                     maxProfit = profit;
@@ -1552,7 +1549,7 @@
                     currentPrice = Math.round(currentPrice + 1);
                 }
             }
-    
+
             self.postMessage({ cardId, maxProfit });
         };
         `;
