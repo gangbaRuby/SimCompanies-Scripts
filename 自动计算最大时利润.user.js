@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.8.1
+// @version      1.9
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -12,10 +12,38 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addStyle
+// @connect      hub.sctools.top
+// @connect      raw.sctools.top
 // ==/UserScript==
 
 (function () {
     'use strict';
+
+    const localVersion = GM_info.script.version;
+    const scriptUrl = 'https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js';
+
+    GM_xmlhttpRequest({
+        method: "GET",
+        url: scriptUrl,
+        onload: function(response) {
+            const remoteText = response.responseText;
+            const match = remoteText.match(/@version\s+([0-9.]+)/);
+            if (match) {
+                const latestVersion = match[1];
+                if (latestVersion !== localVersion) {
+                    // 自动跳转更新地址
+                    window.location.href = scriptUrl;
+                } else {
+                    console.log("✅ 当前已是最新版本");
+                }
+            } else {
+                console.warn("⚠️ 远程脚本未找到 @version！");
+            }
+        },
+        onerror: function() {
+            console.error("❌ 获取远程版本号失败！");
+        }
+    });
 
     // ======================
     // 计算用到的函数
