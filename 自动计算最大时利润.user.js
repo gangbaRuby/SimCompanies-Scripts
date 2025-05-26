@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.9.1
+// @version      1.9.2
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -36,18 +36,19 @@
     function checkForUpdate() {
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js';
+        const currentChange = '移除了非传统零售的显示，本插件只能计算传统零售。'
 
         GM_xmlhttpRequest({
             method: "GET",
             url: scriptUrl,
-            onload: function(response) {
+            onload: function (response) {
                 const remoteText = response.responseText;
                 const match = remoteText.match(/@version\s+([0-9.]+)/);
                 if (match) {
                     const latestVersion = match[1];
                     if (compareVersions(latestVersion, localVersion) > 0) {
                         console.log(`📢 检测到新版本 v${latestVersion}`);
-                        if (confirm(`自动计算最大时利润插件检测到新版本 v${latestVersion}，是否前往更新？`)) {
+                        if (confirm(`自动计算最大时利润插件检测到新版本 v${latestVersion}，是否前往更新？\n\nv${latestVersion} ${currentChange}\n\n关于版本号说明 1.X.Y ，X为增添新功能或功能修复，Y为细节修改不影响功能，如不需更新可将Y或其它位置修改为较大值。`)) {
                             window.location.href = scriptUrl;
                         }
                     } else {
@@ -57,7 +58,7 @@
                     console.warn("⚠️ 远程脚本未找到 @version！");
                 }
             },
-            onerror: function() {
+            onerror: function () {
                 console.error("❌ 获取远程版本号失败！");
             }
         });
@@ -344,6 +345,12 @@
                     if (keyMatch) {
                         const varName = keyMatch[1];
                         data[key] = extractValue(varName);
+
+                        // 如果是 SALES，删掉 B 和 r 即删除大楼和餐馆此类非传统零售
+                        if (key === 'SALES' && data[key]) {
+                            delete data[key]['B'];
+                            delete data[key]['r'];
+                        }
                     } else {
                         console.warn(`${key} 未找到`);
                     }
