@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.9.2
+// @version      1.10.0
+// @changelog    更新获取高管信息方法，微调按钮位置
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -36,19 +37,28 @@
     function checkForUpdate() {
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js';
-        const currentChange = '移除了非传统零售的显示，本插件只能计算传统零售。'
+        const currentChange = '更新获取高管信息方法，微调按钮位置'
 
         GM_xmlhttpRequest({
             method: "GET",
             url: scriptUrl,
             onload: function (response) {
+                if (response.status !== 200 || !response.responseText) {
+                    console.error("❌ 远程脚本获取失败！");
+                    return;
+                }
+
                 const remoteText = response.responseText;
-                const match = remoteText.match(/@version\s+([0-9.]+)/);
-                if (match) {
-                    const latestVersion = match[1];
+                const matchVersion = remoteText.match(/^\s*\/\/\s*@version\s+([0-9.]+)/m);
+                const matchChange = remoteText.match(/^\s*\/\/\s*@changelog\s+(.+)/m);
+
+                if (matchVersion) {
+                    const latestVersion = matchVersion[1];
+                    const changeLog = matchChange ? matchChange[1] : currentChange;
+
                     if (compareVersions(latestVersion, localVersion) > 0) {
                         console.log(`📢 检测到新版本 v${latestVersion}`);
-                        if (confirm(`自动计算最大时利润插件检测到新版本 v${latestVersion}，是否前往更新？\n\nv${latestVersion} ${currentChange}\n\n关于版本号说明 1.X.Y ，X为增添新功能或功能修复，Y为细节修改不影响功能，如不需更新可将Y或其它位置修改为较大值。`)) {
+                        if (confirm(`自动计算最大时利润插件检测到新版本 v${latestVersion}，是否前往更新？\n\nv${latestVersion} ${changeLog}\n\n关于版本号说明 1.X.Y ，X为增添新功能或修复不可用，Y为细节修改不影响功能，如不需更新可将Y或其它位置修改为较大值。`)) {
                             window.location.href = scriptUrl;
                         }
                     } else {
@@ -187,14 +197,18 @@
 
         // 高管技能
         const getExecutives = async () => {
-            const data = await Network.requestJson('https://www.simcompanies.com/api/v2/companies/me/executives/');
+            const response = await Network.requestJson('https://www.simcompanies.com/api/v3/companies/me/executives/');
+            const data = response.executives;
             const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
 
+            // 定义职位代码映射
+            const targetPositions = ['o', 'f', 'm', 't'];
+
             return data.filter(exec =>
-                ['coo', 'cfo', 'cmo', 'cto'].includes(exec.position) &&
-                !exec.currentTraining &&
+                exec.currentWorkHistory &&
+                targetPositions.includes(exec.currentWorkHistory.position) &&
                 (!exec.strikeUntil || new Date(exec.strikeUntil) < new Date()) &&
-                new Date(exec.start) < threeHoursAgo
+                new Date(exec.currentWorkHistory.start) < threeHoursAgo
             );
         };
 
@@ -236,28 +250,32 @@
 
             // 计算高管加成
             const calculateExecutiveBonus = (executives) => {
+                // 整理职位 → 技能表
                 const skills = executives.reduce((acc, exec) => {
-                    acc[exec.position] = exec.skills;
+                    if (exec.currentWorkHistory) {
+                        acc[exec.currentWorkHistory.position] = exec.skills;
+                    }
                     return acc;
                 }, {});
 
+                // 安全读取技能值，没值就返回0
                 const safeSkill = (position, skillName) => skills[position]?.[skillName] || 0;
 
                 return {
                     saleBonus: Math.floor((
-                        safeSkill('cmo', 'cmo') +
+                        safeSkill('m', 'cmo') +
                         Math.floor((
-                            safeSkill('coo', 'cmo') +
-                            safeSkill('cfo', 'cmo') +
-                            safeSkill('cto', 'cmo')
+                            safeSkill('o', 'cmo') +
+                            safeSkill('f', 'cmo') +
+                            safeSkill('t', 'cmo')
                         ) / 4)
                     ) / 3),
                     adminBonus:
-                        safeSkill('coo', 'coo') +
+                        safeSkill('o', 'coo') +
                         Math.floor((
-                            safeSkill('cfo', 'coo') +
-                            safeSkill('cmo', 'coo') +
-                            safeSkill('cto', 'coo')
+                            safeSkill('f', 'coo') +
+                            safeSkill('m', 'coo') +
+                            safeSkill('t', 'coo')
                         ) / 4)
                 };
             };
@@ -529,7 +547,7 @@
             .SimcompaniesRetailCalculation-mini-panel {
                 position: fixed;
                 left: 10px;
-                bottom: 10px;
+                bottom: 55px;
                 z-index: 9999;
                 font-family: Arial, sans-serif;
             }
