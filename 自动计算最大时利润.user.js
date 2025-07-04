@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.10.0
-// @changelog    更新获取高管信息方法，微调按钮位置
+// @version      1.11.0
+// @changelog    更新学院计算
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -37,7 +37,6 @@
     function checkForUpdate() {
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js';
-        const currentChange = '更新获取高管信息方法，微调按钮位置'
 
         GM_xmlhttpRequest({
             method: "GET",
@@ -54,7 +53,7 @@
 
                 if (matchVersion) {
                     const latestVersion = matchVersion[1];
-                    const changeLog = matchChange ? matchChange[1] : currentChange;
+                    const changeLog = matchChange[1];
 
                     if (compareVersions(latestVersion, localVersion) > 0) {
                         console.log(`📢 检测到新版本 v${latestVersion}`);
@@ -202,7 +201,7 @@
             const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
 
             // 定义职位代码映射
-            const targetPositions = ['o', 'f', 'm', 't'];
+            const targetPositions = ['o', 'f', 'm', 't', 'v', 'y'];
 
             return data.filter(exec =>
                 exec.currentWorkHistory &&
@@ -261,22 +260,43 @@
                 // 安全读取技能值，没值就返回0
                 const safeSkill = (position, skillName) => skills[position]?.[skillName] || 0;
 
+                let saleBonus = Math.floor((
+                    safeSkill('m', 'cmo') +
+                    Math.floor(safeSkill('y', 'cmo') / 2) +
+                    Math.floor((
+                        safeSkill('o', 'cmo') +
+                        safeSkill('f', 'cmo') +
+                        safeSkill('t', 'cmo')
+                    ) / 4)
+                ) / 3);
+                
+                if (saleBonus > 80) {
+                    saleBonus = 80 + Math.floor((saleBonus - 80) / 2);
+                }
+                if (saleBonus > 60) {
+                    saleBonus = 60 + Math.floor((saleBonus - 60) / 2);
+                }
+                   
+
+                let adminBonus =
+                    safeSkill('o', 'coo') +
+                    Math.floor(safeSkill('v', 'coo') / 2) +
+                    Math.floor((
+                        safeSkill('f', 'coo') +
+                        safeSkill('m', 'coo') +
+                        safeSkill('t', 'coo')
+                    ) / 4);
+
+                if (adminBonus > 80) {
+                    adminBonus = 80 + Math.floor((adminBonus - 80) / 2);
+                }
+                if (adminBonus > 60) {
+                    adminBonus = 60 + Math.floor((adminBonus - 60) / 2);
+                }
+
                 return {
-                    saleBonus: Math.floor((
-                        safeSkill('m', 'cmo') +
-                        Math.floor((
-                            safeSkill('o', 'cmo') +
-                            safeSkill('f', 'cmo') +
-                            safeSkill('t', 'cmo')
-                        ) / 4)
-                    ) / 3),
-                    adminBonus:
-                        safeSkill('o', 'coo') +
-                        Math.floor((
-                            safeSkill('f', 'coo') +
-                            safeSkill('m', 'coo') +
-                            safeSkill('t', 'coo')
-                        ) / 4)
+                    saleBonus,
+                    adminBonus
                 };
             };
 
