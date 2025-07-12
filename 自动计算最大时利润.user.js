@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.11.0
-// @changelog    更新学院计算
+// @version      1.11.1
+// @changelog    修改获取高管数据时把训练中的高管也获取的错误，此错误只影响交易所和合同显示的时利润。
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -207,7 +207,8 @@
                 exec.currentWorkHistory &&
                 targetPositions.includes(exec.currentWorkHistory.position) &&
                 (!exec.strikeUntil || new Date(exec.strikeUntil) < new Date()) &&
-                new Date(exec.currentWorkHistory.start) < threeHoursAgo
+                new Date(exec.currentWorkHistory.start) < threeHoursAgo &&
+                !exec.currentTraining
             );
         };
 
