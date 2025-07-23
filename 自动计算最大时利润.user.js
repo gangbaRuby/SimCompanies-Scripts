@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.11.1
-// @changelog    修改获取高管数据时把训练中的高管也获取的错误，此错误只影响交易所和合同显示的时利润。
+// @version      1.11.2
+// @changelog    修改了获取salaryModifier的方式，解决因无法获取salaryModifier而导致生鲜商店计算错误的问题。
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -270,14 +270,14 @@
                         safeSkill('t', 'cmo')
                     ) / 4)
                 ) / 3);
-                
+
                 if (saleBonus > 80) {
                     saleBonus = 80 + Math.floor((saleBonus - 80) / 2);
                 }
                 if (saleBonus > 60) {
                     saleBonus = 60 + Math.floor((saleBonus - 60) / 2);
                 }
-                   
+
 
                 let adminBonus =
                     safeSkill('o', 'coo') +
@@ -396,16 +396,42 @@
                 });
 
                 // 提取建筑工资系数
-                const extractSalaryModifiers = (str) => {
-                    const regex = /{[^}]*?dbLetter:\s*"(\w+)"[^}]*?salaryModifier:\s*([-\d.]+)/g;
+                function extractSalaryModifiers(str) {
                     const result = {};
-
-                    for (const match of str.matchAll(regex)) {
-                        const letter = match[1];
-                        const salary = parseFloat(match[2]);
-                        result[letter] = salary;
+                    const varAssignRegex = /(\w+)\s*=\s*{/g;
+                    let match;
+                
+                    while ((match = varAssignRegex.exec(str)) !== null) {
+                        const varName = match[1];
+                        const startIndex = varAssignRegex.lastIndex - 1; // '{' 的位置
+                        let braceCount = 1;
+                        let currentIndex = startIndex + 1;
+                
+                        // 从startIndex开始，找到匹配的闭合括号
+                        while (braceCount > 0 && currentIndex < str.length) {
+                            if (str[currentIndex] === '{') braceCount++;
+                            else if (str[currentIndex] === '}') braceCount--;
+                            currentIndex++;
+                        }
+                
+                        if (braceCount === 0) {
+                            const objText = str.slice(startIndex, currentIndex);
+                
+                            // 提取dbLetter和salaryModifier
+                            const dbLetterMatch = objText.match(/dbLetter\s*:\s*"(\w)"/);
+                            const salaryMatch = objText.match(/salaryModifier\s*:\s*([.\d]+)/);
+                
+                            if (dbLetterMatch && salaryMatch) {
+                                const dbLetter = dbLetterMatch[1];
+                                const salary = parseFloat(salaryMatch[1]);
+                                result[dbLetter] = salary;
+                            }
+                        } else {
+                            // 没找到匹配括号，跳过
+                            console.warn(`未能匹配完整对象: ${varName}`);
+                        }
                     }
-
+                
                     return result;
                 }
                 const buildingsSalaryModifier = extractSalaryModifiers(rawContent);
