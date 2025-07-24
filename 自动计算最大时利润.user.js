@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.11.2
-// @changelog    修改了获取salaryModifier的方式，解决因无法获取salaryModifier而导致生鲜商店计算错误的问题。
+// @version      1.11.3
+// @changelog    完善了获取salaryModifier的方式，解决不能正常获取salaryModifier的问题。
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -398,16 +398,16 @@
                 // 提取建筑工资系数
                 function extractSalaryModifiers(str) {
                     const result = {};
+                
+                    // ✅ 处理第一种格式：多个变量赋值
                     const varAssignRegex = /(\w+)\s*=\s*{/g;
                     let match;
                 
                     while ((match = varAssignRegex.exec(str)) !== null) {
-                        const varName = match[1];
-                        const startIndex = varAssignRegex.lastIndex - 1; // '{' 的位置
+                        const startIndex = varAssignRegex.lastIndex - 1;
                         let braceCount = 1;
                         let currentIndex = startIndex + 1;
                 
-                        // 从startIndex开始，找到匹配的闭合括号
                         while (braceCount > 0 && currentIndex < str.length) {
                             if (str[currentIndex] === '{') braceCount++;
                             else if (str[currentIndex] === '}') braceCount--;
@@ -416,9 +416,7 @@
                 
                         if (braceCount === 0) {
                             const objText = str.slice(startIndex, currentIndex);
-                
-                            // 提取dbLetter和salaryModifier
-                            const dbLetterMatch = objText.match(/dbLetter\s*:\s*"(\w)"/);
+                            const dbLetterMatch = objText.match(/dbLetter\s*:\s*"(\w+)"/);
                             const salaryMatch = objText.match(/salaryModifier\s*:\s*([.\d]+)/);
                 
                             if (dbLetterMatch && salaryMatch) {
@@ -426,14 +424,26 @@
                                 const salary = parseFloat(salaryMatch[1]);
                                 result[dbLetter] = salary;
                             }
-                        } else {
-                            // 没找到匹配括号，跳过
-                            console.warn(`未能匹配完整对象: ${varName}`);
+                        }
+                    }
+                
+                    // ✅ 处理第二种格式：对象字面量内部嵌套对象（带数字键）
+                    const objectEntryRegex = /\d+\s*:\s*{[\s\S]*?}/g;
+                    const entries = str.match(objectEntryRegex) || [];
+                
+                    for (const entry of entries) {
+                        const dbLetterMatch = entry.match(/dbLetter\s*:\s*"(\w+)"/);
+                        const salaryMatch = entry.match(/salaryModifier\s*:\s*([.\d]+)/);
+                
+                        if (dbLetterMatch && salaryMatch) {
+                            const dbLetter = dbLetterMatch[1];
+                            const salary = parseFloat(salaryMatch[1]);
+                            result[dbLetter] = salary;
                         }
                     }
                 
                     return result;
-                }
+                }             
                 const buildingsSalaryModifier = extractSalaryModifiers(rawContent);
 
 
