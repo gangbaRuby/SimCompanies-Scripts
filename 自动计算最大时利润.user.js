@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    http://tampermonkey.net/
-// @version      1.11.3
-// @changelog    完善了获取salaryModifier的方式，解决不能正常获取salaryModifier的问题。
+// @version      1.12.0
+// @changelog    更新了夏季商品。
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -107,11 +107,12 @@
         const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
         return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
     };
-    const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size) => {
+    const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
         const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
         if (u <= 0) return NaN;
         const d = u / acc / size;
-        return d - d * salesModifier / 100;
+        let p = d - d * salesModifier / 100;
+        return weather && (p /= weather.sellingSpeedMultiplier), p
     };
 
     // ======================
@@ -237,15 +238,32 @@
             return resourcesRetailInfo;
         }
 
+        // 天气
+        const getWeather = async (realmId) => {
+            try {
+                const data = await Network.requestJson(`https://www.simcompanies.com/api/v2/weather/${realmId}/`);
+                return {
+                    Until: data.until,
+                    sellingSpeedMultiplier: data.sellingSpeedMultiplier
+                };
+            } catch (e) {
+                console.warn(`[Weather] Failed to fetch weather for realm ${realmId}:`, e);
+                return {
+                    Until: null,
+                    sellingSpeedMultiplier: null
+                };
+            }
+        };
 
         // 完整领域数据获取
         const fetchFullRegionData = async () => {
             const auth = await getAuthInfo();
-            const [recreation, executives, administration, resourcesRetailInfo] = await Promise.all([
+            const [recreation, executives, administration, resourcesRetailInfo, sellingSpeedMultiplier, weatherUntil] = await Promise.all([
                 getRecreationBonus(auth.realmId, auth.company),
                 getExecutives(),
                 getAdministrationCost(),
-                getResourcesRetailInfo(auth.realmId)
+                getResourcesRetailInfo(auth.realmId),
+                getWeather(auth.realmId)
             ]);
 
             // 计算高管加成
@@ -307,6 +325,8 @@
                 ...calculateExecutiveBonus(executives),
                 administration,
                 ResourcesRetailInfo: resourcesRetailInfo,
+                sellingSpeedMultiplier,
+                weatherUntil,
                 timestamp: new Date().toISOString()
             };
         };
@@ -349,17 +369,18 @@
 
                 // 提取变量值（支持数字 / 布尔 / 对象）
                 const extractValue = (variableName) => {
-                    const varRegex = new RegExp(`[,{\\s]${variableName}\\s*=\\s*([^,;\\n\\r]+)`);
+                    const escapedVar = variableName.replace('$', '\\$');
+                    const varRegex = new RegExp(`[,{\\s]${escapedVar}\\s*=\\s*([^,;\\n\\r]+)`);
                     const match = rawContent.match(varRegex);
                     if (!match) {
                         console.warn(`变量未找到: ${variableName}`);
                         return null;
                     }
-
+                
                     try {
                         const value = match[1].trim();
                         if (value.startsWith('{')) {
-                            const objectRegex = new RegExp(`[,{\\s]${variableName}\\s*=\\s*(\\{[^}]*\\})`);
+                            const objectRegex = new RegExp(`[,{\\s]${escapedVar}\\s*=\\s*(\\{[^}]*\\})`);
                             const matchAgain = rawContent.match(objectRegex);
                             if (matchAgain) {
                                 return JSON.parse(matchAgain[1]
@@ -398,27 +419,27 @@
                 // 提取建筑工资系数
                 function extractSalaryModifiers(str) {
                     const result = {};
-                
+
                     // ✅ 处理第一种格式：多个变量赋值
                     const varAssignRegex = /(\w+)\s*=\s*{/g;
                     let match;
-                
+
                     while ((match = varAssignRegex.exec(str)) !== null) {
                         const startIndex = varAssignRegex.lastIndex - 1;
                         let braceCount = 1;
                         let currentIndex = startIndex + 1;
-                
+
                         while (braceCount > 0 && currentIndex < str.length) {
                             if (str[currentIndex] === '{') braceCount++;
                             else if (str[currentIndex] === '}') braceCount--;
                             currentIndex++;
                         }
-                
+
                         if (braceCount === 0) {
                             const objText = str.slice(startIndex, currentIndex);
                             const dbLetterMatch = objText.match(/dbLetter\s*:\s*"(\w+)"/);
                             const salaryMatch = objText.match(/salaryModifier\s*:\s*([.\d]+)/);
-                
+
                             if (dbLetterMatch && salaryMatch) {
                                 const dbLetter = dbLetterMatch[1];
                                 const salary = parseFloat(salaryMatch[1]);
@@ -426,24 +447,24 @@
                             }
                         }
                     }
-                
+
                     // ✅ 处理第二种格式：对象字面量内部嵌套对象（带数字键）
                     const objectEntryRegex = /\d+\s*:\s*{[\s\S]*?}/g;
                     const entries = str.match(objectEntryRegex) || [];
-                
+
                     for (const entry of entries) {
                         const dbLetterMatch = entry.match(/dbLetter\s*:\s*"(\w+)"/);
                         const salaryMatch = entry.match(/salaryModifier\s*:\s*([.\d]+)/);
-                
+
                         if (dbLetterMatch && salaryMatch) {
                             const dbLetter = dbLetterMatch[1];
                             const salary = parseFloat(salaryMatch[1]);
                             result[dbLetter] = salary;
                         }
                     }
-                
+
                     return result;
-                }             
+                }
                 const buildingsSalaryModifier = extractSalaryModifiers(rawContent);
 
 
@@ -852,7 +873,9 @@
                 149: "南瓜汤",
                 150: "树",
                 151: "复活节兔兔",
-                152: "斋月糖果"
+                152: "斋月糖果",
+                153: "巧克力冰淇淋",
+                154: "苹果冰淇淋"
             };
 
             // 表格
@@ -1170,7 +1193,7 @@
                         while (currentPrice > 0) {
 
 
-                            w = zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size);
+                            w = zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? comp.props.weather : void 0);
 
                             // console.log(`v:${v}, b:${b}, w:${w}`)
 
@@ -1221,10 +1244,10 @@
                         btn.parentNode.insertBefore(profitDisplay, btn.nextSibling);
 
                         // 校验用 如果误差大则提示用户尝试更新数据
-                        currentWagesTotal = Math.ceil(zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, bestPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size) * wages * acceleration * b / 60 / 60);
+                        currentWagesTotal = Math.ceil(zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, bestPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? comp.props.weather : void 0) * wages * acceleration * b / 60 / 60);
                         // console.log(`currentWagesTotal:${currentWagesTotal}, comp.state.wagesTotal: ${comp.state.wagesTotal}`)
                         if (currentWagesTotal !== comp.state.wagesTotal) {
-                            alert("先输入数量或请尝试更新基本数据（左下角按钮）");
+                            alert("计算利润与显示利润不相符，请先输入数量或请尝试更新基本数据（左下角按钮）");
                         }
 
                     };
@@ -1331,11 +1354,12 @@
             const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
             return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
         };
-        const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size) => {
+        const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
             const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
             if (u <= 0) return NaN;
             const d = u / acc / size;
-            return d - d * salesModifier / 100;
+            let p = d - d * salesModifier / 100;
+            return weather && (p /= weather.sellingSpeedMultiplier), p
         };
 
         // Initial debug log
@@ -1368,6 +1392,7 @@
         const averageSalary = zn.AVERAGE_SALARY;
         const wages = averageSalary * salaryModifier;
         const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
+        const resourceDetail = SCD.constantsResources[parseInt(resource)]
 
         const v = salesModifierWithRecreationBonus + skillCMO;
         const b = Ul(administrationOverhead, skillCOO);
@@ -1383,7 +1408,8 @@
                 forceQuality === void 0 ? quality : 0,
                 saturation,
                 acceleration,
-                size
+                size,
+                resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
             );
             const revenue = currentPrice * quantity;
             const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
@@ -1515,42 +1541,13 @@
                     }
 
                     const initPromise = (() => {
-                        // console.log('[Check] currentResourceId:', currentResourceId, typeof currentResourceId);
-                        if (!localStorage.getItem("SimcompaniesConstantsData") || !localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`)) {
-                            return constantsData.initialize()
-                                .then(data => {
-                                    Storage.save('constants', data);
-                                    extractRealmIdOnce(tbody);
-
-                                    const salesMap = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES;
-                                    const isRetail = Object.values(salesMap).some(list => list.includes(parseInt(currentResourceId)));
-                                    if (!isRetail) return Promise.resolve();  // 如果不是零售商品，跳过处理
-
-                                    if (!localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`)) {
-                                        return RegionData.fetchFullRegionData();
-                                    } else {
-                                        return processNewRows(tbody);  // 只有零售商品才处理新行
-                                    }
-                                })
-                                .then(regionData => {
-                                    if (regionData) {
-                                        Storage.save('region', regionData);
-                                        console.log('[RegionAutoUpdater] 领域数据已更新');
-                                    }
-                                    // 不管是否获取了领域数据，都继续处理新行
-                                    return processNewRows(tbody);
-                                })
-                                .catch(err => {
-                                    console.error("基本数据初始化或领域数据更新失败", err);
-                                });
-
-                        } else {
-                            extractRealmIdOnce(tbody);
-                            const salesMap = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES;
-                            const isRetail = Object.values(salesMap).some(list => list.includes(parseInt(currentResourceId)));
-                            if (!isRetail) return Promise.resolve();  // 如果不是零售商品，跳过处理
-                            return processNewRows(tbody);  // 只有零售商品才处理新行
-                        }
+                        extractRealmIdOnce(tbody);
+                    
+                        const salesMap = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES;
+                        const isRetail = Object.values(salesMap).some(list => list.includes(parseInt(currentResourceId)));
+                        if (!isRetail) return Promise.resolve();  // 如果不是零售商品，跳过处理
+                    
+                        return processNewRows(tbody);  // 是零售商品就处理新行
                     })();
 
 
@@ -1607,11 +1604,12 @@
                 const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
                 return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
             };
-            const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size) => {
+            const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
                 const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
                 if (u <= 0) return NaN;
                 const d = u / acc / size;
-                return d - d * salesModifier / 100;
+                let p = d - d * salesModifier / 100;
+                return weather && (p /= weather.sellingSpeedMultiplier), p
             };
 
             let currentPrice = price,
@@ -1640,6 +1638,7 @@
             const averageSalary = zn.AVERAGE_SALARY;
             const wages = averageSalary * salaryModifier;
             const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
+            const resourceDetail = SCD.constantsResources[parseInt(resource)]
 
             const v = salesModifierWithRecreationBonus + skillCMO;
             const b = Ul(administrationOverhead, skillCOO);
@@ -1655,7 +1654,8 @@
                     forceQuality === void 0 ? quality : 0,
                     saturation,
                     acceleration,
-                    size
+                    size,
+                    resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
                 );
                 const revenue = currentPrice * quantity;
                 const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
@@ -2016,7 +2016,6 @@
 
     // RegionAutoUpdater 用于更新领域数据
     const RegionAutoUpdater = (() => {
-        const getStorageKey = realmId => `SimcompaniesRetailCalculation_${realmId}`;
         const ONE_HOUR = 60 * 60 * 1000;
 
         const needsUpdate = (realmId) => {
@@ -2027,10 +2026,12 @@
             try {
                 const data = JSON.parse(dataStr);
                 const lastTime = new Date(data.timestamp).getTime();
+                const weatherUntil = new Date(data.sellingSpeedMultiplier.weatherUntil).getTime();
                 const now = Date.now();
 
                 const ONE_HOUR = 60 * 60 * 1000;
-                if (now - lastTime > ONE_HOUR) return true;
+                if (now - lastTime > ONE_HOUR) return true; //大于1小时
+                if (now > weatherUntil) return true; //天气过期
 
                 // 当前北京时间
                 const nowInBeijing = new Date(now + 8 * 60 * 60 * 1000);
