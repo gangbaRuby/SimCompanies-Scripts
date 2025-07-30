@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
-// @namespace    http://tampermonkey.net/
-// @version      1.12.0
-// @changelog    更新了夏季商品。
+// @namespace    https://github.com/gangbaRuby
+// @version      1.12.1
+// @changelog    增加库存未来衰减量计算。
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -116,6 +116,100 @@
     };
 
     // ======================
+    // 计算剩余量
+    // ======================
+    function fo(e, t) {
+        // 因目前只有153，154有衰减，且衰减值为0.05，故省略判断，pve为最小衰减检测时间，目前为4
+        // const r = mt[e.kind].decay;
+        // if (r === 0)
+        //     return e.amount;
+        const n = Date.parse(e.datetime)
+            , a = Math.abs(t - n)
+            , o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+        return Math.floor(e.amount * Math.pow(1 - 0.05, o))
+    }
+
+    function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+        const originalDate = new Date(originalTimeStr);
+        const nowDate = new Date(nowTimestamp);
+
+        // 拿出原始时间的秒和毫秒
+        const originalSeconds = originalDate.getSeconds();
+        const originalMilliseconds = originalDate.getMilliseconds();
+
+        // 创建一个新时间，基于当前时间，但秒和毫秒用原始时间的
+        const alignedDate = new Date(nowDate);
+        alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+
+        // 如果对齐后时间比当前时间还大，则减1分钟保证不超过当前时间
+        if (alignedDate.getTime() > nowTimestamp) {
+            alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+        }
+
+        return alignedDate.getTime();
+    }
+
+    function formatLocalDateSimple(date) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(Math.floor(date.getSeconds()))}`;
+    }
+
+    function calculateRemainingQuantity(e, nowTime) {
+        const decayTime = Date.parse(e.datetime);
+        const quantity = e.amount;
+        let lastAmount = fo(e, nowTime);
+        const results = [];
+
+        let startTime = alignTimeToOriginalSeconds(e.datetime, nowTime);
+
+        for (let currentTime = startTime; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+            const diff = Math.abs(currentTime - decayTime);
+            const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+            const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+
+            if (amount !== lastAmount) {
+                const dateStr = formatLocalDateSimple(new Date(currentTime));
+                // 保存结果到数组
+                results.push({ amount, time: dateStr });
+                lastAmount = amount;
+                if (amount === 0) break;
+            }
+        }
+        return results;  // 返回结果数组，方便后续使用
+    }
+
+    function calculateFutureDecayWithCost(entry, nowTimestamp) {
+        const decayTime = Date.parse(entry.datetime);
+        const quantity = entry.amount;
+        const costTotal = Object.values(entry.cost || {}).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
+        let lastAmount = fo(entry, nowTimestamp);
+        const results = [];
+
+        // 起始时间对齐（秒和毫秒用原始时间的）
+        let startTime = alignTimeToOriginalSeconds(entry.datetime, nowTimestamp);
+
+        for (let currentTime = startTime; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+            const diff = Math.abs(currentTime - decayTime);
+            const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+            const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+
+            if (amount !== lastAmount) {
+                const dateStr = formatLocalDateSimple(new Date(currentTime));
+                const unitCost = amount === 0 ? Infinity : costTotal / amount;
+                results.push({
+                    time: dateStr,
+                    amount,
+                    unitCost
+                });
+                lastAmount = amount;
+                if (amount === 0) break;
+            }
+        }
+
+        return results;
+    }
+
+    // ======================
     // 模块1：网络请求模块
     // ======================
     const Network = (() => {
@@ -179,6 +273,7 @@
             const data = await Network.requestJson('https://www.simcompanies.com/api/v3/companies/auth-data/');
             return {
                 realmId: data.authCompany?.realmId,
+                companyId: data.authCompany?.companyId,
                 company: data.authCompany?.company,
                 salesModifier: data.authCompany?.salesModifier,
                 economyState: data.temporals?.economyState,
@@ -376,7 +471,7 @@
                         console.warn(`变量未找到: ${variableName}`);
                         return null;
                     }
-                
+
                     try {
                         const value = match[1].trim();
                         if (value.startsWith('{')) {
@@ -977,6 +1072,7 @@
             btnGroup.append(
                 createActionButton('更新领域数据', 'region'),
                 createActionButton('更新基本数据', 'constants'),
+                createActionButton('计算剩余量', 'calculateDecay'),
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
@@ -985,9 +1081,18 @@
                     return btn;
                 })()
             );
-
             content.appendChild(btnGroup);
 
+            // 插件信息区块
+            const info = document.createElement('div');
+            info.style.cssText = 'margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:#ccc;border-top:1px solid #555;';
+
+            info.innerHTML = `
+                作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" style="color:#6cf;">Rabbit House</a> 反馈请说明问题<br>
+                源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub ⭐</a>
+            `;
+
+            content.appendChild(info);
             panel.append(trigger, content);
             return panel;
         };
@@ -1012,6 +1117,27 @@
         // 处理数据更新
         const handleUpdate = async (type) => {
             const button = panelElement.querySelector(`[data-action-type="${type}"]`);
+            if (type === 'calculateDecay') {
+                button.disabled = true;
+                button.textContent = '计算中...';
+
+                const wasOpen = document.getElementById('decayDataPanel')?.style.display !== 'none';
+
+                try {
+                    await window.calculateAllDecayResources(); // 先执行计算
+                } catch (e) {
+                    console.error('计算失败', e);
+                } finally {
+                    if (wasOpen) {
+                        DecayResultViewer.show(); // 如果原本是打开的，就刷新
+                    } else {
+                        DecayResultViewer.toggle(); // 原本关闭，执行 toggle 打开
+                    }
+                    button.disabled = false;
+                    button.textContent = '计算剩余量';
+                }
+                return;
+            }
             try {
                 button.disabled = true;
                 button.textContent = '更新中...';
@@ -1542,11 +1668,11 @@
 
                     const initPromise = (() => {
                         extractRealmIdOnce(tbody);
-                    
+
                         const salesMap = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data.SALES;
                         const isRetail = Object.values(salesMap).some(list => list.includes(parseInt(currentResourceId)));
                         if (!isRetail) return Promise.resolve();  // 如果不是零售商品，跳过处理
-                    
+
                         return processNewRows(tbody);  // 是零售商品就处理新行
                     })();
 
@@ -1693,13 +1819,13 @@
         };
 
         function init() {
-            console.log('[合同页面处理] 初始化合同页面处理逻辑');
+            // console.log('[合同页面处理] 初始化合同页面处理逻辑');
 
             const checkPageLoaded = setInterval(() => {
                 const isOnTargetPage = /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
 
                 if (!isOnTargetPage) {
-                    console.log('[合同页面处理] 用户已离开页面，停止轮询');
+                    // console.log('[合同页面处理] 用户已离开页面，停止轮询');
                     clearInterval(checkPageLoaded);
                     removeWarningNotice(); // 🔄 页面离开时清理提示
                     return;
@@ -1707,13 +1833,13 @@
 
                 const contractCards = document.querySelectorAll('div[tabindex="0"]');
                 if (contractCards.length > 0) {
-                    console.log('[合同页面处理] 合同卡片已加载');
+                    // console.log('[合同页面处理] 合同卡片已加载');
                     clearInterval(checkPageLoaded);
                     insertWarningNotice(); // ✅ 卡片加载后插入提示
                     contractCards.forEach(handleCard);
                     startMutationObserver();
                 } else {
-                    console.log('[合同页面处理] 等待合同卡片加载...');
+                    // console.log('[合同页面处理] 等待合同卡片加载...');
                 }
             }, 500);
         }
@@ -2107,5 +2233,493 @@
         // 开始监听 DOM 变化，直到提取到 realmId
         observer.observe(document.body, { childList: true, subtree: true });
     };
+
+    // ======================
+    // 模块11：计算预测剩余量
+    // ======================
+    (function () {
+
+        // 计算入口函数（可被按钮触发调用）
+        async function calculateAllDecayResources() {
+            try {
+                const realmId = getRealmIdFromLink();
+                const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
+                const SRC = JSON.parse(localStorage.getItem(regionKey));
+                if (!SRC || !SRC.companyId) {
+                    console.warn("[资源模块] 未找到 companyId，无法发起请求");
+                    return;
+                }
+
+                const url = `https://www.simcompanies.com/api/v3/resources/${SRC.companyId}/`;
+                const response = await fetch(url);
+                const data = await response.json();
+                const now = Date.now();
+
+                const workerCode = `
+                self.onmessage = function(e) {
+                  const { data, now, companyId } = e.data;
+          
+                  function fo(entry, t) {
+                    const n = Date.parse(entry.datetime);
+                    const a = Math.abs(t - n);
+                    const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+                    return Math.floor(entry.amount * Math.pow(1 - 0.05, o));
+                  }
+          
+                  function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+                    const originalDate = new Date(originalTimeStr);
+                    const nowDate = new Date(nowTimestamp);
+                    const originalSeconds = originalDate.getSeconds();
+                    const originalMilliseconds = originalDate.getMilliseconds();
+                    const alignedDate = new Date(nowDate);
+                    alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+                    if (alignedDate.getTime() > nowTimestamp) {
+                      alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                    }
+                    return alignedDate.getTime();
+                  }
+          
+                  function formatLocalDateSimple(date) {
+                    const pad = (n) => String(n).padStart(2, '0');
+                    return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
+                  }
+          
+                  function calculate(entry) {
+                    const decayTime = Date.parse(entry.datetime);
+                    const quantity = entry.amount;
+                    const totalCost = Object.values(entry.cost || {}).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
+                    let lastAmount = fo(entry, now);
+                    const results = [];
+                    let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
+          
+                    for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+                      const diff = Math.abs(currentTime - decayTime);
+                      const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+                      const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+                      if (amount !== lastAmount) {
+                        const dateStr = formatLocalDateSimple(new Date(currentTime));
+                        const unitCost = amount === 0 ? Infinity : Number((totalCost / amount).toFixed(3));
+                        results.push({
+                          time: dateStr,
+                          amount,
+                          unitCost
+                        });
+                        lastAmount = amount;
+                        if (amount === 0) break;
+                      }
+                    }
+          
+                    return {
+                      kind: entry.kind,
+                      quality: entry.quality,
+                      result: results
+                    };
+                  }
+          
+                  const output = {};
+                  for (const entry of data) {
+                    if ([153, 154].includes(entry.kind)) {
+                      if (!output[entry.kind]) output[entry.kind] = {};
+                      if (!output[entry.kind][entry.quality]) {
+                        output[entry.kind][entry.quality] = calculate(entry);
+                      }
+                    }
+                  }
+          
+                  self.postMessage({ companyId, output });
+                };
+              `;
+
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const worker = new Worker(URL.createObjectURL(blob));
+
+                worker.onmessage = function (e) {
+                    const { companyId, output } = e.data;
+                    const key = `wareHouse-${companyId}`;
+                    localStorage.setItem(key, JSON.stringify(output));
+                    window.dispatchEvent(new Event('warehouse-updated'));
+                    console.log(`[📦资源剩余量已计算] ${key}`, output);
+                };
+
+                worker.postMessage({ data, now, companyId: SRC.companyId });
+
+            } catch (e) {
+                console.error("[资源模块] 处理失败：", e);
+            }
+        }
+
+
+
+        // 暴露到 window 供外部按钮调用
+        window.calculateAllDecayResources = calculateAllDecayResources;
+    })();
+
+    // ======================
+    // 模块12：展示预测剩余量
+    // ======================
+
+    const DecayResultViewer = (() => {
+        let container, header, content;
+
+        const KIND_NAMES = {
+            153: '巧克力冰淇凌',
+            154: '苹果冰淇凌',
+        };
+
+        const getCurrentCompanyData = () => {
+            const realmId = getRealmIdFromLink();
+            const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
+            const SRC = JSON.parse(localStorage.getItem(regionKey));
+            if (!SRC || !SRC.companyId) {
+                console.warn("[资源模块] 未找到 companyId，无法展示资源面板");
+                return { inventory: [], market: [], contract: [] };
+            }
+
+            const key = `wareHouse-${SRC.companyId}`;
+            const raw = localStorage.getItem(key);
+            const inventory = [];
+
+            if (raw) {
+                try {
+                    const obj = JSON.parse(raw);
+                    for (const kind in obj) {
+                        for (const quality in obj[kind]) {
+                            const item = obj[kind][quality];
+                            inventory.push(item);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('解析库存数据失败', e);
+                }
+            }
+
+            return { inventory, market: [], contract: [] };
+        };
+
+        const getDataFromStorage = () => {
+            const data = getCurrentCompanyData();
+
+            return data;
+        };
+
+        const formatSimpleDate = (dateStr) => {
+            const d = new Date(dateStr);
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        };
+
+        const createToggleSection = (title, contentElement, isOpen = true) => {
+            const section = document.createElement("div");
+            section.style.marginBottom = '8px';
+
+            const header = document.createElement("div");
+            header.textContent = (isOpen ? '▼ ' : '▶ ') + title;
+            header.style.cssText = "cursor:pointer;font-weight:bold;padding:6px;background:#444;border-radius:4px;user-select:none;";
+            header.addEventListener("click", () => {
+                const isHidden = contentElement.style.display === "none";
+                contentElement.style.display = isHidden ? "block" : "none";
+                header.textContent = (isHidden ? '▼ ' : '▶ ') + title;
+            });
+
+            section.appendChild(header);
+            section.appendChild(contentElement);
+            contentElement.style.display = isOpen ? "block" : "none";
+            return section;
+        };
+
+        const renderResult = () => {
+            const data = getDataFromStorage();
+
+            content.innerHTML = ''; // 清空内容
+
+            const makeSection = (label, items) => {
+                const containerDiv = document.createElement("div");
+                if (items.length === 0) {
+                    const msg = document.createElement("div");
+                    msg.textContent = "暂无数据。";
+                    msg.style.padding = "5px 10px";
+                    containerDiv.appendChild(msg);
+                    return createToggleSection(label, containerDiv, false);
+                }
+
+                const groupedByKind = {};
+                items.forEach(item => {
+                    if (!groupedByKind[item.kind]) groupedByKind[item.kind] = [];
+                    groupedByKind[item.kind].push(item);
+                });
+
+                for (const kind in groupedByKind) {
+                    const kindName = KIND_NAMES[kind] || `种类 ${kind}`;
+                    const kindContent = document.createElement("div");
+                    kindContent.style.paddingLeft = "12px";
+
+                    const groupedByQuality = {};
+                    groupedByKind[kind].forEach(item => {
+                        if (!groupedByQuality[item.quality]) groupedByQuality[item.quality] = [];
+                        groupedByQuality[item.quality].push(item);
+                    });
+
+                    for (const quality in groupedByQuality) {
+                        const qualityContent = document.createElement("div");
+                        qualityContent.style.paddingLeft = "16px";
+
+                        // 表头
+                        const headerRow = document.createElement('div');
+                        headerRow.style.fontWeight = 'bold';
+                        headerRow.style.display = 'flex';
+                        headerRow.style.gap = '16px';
+                        headerRow.style.padding = '2px 0';
+                        headerRow.innerHTML = `<div style="width:60px">剩余量</div><div style="width:130px">达成时间</div><div style="width:80px">单位成本</div>`;
+                        qualityContent.appendChild(headerRow);
+
+                        const allDecayArrays = groupedByQuality[quality].flatMap(i => i.futureDecayArray || i.result || []);
+
+                        if (allDecayArrays.length === 0) {
+                            const row = document.createElement("div");
+                            row.style.display = "flex";
+                            row.style.gap = "16px";
+                            row.style.padding = "1px 0";
+                            row.innerHTML = `
+                                <div style="width:60px">已全部衰减</div>
+                                <div style="width:130px">-</div>
+                                <div style="width:80px">∞</div>
+                            `;
+                            qualityContent.appendChild(row);
+                        } else {
+                            allDecayArrays.forEach(({ amount, time, unitCost }) => {
+                                const row = document.createElement("div");
+                                row.style.display = "flex";
+                                row.style.gap = "16px";
+                                row.style.padding = "1px 0";
+                                row.innerHTML = `
+                                    <div style="width:60px">${amount}</div>
+                                    <div style="width:130px">${time}</div>
+                                    <div style="width:80px">${unitCost === Infinity
+                                        ? '∞'
+                                        : (typeof unitCost === 'number' ? unitCost.toFixed(3) : '∞')
+                                    }</div>
+                                `;
+                                qualityContent.appendChild(row);
+                            });
+                        }
+
+
+                        kindContent.appendChild(createToggleSection(`品质 ${quality}`, qualityContent, false));
+                    }
+
+                    containerDiv.appendChild(createToggleSection(kindName, kindContent, true));
+                }
+
+                return createToggleSection(label, containerDiv, true);
+            };
+
+            content.appendChild(makeSection("📦 库存数据", data.inventory));
+        };
+
+        const init = () => {
+            container = document.createElement("div");
+            container.id = 'decayDataPanel';
+            container.style.cssText = `
+                position: fixed;
+                left: calc(100% - 330px);
+                top: calc(100vh - 60px - 300px);
+                width: 320px;
+                height: 300px;
+                max-height: 60%;
+                overflow: hidden;
+                background: #222;
+                color: white;
+                padding: 10px;
+                z-index: 10000;
+                border-radius: 6px;
+                font-size: clamp(12px, 1.2vw, 16px);
+                box-shadow: 0 0 10px #000;
+                user-select: none;
+                display: flex;
+                flex-direction: column;
+            `;
+
+            // 标题栏：拖动区域
+            header = document.createElement('div');
+            header.textContent = '未来衰减量';
+            header.style.cssText = `
+                background: #444;
+                padding: 8px 10px;
+                cursor: move;
+                font-weight: bold;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                flex-shrink: 0;
+                position: relative;
+            `;
+
+            // 计算按钮
+            const calcBtn = document.createElement('button');
+            calcBtn.textContent = '🔄';
+            calcBtn.title = '重新计算资源剩余量';
+            calcBtn.style.cssText = `
+                float: right;
+                margin-right: 6px;
+                background: transparent;
+                border: none;
+                color: white;
+                font-size: 16px;
+                cursor: pointer;
+                user-select: none;
+            `;
+            calcBtn.onclick = async () => {
+                calcBtn.disabled = true;
+                calcBtn.textContent = '⏳';
+                try {
+                    await window.calculateAllDecayResources();
+                    DecayResultViewer.show(); // 重新渲染展示框内容
+                } catch (e) {
+                    console.error("资源计算失败", e);
+                } finally {
+                    calcBtn.disabled = false;
+                    calcBtn.textContent = '🔄';
+                }
+            };
+            header.appendChild(calcBtn);
+
+            // 关闭按钮
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '×';
+            closeBtn.title = '关闭面板';
+            closeBtn.style.cssText = `
+                position: absolute;
+                right: 8px;
+                top: 6px;
+                background: transparent;
+                border: none;
+                color: white;
+                font-size: 16px;
+                cursor: pointer;
+                user-select: none;
+            `;
+            closeBtn.onclick = () => { container.style.display = 'none'; };
+            header.appendChild(closeBtn);
+
+            // 内容容器（滚动区域）
+            content = document.createElement('div');
+            content.style.cssText = `
+                flex: 1 1 auto;
+                overflow: auto;
+                padding: 10px;
+            `;
+
+            container.appendChild(header);
+            container.appendChild(content);
+            document.body.appendChild(container);
+
+            renderResult();
+
+            // 拖拽逻辑
+            let isDragging = false, startX, startY, startLeft, startTop;
+
+            header.addEventListener('mousedown', (e) => {
+                if (e.target === closeBtn) return; // 排除点关闭按钮时触发拖拽
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                const rect = container.getBoundingClientRect();
+                startLeft = rect.left;
+                startTop = rect.top;
+                e.preventDefault();
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                let newLeft = startLeft + (e.clientX - startX);
+                let newTop = startTop + (e.clientY - startY);
+
+                // 限制边界（不允许拖出窗口）
+                newLeft = Math.min(Math.max(newLeft, 0), window.innerWidth - container.offsetWidth);
+                newTop = Math.min(Math.max(newTop, 0), window.innerHeight - container.offsetHeight);
+
+                container.style.left = newLeft + 'px';
+                container.style.top = newTop + 'px';
+                container.style.bottom = 'auto';
+            });
+
+            // 创建右下角缩放柄
+            const resizer = document.createElement('div');
+            resizer.style.cssText = `
+                width: 14px;
+                height: 14px;
+                background: transparent;
+                position: absolute;
+                right: 2px;
+                bottom: 2px;
+                cursor: se-resize;
+                user-select: none;
+                z-index: 10001;
+            `;
+            container.appendChild(resizer);
+
+            let isResizing = false;
+            let startWidth, startHeight, startPageX, startPageY;
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startWidth = container.offsetWidth;
+                startHeight = container.offsetHeight;
+                startPageX = e.pageX;
+                startPageY = e.pageY;
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                let newWidth = startWidth + (e.pageX - startPageX);
+                let newHeight = startHeight + (e.pageY - startPageY);
+
+                // 限制最小尺寸
+                newWidth = Math.max(newWidth, 250);
+                newHeight = Math.max(newHeight, 150);
+
+                // 限制最大尺寸，不超出窗口
+                newWidth = Math.min(newWidth, window.innerWidth - container.getBoundingClientRect().left);
+                newHeight = Math.min(newHeight, window.innerHeight - container.getBoundingClientRect().top);
+
+                container.style.width = newWidth + 'px';
+                container.style.height = newHeight + 'px';
+
+                // 调整content高度，保证撑满
+                content.style.height = `calc(100% - ${header.offsetHeight}px)`;
+            });
+
+            window.addEventListener('mouseup', () => {
+                isResizing = false;
+            });
+        };
+
+        window.addEventListener('warehouse-updated', () => {
+            if (container && container.style.display !== 'none') {
+                renderResult();
+            }
+        });
+
+        return {
+            show() {
+                if (!container) init();
+                else container.style.display = "flex";
+                renderResult();
+            },
+            hide() {
+                if (container) container.style.display = "none";
+            },
+            toggle() {
+                if (!container || container.style.display === "none") this.show();
+                else this.hide();
+            }
+        };
+    })();
+
 
 })();

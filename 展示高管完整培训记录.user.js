@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         显示高管培训记录
-// @namespace    http://tampermonkey.net/
+// @namespace    https://github.com/gangbaRuby
 // @version      1.3
 // @description  在高管详情页和公司主页的高管详情页展示公司高管培训记录
 // @author       Rabbit House
