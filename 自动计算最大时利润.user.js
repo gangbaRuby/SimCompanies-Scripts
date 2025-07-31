@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.12.1
-// @changelog    增加库存未来衰减量计算。
+// @version      1.12.2
+// @changelog    未来衰减量的展示框适配手机，由于上次更新修改了命名空间导致同时存在两个插件，请手动删除版本为1.12.0的插件🙇。
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -1087,9 +1087,12 @@
             const info = document.createElement('div');
             info.style.cssText = 'margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:#ccc;border-top:1px solid #555;';
 
+            const version = GM_info?.script?.version || '未知版本';
+
             info.innerHTML = `
                 作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" style="color:#6cf;">Rabbit House</a> 反馈请说明问题<br>
-                源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub ⭐</a>
+                源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub ⭐</a><br>
+                版本：${version} 
             `;
 
             content.appendChild(info);
@@ -2517,22 +2520,24 @@
         };
 
         const init = () => {
+            const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
             container = document.createElement("div");
             container.id = 'decayDataPanel';
             container.style.cssText = `
                 position: fixed;
-                left: calc(100% - 330px);
-                top: calc(100vh - 60px - 300px);
-                width: 320px;
-                height: 300px;
-                max-height: 60%;
+                left: ${isMobile ? '5vw' : 'calc(100% - 330px)'};
+                top: ${isMobile ? '20px' : 'calc(100vh - 60px - 300px)'};
+                width: ${isMobile ? '80vw' : '320px'};
+                height: ${isMobile ? '50vh' : '300px'};
+                max-height: 80%;
                 overflow: hidden;
                 background: #222;
                 color: white;
                 padding: 10px;
                 z-index: 10000;
                 border-radius: 6px;
-                font-size: clamp(12px, 1.2vw, 16px);
+                font-size: clamp(12px, 1.5vw, 16px);
                 box-shadow: 0 0 10px #000;
                 user-select: none;
                 display: flex;
@@ -2541,19 +2546,36 @@
 
             // 标题栏：拖动区域
             header = document.createElement('div');
-            header.textContent = '未来衰减量';
+            const headerTitle = document.createElement('span');
+            headerTitle.textContent = '未来衰减量 ▾';
+            header.appendChild(headerTitle);
+
+            // 折叠逻辑
+            let isCollapsed = false;
+            header.addEventListener('click', (e) => {
+                if (e.target === calcBtn || e.target === closeBtn) return; // 忽略按钮
+                isCollapsed = !isCollapsed;
+
+                // 展示与隐藏整个内容部分（包括 header 以外所有）
+                content.style.display = isCollapsed ? 'none' : 'block';
+
+                // 调整 container 高度（标题栏约 40px）
+                container.style.height = isCollapsed ? `${header.offsetHeight + 2}px` : (isMobile ? '50vh' : '300px');
+
+                // 更新箭头方向
+                headerTitle.textContent = isCollapsed ? '未来衰减量 ▸' : '未来衰减量 ▾';
+            });
             header.style.cssText = `
                 background: #444;
                 padding: 8px 10px;
-                cursor: move;
                 font-weight: bold;
                 border-top-left-radius: 6px;
                 border-top-right-radius: 6px;
                 flex-shrink: 0;
                 position: relative;
+                ${isMobile ? '' : 'cursor: move;'}
             `;
 
-            // 计算按钮
             const calcBtn = document.createElement('button');
             calcBtn.textContent = '🔄';
             calcBtn.title = '重新计算资源剩余量';
@@ -2572,7 +2594,7 @@
                 calcBtn.textContent = '⏳';
                 try {
                     await window.calculateAllDecayResources();
-                    DecayResultViewer.show(); // 重新渲染展示框内容
+                    DecayResultViewer.show();
                 } catch (e) {
                     console.error("资源计算失败", e);
                 } finally {
@@ -2582,7 +2604,6 @@
             };
             header.appendChild(calcBtn);
 
-            // 关闭按钮
             const closeBtn = document.createElement('button');
             closeBtn.textContent = '×';
             closeBtn.title = '关闭面板';
@@ -2600,7 +2621,6 @@
             closeBtn.onclick = () => { container.style.display = 'none'; };
             header.appendChild(closeBtn);
 
-            // 内容容器（滚动区域）
             content = document.createElement('div');
             content.style.cssText = `
                 flex: 1 1 auto;
@@ -2614,89 +2634,118 @@
 
             renderResult();
 
-            // 拖拽逻辑
-            let isDragging = false, startX, startY, startLeft, startTop;
+            if (!isMobile) {
+                let isDragging = false, startX, startY, startLeft, startTop;
 
-            header.addEventListener('mousedown', (e) => {
-                if (e.target === closeBtn) return; // 排除点关闭按钮时触发拖拽
-                isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                const rect = container.getBoundingClientRect();
-                startLeft = rect.left;
-                startTop = rect.top;
-                e.preventDefault();
-            });
+                header.addEventListener('mousedown', (e) => {
+                    if (e.target === closeBtn) return;
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    const rect = container.getBoundingClientRect();
+                    startLeft = rect.left;
+                    startTop = rect.top;
+                    e.preventDefault();
+                });
 
-            window.addEventListener('mouseup', () => {
-                isDragging = false;
-            });
+                window.addEventListener('mouseup', () => {
+                    isDragging = false;
+                });
 
-            window.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                let newLeft = startLeft + (e.clientX - startX);
-                let newTop = startTop + (e.clientY - startY);
+                window.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    let newLeft = startLeft + (e.clientX - startX);
+                    let newTop = startTop + (e.clientY - startY);
 
-                // 限制边界（不允许拖出窗口）
-                newLeft = Math.min(Math.max(newLeft, 0), window.innerWidth - container.offsetWidth);
-                newTop = Math.min(Math.max(newTop, 0), window.innerHeight - container.offsetHeight);
+                    newLeft = Math.min(Math.max(newLeft, 0), window.innerWidth - container.offsetWidth);
+                    newTop = Math.min(Math.max(newTop, 0), window.innerHeight - container.offsetHeight);
 
-                container.style.left = newLeft + 'px';
-                container.style.top = newTop + 'px';
-                container.style.bottom = 'auto';
-            });
+                    container.style.left = newLeft + 'px';
+                    container.style.top = newTop + 'px';
+                    container.style.bottom = 'auto';
+                });
 
-            // 创建右下角缩放柄
-            const resizer = document.createElement('div');
-            resizer.style.cssText = `
-                width: 14px;
-                height: 14px;
-                background: transparent;
-                position: absolute;
-                right: 2px;
-                bottom: 2px;
-                cursor: se-resize;
-                user-select: none;
-                z-index: 10001;
-            `;
-            container.appendChild(resizer);
+                const resizer = document.createElement('div');
+                resizer.style.cssText = `
+                    width: 14px;
+                    height: 14px;
+                    background: transparent;
+                    position: absolute;
+                    right: 2px;
+                    bottom: 2px;
+                    cursor: se-resize;
+                    user-select: none;
+                    z-index: 10001;
+                `;
+                container.appendChild(resizer);
 
-            let isResizing = false;
-            let startWidth, startHeight, startPageX, startPageY;
+                let isResizing = false;
+                let startWidth, startHeight, startPageX, startPageY;
 
-            resizer.addEventListener('mousedown', (e) => {
-                isResizing = true;
-                startWidth = container.offsetWidth;
-                startHeight = container.offsetHeight;
-                startPageX = e.pageX;
-                startPageY = e.pageY;
-                e.preventDefault();
-                e.stopPropagation();
-            });
+                resizer.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    startWidth = container.offsetWidth;
+                    startHeight = container.offsetHeight;
+                    startPageX = e.pageX;
+                    startPageY = e.pageY;
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
 
-            window.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
-                let newWidth = startWidth + (e.pageX - startPageX);
-                let newHeight = startHeight + (e.pageY - startPageY);
+                window.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    let newWidth = startWidth + (e.pageX - startPageX);
+                    let newHeight = startHeight + (e.pageY - startPageY);
 
-                // 限制最小尺寸
-                newWidth = Math.max(newWidth, 250);
-                newHeight = Math.max(newHeight, 150);
+                    newWidth = Math.max(newWidth, 250);
+                    newHeight = Math.max(newHeight, 150);
 
-                // 限制最大尺寸，不超出窗口
-                newWidth = Math.min(newWidth, window.innerWidth - container.getBoundingClientRect().left);
-                newHeight = Math.min(newHeight, window.innerHeight - container.getBoundingClientRect().top);
+                    newWidth = Math.min(newWidth, window.innerWidth - container.getBoundingClientRect().left);
+                    newHeight = Math.min(newHeight, window.innerHeight - container.getBoundingClientRect().top);
 
-                container.style.width = newWidth + 'px';
-                container.style.height = newHeight + 'px';
+                    container.style.width = newWidth + 'px';
+                    container.style.height = newHeight + 'px';
+                    content.style.height = `calc(100% - ${header.offsetHeight}px)`;
+                });
 
-                // 调整content高度，保证撑满
-                content.style.height = `calc(100% - ${header.offsetHeight}px)`;
-            });
+                window.addEventListener('mouseup', () => {
+                    isResizing = false;
+                });
+            }
+            if (isMobile) {
+                let isDragging = false, startX, startY, startLeft, startTop;
 
-            window.addEventListener('mouseup', () => {
-                isResizing = false;
-            });
+                header.addEventListener('touchstart', (e) => {
+                    if (e.target === closeBtn) return;
+                    const touch = e.touches[0];
+                    isDragging = true;
+                    startX = touch.clientX;
+                    startY = touch.clientY;
+                    const rect = container.getBoundingClientRect();
+                    startLeft = rect.left;
+                    startTop = rect.top;
+                }, { passive: true });
+
+                window.addEventListener('touchend', () => {
+                    isDragging = false;
+                });
+
+                window.addEventListener('touchmove', (e) => {
+                    if (!isDragging) return;
+                    const touch = e.touches[0];
+                    let newLeft = startLeft + (touch.clientX - startX);
+                    let newTop = startTop + (touch.clientY - startY);
+
+                    newLeft = Math.min(Math.max(newLeft, 0), window.innerWidth - container.offsetWidth);
+                    newTop = Math.min(Math.max(newTop, 0), window.innerHeight - container.offsetHeight);
+
+                    container.style.left = newLeft + 'px';
+                    container.style.top = newTop + 'px';
+                    container.style.bottom = 'auto';
+                }, { passive: true });
+
+                // 简易缩放：双指捏合或额外按钮控制可选（此处不实现复杂捏合）
+            }
         };
 
         window.addEventListener('warehouse-updated', () => {
@@ -2720,6 +2769,5 @@
             }
         };
     })();
-
 
 })();
