@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.12.3
-// @changelog    未来衰减量增加出入库合同及市场订单。由于1.12.1更新修改了命名空间导致同时存在两个插件，如果多次提示更新请手动删除版本为1.12.0的插件🙇。
+// @version      1.12.4
+// @changelog    交易所增加显示一级销售用时。由于1.12.1更新修改了命名空间导致同时存在两个插件，如果多次提示更新请手动删除版本为1.12.0的插件🙇。
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -1431,6 +1431,7 @@
 
         const v = salesModifierWithRecreationBonus + skillCMO;
         const b = Ul(administrationOverhead, skillCOO);
+        let selltime;
 
         while (currentPrice > 0) {
             const modeledData = wv(economyState, resource, forceQuality ?? null);
@@ -1456,6 +1457,7 @@
             if (!secondsToFinish || secondsToFinish <= 0) break;
             if (profit > maxProfit) {
                 maxProfit = profit;
+                selltime = secondsToFinish;
             } else if (maxProfit > 0 && profit < 0) {
                 break;
             }
@@ -1470,24 +1472,66 @@
 
         }
 
-        self.postMessage({ rowId, maxProfit });
+        self.postMessage({ rowId, maxProfit, selltime});
     };
     `;
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
 
+        // 全局状态与注册器（放最上面，只运行一次）
+        const allProfitSpans = new Set();
+        let isShowingProfit = true;
+
+        setInterval(() => {
+            isShowingProfit = !isShowingProfit;
+            for (const span of allProfitSpans) {
+                const { profitText, timeText } = span.dataset;
+                span.textContent = isShowingProfit ? profitText : timeText;
+            }
+        }, 3000);
+
+        // 主回调处理
         profitWorker.onmessage = function (e) {
-            const { rowId, maxProfit } = e.data;
+            const { rowId, maxProfit, selltime } = e.data;
+            const hours = Math.floor(selltime / 3600);
+            const minutes = Math.ceil((selltime % 3600) / 60);
+            const timeStr = `${hours > 0 ? `${hours}h ` : ''}${minutes}m`;
+            const profit = (maxProfit * 3600).toFixed(2);
             const row = pendingRows.get(rowId);
             if (!row) return;
             pendingRows.delete(rowId);
+
             if (!row.querySelector('td.auto-profit-info')) {
                 const td = document.createElement('td');
                 td.classList.add('auto-profit-info');
+            
                 const span = document.createElement('span');
-                span.textContent = `时利润：${(maxProfit * 3600).toFixed(2)}`;
-                span.style.cssText = 'font-size:14px;color:white;background:gray;padding:4px 8px';
+                const isMobile = window.innerWidth <= 600;
+
+                const profitText = `时利润：${Math.round(profit)}`;
+                const timeText = `用时：${timeStr}`;
+                const fullText = `时利润：${profit} 用时：${timeStr}`;
+
+                span.textContent = isMobile ? (isShowingProfit ? profitText : timeText) : fullText;
+
+                span.style.cssText = `
+                display: inline-block;
+                min-width: 60px;
+                font-size: 16px;
+                color: white;
+                background: gray;
+                padding: 4px 8px;
+                line-height: 1.2;
+                box-sizing: border-box;
+            `.trim();
+
                 td.appendChild(span);
                 row.appendChild(td);
+
+                if (isMobile) {
+                    span.dataset.profitText = profitText;
+                    span.dataset.timeText = timeText;
+                    allProfitSpans.add(span);
+                }
             }
         };
 
@@ -1569,7 +1613,7 @@
 
                         if (container && !container.querySelector('[data-custom-notice]')) {
                             const infoText = document.createElement('div');
-                            infoText.textContent = '高管若变动，时利润会有误差，点左下更新。';
+                            infoText.textContent = '高管、周期变动，会影响计算，记得更新，所有展示内容均为1级建筑。';
                             infoText.dataset.customNotice = 'true'; // 避免重复添加
                             container.appendChild(infoText); // 插入在 form 所在 div 的后面
                         }
