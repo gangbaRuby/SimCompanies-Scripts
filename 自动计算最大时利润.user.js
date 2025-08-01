@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.12.2
-// @changelog    未来衰减量的展示框适配手机，由于上次更新修改了命名空间导致同时存在两个插件，请手动删除版本为1.12.0的插件🙇。
+// @version      1.12.3
+// @changelog    未来衰减量增加出入库合同及市场订单。由于1.12.1更新修改了命名空间导致同时存在两个插件，如果多次提示更新请手动删除版本为1.12.0的插件🙇。
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -114,100 +114,6 @@
         let p = d - d * salesModifier / 100;
         return weather && (p /= weather.sellingSpeedMultiplier), p
     };
-
-    // ======================
-    // 计算剩余量
-    // ======================
-    function fo(e, t) {
-        // 因目前只有153，154有衰减，且衰减值为0.05，故省略判断，pve为最小衰减检测时间，目前为4
-        // const r = mt[e.kind].decay;
-        // if (r === 0)
-        //     return e.amount;
-        const n = Date.parse(e.datetime)
-            , a = Math.abs(t - n)
-            , o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
-        return Math.floor(e.amount * Math.pow(1 - 0.05, o))
-    }
-
-    function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
-        const originalDate = new Date(originalTimeStr);
-        const nowDate = new Date(nowTimestamp);
-
-        // 拿出原始时间的秒和毫秒
-        const originalSeconds = originalDate.getSeconds();
-        const originalMilliseconds = originalDate.getMilliseconds();
-
-        // 创建一个新时间，基于当前时间，但秒和毫秒用原始时间的
-        const alignedDate = new Date(nowDate);
-        alignedDate.setSeconds(originalSeconds, originalMilliseconds);
-
-        // 如果对齐后时间比当前时间还大，则减1分钟保证不超过当前时间
-        if (alignedDate.getTime() > nowTimestamp) {
-            alignedDate.setMinutes(alignedDate.getMinutes() - 1);
-        }
-
-        return alignedDate.getTime();
-    }
-
-    function formatLocalDateSimple(date) {
-        const pad = (n) => String(n).padStart(2, '0');
-        return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(Math.floor(date.getSeconds()))}`;
-    }
-
-    function calculateRemainingQuantity(e, nowTime) {
-        const decayTime = Date.parse(e.datetime);
-        const quantity = e.amount;
-        let lastAmount = fo(e, nowTime);
-        const results = [];
-
-        let startTime = alignTimeToOriginalSeconds(e.datetime, nowTime);
-
-        for (let currentTime = startTime; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
-            const diff = Math.abs(currentTime - decayTime);
-            const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
-            const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
-
-            if (amount !== lastAmount) {
-                const dateStr = formatLocalDateSimple(new Date(currentTime));
-                // 保存结果到数组
-                results.push({ amount, time: dateStr });
-                lastAmount = amount;
-                if (amount === 0) break;
-            }
-        }
-        return results;  // 返回结果数组，方便后续使用
-    }
-
-    function calculateFutureDecayWithCost(entry, nowTimestamp) {
-        const decayTime = Date.parse(entry.datetime);
-        const quantity = entry.amount;
-        const costTotal = Object.values(entry.cost || {}).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
-        let lastAmount = fo(entry, nowTimestamp);
-        const results = [];
-
-        // 起始时间对齐（秒和毫秒用原始时间的）
-        let startTime = alignTimeToOriginalSeconds(entry.datetime, nowTimestamp);
-
-        for (let currentTime = startTime; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
-            const diff = Math.abs(currentTime - decayTime);
-            const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
-            const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
-
-            if (amount !== lastAmount) {
-                const dateStr = formatLocalDateSimple(new Date(currentTime));
-                const unitCost = amount === 0 ? Infinity : costTotal / amount;
-                results.push({
-                    time: dateStr,
-                    amount,
-                    unitCost
-                });
-                lastAmount = amount;
-                if (amount === 0) break;
-            }
-        }
-
-        return results;
-    }
 
     // ======================
     // 模块1：网络请求模块
@@ -1091,7 +997,7 @@
 
             info.innerHTML = `
                 作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" style="color:#6cf;">Rabbit House</a> 反馈请说明问题<br>
-                源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub ⭐</a><br>
+                源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub</a> ⭐🙇<br>
                 版本：${version} 
             `;
 
@@ -1127,7 +1033,7 @@
                 const wasOpen = document.getElementById('decayDataPanel')?.style.display !== 'none';
 
                 try {
-                    await window.calculateAllDecayResources(); // 先执行计算
+                    await window.calculateAll(); // 先执行计算
                 } catch (e) {
                     console.error('计算失败', e);
                 } finally {
@@ -2249,7 +2155,7 @@
                 const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
                 const SRC = JSON.parse(localStorage.getItem(regionKey));
                 if (!SRC || !SRC.companyId) {
-                    console.warn("[资源模块] 未找到 companyId，无法发起请求");
+                    console.warn("[库存模块] 未找到 companyId，无法发起请求");
                     return;
                 }
 
@@ -2341,20 +2247,350 @@
                     const key = `wareHouse-${companyId}`;
                     localStorage.setItem(key, JSON.stringify(output));
                     window.dispatchEvent(new Event('warehouse-updated'));
-                    console.log(`[📦资源剩余量已计算] ${key}`, output);
+                    //console.log(`[📦资源剩余量已计算] ${key}`, output);
                 };
 
                 worker.postMessage({ data, now, companyId: SRC.companyId });
 
             } catch (e) {
-                console.error("[资源模块] 处理失败：", e);
+                console.error("[库存模块] 处理失败：", e);
             }
         }
 
+        async function calculateContractsOutgoing() {
+            try {
+                const realmId = getRealmIdFromLink();
+                const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
+                const SRC = JSON.parse(localStorage.getItem(regionKey));
+                if (!SRC || !SRC.companyId) {
+                    console.warn("[合同模块] 未找到 companyId，无法发起请求");
+                    return;
+                }
 
+                const url = `https://www.simcompanies.com/api/v2/contracts-outgoing/`;
+                const response = await fetch(url);
+                const data = await response.json();
+                const now = Date.now();
+
+                const workerCode = `
+                self.onmessage = function(e) {
+                  const { data, now, companyId } = e.data;
+          
+                  function fo(entry, t) {
+                    const n = Date.parse(entry.datetime);
+                    const a = Math.abs(t - n);
+                    const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+                    return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
+                  }
+          
+                  function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+                    const originalDate = new Date(originalTimeStr);
+                    const nowDate = new Date(nowTimestamp);
+                    const originalSeconds = originalDate.getSeconds();
+                    const originalMilliseconds = originalDate.getMilliseconds();
+                    const alignedDate = new Date(nowDate);
+                    alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+                    if (alignedDate.getTime() > nowTimestamp) {
+                      alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                    }
+                    return alignedDate.getTime();
+                  }
+          
+                  function formatLocalDateSimple(date) {
+                    const pad = (n) => String(n).padStart(2, '0');
+                    return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
+                  }
+          
+                  function calculate(entry) {
+                    const decayTime = Date.parse(entry.datetime);
+                    const quantity = entry.quantity;
+                    let lastAmount = fo(entry, now);
+                    const results = [];
+                    let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
+          
+                    for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+                      const diff = Math.abs(currentTime - decayTime);
+                      const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+                      const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+                      if (amount !== lastAmount) {
+                        const dateStr = formatLocalDateSimple(new Date(currentTime));
+                        results.push({
+                          time: dateStr,
+                          amount,
+                        });
+                        lastAmount = amount;
+                        if (amount === 0) break;
+                      }
+                    }
+          
+                    return {
+                      kind: entry.kind,
+                      buyer: entry.buyer.company,
+                      quality: entry.quality,
+                      quantity: entry.quantity,
+                      price: entry.price,
+                      datetime: entry.datetime,
+                      rawTime: decayTime,
+                      result: results
+                    };
+                  }
+          
+                  const output = {};
+                  for (const entry of data) {
+                    if ([153, 154].includes(entry.kind) && entry.datetime) {
+                        if (!output[entry.kind]) output[entry.kind] = {};
+                        if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];                        
+                        output[entry.kind][entry.buyer.company].push(calculate(entry));
+                    }
+                  }
+          
+                  self.postMessage({ companyId, output });
+                };
+              `;
+
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const worker = new Worker(URL.createObjectURL(blob));
+
+                worker.onmessage = function (e) {
+                    const { companyId, output } = e.data;
+                    const key = `contractsOutgoing-${companyId}`;
+                    localStorage.setItem(key, JSON.stringify(output));
+                    window.dispatchEvent(new Event('contractsOutgoing-updated'));
+                    //console.log(`[📦合同剩余量已计算] ${key}`, output);
+                };
+
+                worker.postMessage({ data, now, companyId: SRC.companyId });
+
+            } catch (e) {
+                console.error("[合同模块] 处理失败：", e);
+            }
+        }
+
+        async function calculateContractsIncoming() {
+            try {
+                const realmId = getRealmIdFromLink();
+                const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
+                const SRC = JSON.parse(localStorage.getItem(regionKey));
+                if (!SRC || !SRC.companyId) {
+                    console.warn("[合同模块] 未找到 companyId，无法发起请求");
+                    return;
+                }
+
+                const url = `https://www.simcompanies.com/api/v2/contracts-incoming/`;
+                const response = await fetch(url);
+                const json = await response.json();
+                const data = json.incomingContracts;
+                const now = Date.now();
+
+                const workerCode = `
+                self.onmessage = function(e) {
+                  const { data, now, companyId } = e.data;
+          
+                  function fo(entry, t) {
+                    const n = Date.parse(entry.datetime);
+                    const a = Math.abs(t - n);
+                    const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+                    return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
+                  }
+          
+                  function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+                    const originalDate = new Date(originalTimeStr);
+                    const nowDate = new Date(nowTimestamp);
+                    const originalSeconds = originalDate.getSeconds();
+                    const originalMilliseconds = originalDate.getMilliseconds();
+                    const alignedDate = new Date(nowDate);
+                    alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+                    if (alignedDate.getTime() > nowTimestamp) {
+                      alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                    }
+                    return alignedDate.getTime();
+                  }
+          
+                  function formatLocalDateSimple(date) {
+                    const pad = (n) => String(n).padStart(2, '0');
+                    return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
+                  }
+          
+                  function calculate(entry) {
+                    const decayTime = Date.parse(entry.datetime);
+                    const quantity = entry.quantity;
+                    let lastAmount = fo(entry, now);
+                    const results = [];
+                    let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
+          
+                    for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+                      const diff = Math.abs(currentTime - decayTime);
+                      const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+                      const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+                      if (amount !== lastAmount) {
+                        const dateStr = formatLocalDateSimple(new Date(currentTime));
+                        results.push({
+                          time: dateStr,
+                          amount,
+                        });
+                        lastAmount = amount;
+                        if (amount === 0) break;
+                      }
+                    }
+          
+                    return {
+                        kind: entry.kind,
+                        seller: entry.seller.company,
+                        quality: entry.quality,
+                        quantity: entry.quantity,
+                        price: entry.price,
+                        datetime: entry.datetime,
+                        rawTime: decayTime,
+                        result: results
+                      };
+                  }
+          
+                  const output = {};
+                  for (const entry of data) {
+                    if ([153, 154].includes(entry.kind) && entry.datetime) {
+                        if (!output[entry.kind]) output[entry.kind] = {};
+                        if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];                        
+                        output[entry.kind][entry.buyer.company].push(calculate(entry));
+                    }
+                  }
+          
+                  self.postMessage({ companyId, output });
+                };
+              `;
+
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const worker = new Worker(URL.createObjectURL(blob));
+
+                worker.onmessage = function (e) {
+                    const { companyId, output } = e.data;
+                    const key = `contractsIncoming-${companyId}`;
+                    localStorage.setItem(key, JSON.stringify(output));
+                    window.dispatchEvent(new Event('contractsIncoming-updated'));
+                };
+
+                worker.postMessage({ data, now, companyId: SRC.companyId });
+
+            } catch (e) {
+                console.error("[合同模块] 处理失败：", e);
+            }
+        }
+
+        async function calculateMarket() {
+            try {
+                const realmId = getRealmIdFromLink();
+                const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
+                const SRC = JSON.parse(localStorage.getItem(regionKey));
+                if (!SRC || !SRC.companyId) {
+                    console.warn("[市场模块] 未找到 companyId，无法发起请求");
+                    return;
+                }
+
+                const url = `https://www.simcompanies.com/api/v2/companies/${SRC.companyId}/market-orders/`;
+                const response = await fetch(url);
+                const data = await response.json();
+                const now = Date.now();
+
+                const workerCode = `
+                self.onmessage = function(e) {
+                  const { data, now, companyId } = e.data;
+          
+                  function fo(entry, t) {
+                    const n = Date.parse(entry.datetimeDecayUpdated);
+                    const a = Math.abs(t - n);
+                    const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+                    return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
+                  }
+          
+                  function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+                    const originalDate = new Date(originalTimeStr);
+                    const nowDate = new Date(nowTimestamp);
+                    const originalSeconds = originalDate.getSeconds();
+                    const originalMilliseconds = originalDate.getMilliseconds();
+                    const alignedDate = new Date(nowDate);
+                    alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+                    if (alignedDate.getTime() > nowTimestamp) {
+                      alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                    }
+                    return alignedDate.getTime();
+                  }
+          
+                  function formatLocalDateSimple(date) {
+                    const pad = (n) => String(n).padStart(2, '0');
+                    return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
+                  }
+          
+                  function calculate(entry) {
+                    const decayTime = Date.parse(entry.datetimeDecayUpdated);
+                    const quantity = entry.quantity;
+                    let lastAmount = fo(entry, now);
+                    const results = [];
+                    let currentTime = alignTimeToOriginalSeconds(entry.datetimeDecayUpdated, now);
+          
+                    for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+                      const diff = Math.abs(currentTime - decayTime);
+                      const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+                      const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+                      if (amount !== lastAmount) {
+                        const dateStr = formatLocalDateSimple(new Date(currentTime));
+                        results.push({
+                          time: dateStr,
+                          amount,
+                        });
+                        lastAmount = amount;
+                        if (amount === 0) break;
+                      }
+                    }
+          
+                    return {
+                      kind: entry.kind,
+                      quality: entry.quality,
+                      price: entry.price,
+                      result: results
+                    };
+                  }
+          
+                  const output = {};
+                  for (const entry of data) {
+                    if ([153, 154].includes(entry.kind) && entry.datetimeDecayUpdated) {
+                      if (!output[entry.kind]) output[entry.kind] = {};
+                      if (!output[entry.kind][entry.quality]) output[entry.kind][entry.quality] = {};
+                      if (!output[entry.kind][entry.quality][entry.price]) {
+                        output[entry.kind][entry.quality][entry.price] = calculate(entry);
+                      }
+                    }
+                  }
+          
+                  self.postMessage({ companyId, output });
+                };
+              `;
+
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const worker = new Worker(URL.createObjectURL(blob));
+
+                worker.onmessage = function (e) {
+                    const { companyId, output } = e.data;
+                    const key = `marketOrders-${companyId}`;
+                    localStorage.setItem(key, JSON.stringify(output));
+                    window.dispatchEvent(new Event('marketOrders-updated'));
+                    //console.log(`[📦市场剩余量已计算] ${key}`, output);
+                };
+
+                worker.postMessage({ data, now, companyId: SRC.companyId });
+
+            } catch (e) {
+                console.error("[市场模块] 处理失败：", e);
+            }
+        }
+
+        async function calculateAll() {
+            await calculateAllDecayResources();
+            await calculateContractsOutgoing();
+            await calculateContractsIncoming();
+            await calculateMarket();
+        }
 
         // 暴露到 window 供外部按钮调用
-        window.calculateAllDecayResources = calculateAllDecayResources;
+        window.calculateAll = calculateAll;
     })();
 
     // ======================
@@ -2378,17 +2614,23 @@
                 return { inventory: [], market: [], contract: [] };
             }
 
-            const key = `wareHouse-${SRC.companyId}`;
-            const raw = localStorage.getItem(key);
-            const inventory = [];
+            const inventoryKey = `wareHouse-${SRC.companyId}`;
+            const marketKey = `marketOrders-${SRC.companyId}`;
+            const contractsOutgoingKey = `contractsOutgoing-${SRC.companyId}`;
+            const contractsIncomingKey = `contractsIncoming-${SRC.companyId}`;
 
-            if (raw) {
+            const inventory = [];
+            const market = [];
+            let contractsOutgoing = {};
+            let contractsIncoming = {};
+
+            const rawInventory = localStorage.getItem(inventoryKey);
+            if (rawInventory) {
                 try {
-                    const obj = JSON.parse(raw);
+                    const obj = JSON.parse(rawInventory);
                     for (const kind in obj) {
                         for (const quality in obj[kind]) {
-                            const item = obj[kind][quality];
-                            inventory.push(item);
+                            inventory.push(obj[kind][quality]);
                         }
                     }
                 } catch (e) {
@@ -2396,7 +2638,41 @@
                 }
             }
 
-            return { inventory, market: [], contract: [] };
+            const rawMarket = localStorage.getItem(marketKey);
+            if (rawMarket) {
+                try {
+                    const obj = JSON.parse(rawMarket);
+                    for (const kind in obj) {
+                        for (const quality in obj[kind]) {
+                            for (const price in obj[kind][quality]) {
+                                market.push(obj[kind][quality][price]);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('解析市场数据失败', e);
+                }
+            }
+
+            const rawContractsOutgoing = localStorage.getItem(contractsOutgoingKey);
+            if (rawContractsOutgoing) {
+                try {
+                    contractsOutgoing = JSON.parse(rawContractsOutgoing);
+                } catch (e) {
+                    console.warn('解析出库合同数据失败', e);
+                }
+            }
+
+            const rawContractsIncoming = localStorage.getItem(contractsIncomingKey);
+            if (rawContractsIncoming) {
+                try {
+                    contractsIncoming = JSON.parse(rawContractsIncoming);
+                } catch (e) {
+                    console.warn('解析入库合同数据失败', e);
+                }
+            }
+
+            return { inventory, market, contractsOutgoing, contractsIncoming };
         };
 
         const getDataFromStorage = () => {
@@ -2432,50 +2708,303 @@
 
         const renderResult = () => {
             const data = getDataFromStorage();
-
             content.innerHTML = ''; // 清空内容
 
-            const makeSection = (label, items) => {
-                const containerDiv = document.createElement("div");
-                if (items.length === 0) {
-                    const msg = document.createElement("div");
-                    msg.textContent = "暂无数据。";
-                    msg.style.padding = "5px 10px";
-                    containerDiv.appendChild(msg);
-                    return createToggleSection(label, containerDiv, false);
-                }
+            content.appendChild(makeInventorySection("📦 库存数据", data.inventory));
+            content.appendChild(makecontractsOutgoingSection("📦 出库合同", data.contractsOutgoing));
+            content.appendChild(makeContractsIncomingSection("📦 入库合同", data.contractsIncoming));
+            content.appendChild(makeMarketSection("📦 市场订单", data.market));
+        };
 
-                const groupedByKind = {};
-                items.forEach(item => {
-                    if (!groupedByKind[item.kind]) groupedByKind[item.kind] = [];
-                    groupedByKind[item.kind].push(item);
+        function makeInventorySection(label, items) {
+            const containerDiv = document.createElement("div");
+            if (items.length === 0) {
+                const msg = document.createElement("div");
+                msg.textContent = "暂无数据。";
+                msg.style.padding = "5px 10px";
+                containerDiv.appendChild(msg);
+                return createToggleSection(label, containerDiv, false);
+            }
+
+            const groupedByKind = {};
+            items.forEach(item => {
+                if (!groupedByKind[item.kind]) groupedByKind[item.kind] = [];
+                groupedByKind[item.kind].push(item);
+            });
+
+            for (const kind in groupedByKind) {
+                const kindName = KIND_NAMES[kind] || `种类 ${kind}`;
+                const kindContent = document.createElement("div");
+                kindContent.style.paddingLeft = "12px";
+
+                const groupedByQuality = {};
+                groupedByKind[kind].forEach(item => {
+                    if (!groupedByQuality[item.quality]) groupedByQuality[item.quality] = [];
+                    groupedByQuality[item.quality].push(item);
                 });
 
-                for (const kind in groupedByKind) {
-                    const kindName = KIND_NAMES[kind] || `种类 ${kind}`;
-                    const kindContent = document.createElement("div");
-                    kindContent.style.paddingLeft = "12px";
+                for (const quality in groupedByQuality) {
+                    const qualityContent = document.createElement("div");
+                    qualityContent.style.paddingLeft = "16px";
 
-                    const groupedByQuality = {};
-                    groupedByKind[kind].forEach(item => {
-                        if (!groupedByQuality[item.quality]) groupedByQuality[item.quality] = [];
-                        groupedByQuality[item.quality].push(item);
+                    const headerRow = document.createElement('div');
+                    headerRow.style.fontWeight = 'bold';
+                    headerRow.style.display = 'flex';
+                    headerRow.style.gap = '16px';
+                    headerRow.style.padding = '2px 0';
+                    headerRow.innerHTML = `<div style="width:100px">剩余量</div><div style="width:130px">达成时间</div><div style="width:80px">单位成本</div>`;
+                    qualityContent.appendChild(headerRow);
+
+                    const allDecayArrays = groupedByQuality[quality].flatMap(i => i.futureDecayArray || i.result || []);
+
+                    if (allDecayArrays.length === 0) {
+                        const row = document.createElement("div");
+                        row.style.display = "flex";
+                        row.style.gap = "16px";
+                        row.style.padding = "1px 0";
+                        row.innerHTML = `
+                            <div style="width:100px">已全部衰减</div>
+                            <div style="width:130px">-</div>
+                            <div style="width:80px">∞</div>
+                        `;
+                        qualityContent.appendChild(row);
+                    } else {
+                        allDecayArrays.forEach(({ amount, time, unitCost }) => {
+                            const row = document.createElement("div");
+                            row.style.display = "flex";
+                            row.style.gap = "16px";
+                            row.style.padding = "1px 0";
+                            row.innerHTML = `
+                                <div style="width:100px">${amount}</div>
+                                <div style="width:130px">${time}</div>
+                                <div style="width:80px">${unitCost === Infinity
+                                    ? '∞'
+                                    : (typeof unitCost === 'number' ? unitCost.toFixed(3) : '∞')
+                                }</div>
+                            `;
+                            qualityContent.appendChild(row);
+                        });
+                    }
+
+                    kindContent.appendChild(createToggleSection(`品质 ${quality}`, qualityContent, false));
+                }
+
+                containerDiv.appendChild(createToggleSection(kindName, kindContent, true));
+            }
+
+            return createToggleSection(label, containerDiv, true);
+        }
+
+        function makecontractsOutgoingSection(label, contractsData) {
+            const container = document.createElement("div");
+
+            if (!contractsData || Object.keys(contractsData).length === 0) {
+                const msg = document.createElement("div");
+                msg.textContent = "暂无数据。";
+                msg.style.padding = "5px 10px";
+                container.appendChild(msg);
+                return createToggleSection(label, container, false);
+            }
+
+            for (const kind in contractsData) {
+                const kindName = KIND_NAMES[kind] || `种类 ${kind}`;
+                const kindContent = document.createElement("div");
+                kindContent.style.paddingLeft = "12px";
+
+                for (const buyer in contractsData[kind]) {
+                    const buyerContent = document.createElement("div");
+                    buyerContent.style.paddingLeft = "16px";
+
+                    const sortedContracts = contractsData[kind][buyer].slice().sort((a, b) => {
+                        return Date.parse(a.datetime) - Date.parse(b.datetime);
                     });
 
-                    for (const quality in groupedByQuality) {
-                        const qualityContent = document.createElement("div");
-                        qualityContent.style.paddingLeft = "16px";
+                    sortedContracts.forEach((contract, idx) => {
+                        const contractContent = document.createElement("div");
+                        contractContent.style.paddingLeft = "16px";
+                        contractContent.style.marginBottom = "4px";
 
-                        // 表头
+                        const headerRow = document.createElement('div');
+                        headerRow.style.fontWeight = 'bold';
+                        headerRow.style.display = 'flex';
+                        headerRow.style.gap = '12px';
+                        headerRow.style.padding = '2px 0';
+                        headerRow.innerHTML = `
+                            <div style="width:100px">剩余量</div>
+                            <div style="width:150px">达成时间</div>
+                        `;
+                        contractContent.appendChild(headerRow);
+
+                        if (!contract.result || contract.result.length === 0) {
+                            const row = document.createElement("div");
+                            row.textContent = "已全部衰减";
+                            row.style.padding = "2px 0 2px 10px";
+                            contractContent.appendChild(row);
+                        } else {
+                            contract.result.forEach(({ amount, time }) => {
+                                const row = document.createElement("div");
+                                row.style.display = "flex";
+                                row.style.gap = "12px";
+                                row.style.padding = "1px 0";
+                                row.innerHTML = `
+                                    <div style="width:100px">${amount}</div>
+                                    <div style="width:150px">${time}</div>
+                                `;
+                                contractContent.appendChild(row);
+                            });
+                        }
+
+                        buyerContent.appendChild(createToggleSection(
+                            `品质 Q${contract.quality}｜数量 ${contract.quantity}｜单价 $${contract.price}｜发出 ${new Date(contract.datetime).toLocaleString(undefined, {
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                            })}`,
+                            contractContent,
+                            false
+                        ));
+                    });
+
+                    kindContent.appendChild(createToggleSection(`买方公司 ${buyer}`, buyerContent, true));
+                }
+
+                container.appendChild(createToggleSection(kindName, kindContent, true));
+            }
+
+            return createToggleSection(label, container, true);
+        }
+
+        function makeContractsIncomingSection(label, contractsData) {
+            const container = document.createElement("div");
+
+            if (!contractsData || Object.keys(contractsData).length === 0) {
+                const msg = document.createElement("div");
+                msg.textContent = "暂无数据。";
+                msg.style.padding = "5px 10px";
+                container.appendChild(msg);
+                return createToggleSection(label, container, false);
+            }
+
+            for (const kind in contractsData) {
+                const kindName = KIND_NAMES[kind] || `种类 ${kind}`;
+                const kindContent = document.createElement("div");
+                kindContent.style.paddingLeft = "12px";
+
+                for (const seller in contractsData[kind]) {
+                    const sellerContent = document.createElement("div");
+                    sellerContent.style.paddingLeft = "16px";
+
+                    const sortedContracts = contractsData[kind][seller].slice().sort((a, b) => {
+                        return Date.parse(a.datetime) - Date.parse(b.datetime);
+                    });
+
+                    sortedContracts.forEach((contract, idx) => {
+                        const contractContent = document.createElement("div");
+                        contractContent.style.paddingLeft = "16px";
+                        contractContent.style.marginBottom = "4px";
+
+                        const headerRow = document.createElement('div');
+                        headerRow.style.fontWeight = 'bold';
+                        headerRow.style.display = 'flex';
+                        headerRow.style.gap = '12px';
+                        headerRow.style.padding = '2px 0';
+                        headerRow.innerHTML = `
+                            <div style="width:100px">剩余量</div>
+                            <div style="width:150px">达成时间</div>
+                        `;
+                        contractContent.appendChild(headerRow);
+
+                        if (!contract.result || contract.result.length === 0) {
+                            const row = document.createElement("div");
+                            row.textContent = "已全部衰减";
+                            row.style.padding = "2px 0 2px 10px";
+                            contractContent.appendChild(row);
+                        } else {
+                            contract.result.forEach(({ amount, time }) => {
+                                const row = document.createElement("div");
+                                row.style.display = "flex";
+                                row.style.gap = "12px";
+                                row.style.padding = "1px 0";
+                                row.innerHTML = `
+                                    <div style="width:100px">${amount}</div>
+                                    <div style="width:150px">${time}</div>
+                                `;
+                                contractContent.appendChild(row);
+                            });
+                        }
+
+                        sellerContent.appendChild(createToggleSection(
+                            `品质 Q${contract.quality}｜数量 ${contract.quantity}｜单价 $${contract.price}｜发出 ${new Date(contract.datetime).toLocaleString(undefined, {
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                            })}`,
+                            contractContent,
+                            false
+                        ));
+                    });
+
+                    kindContent.appendChild(createToggleSection(`卖方公司 ${seller}`, sellerContent, true));
+                }
+
+                container.appendChild(createToggleSection(kindName, kindContent, true));
+            }
+
+            return createToggleSection(label, container, true);
+        }
+
+        function makeMarketSection(label, items) {
+            const containerDiv = document.createElement("div");
+            if (items.length === 0) {
+                const msg = document.createElement("div");
+                msg.textContent = "暂无数据。";
+                msg.style.padding = "5px 10px";
+                containerDiv.appendChild(msg);
+                return createToggleSection(label, containerDiv, false);
+            }
+
+            const groupedByKind = {};
+            items.forEach(item => {
+                if (!groupedByKind[item.kind]) groupedByKind[item.kind] = [];
+                groupedByKind[item.kind].push(item);
+            });
+
+            for (const kind in groupedByKind) {
+                const kindName = KIND_NAMES[kind] || `种类 ${kind}`;
+                const kindContent = document.createElement("div");
+                kindContent.style.paddingLeft = "12px";
+
+                const groupedByQuality = {};
+                groupedByKind[kind].forEach(item => {
+                    if (!groupedByQuality[item.quality]) groupedByQuality[item.quality] = [];
+                    groupedByQuality[item.quality].push(item);
+                });
+
+                for (const quality in groupedByQuality) {
+                    const qualityContent = document.createElement("div");
+                    qualityContent.style.paddingLeft = "16px";
+
+                    const groupedByPrice = {};
+                    groupedByQuality[quality].forEach(item => {
+                        if (!groupedByPrice[item.price]) groupedByPrice[item.price] = [];
+                        groupedByPrice[item.price].push(item);
+                    });
+
+                    for (const price in groupedByPrice) {
+                        const priceContent = document.createElement("div");
+                        priceContent.style.paddingLeft = "16px";
+
                         const headerRow = document.createElement('div');
                         headerRow.style.fontWeight = 'bold';
                         headerRow.style.display = 'flex';
                         headerRow.style.gap = '16px';
                         headerRow.style.padding = '2px 0';
-                        headerRow.innerHTML = `<div style="width:60px">剩余量</div><div style="width:130px">达成时间</div><div style="width:80px">单位成本</div>`;
-                        qualityContent.appendChild(headerRow);
+                        headerRow.innerHTML = `<div style="width:100px">剩余量</div><div style="width:130px">达成时间</div>`;
+                        priceContent.appendChild(headerRow);
 
-                        const allDecayArrays = groupedByQuality[quality].flatMap(i => i.futureDecayArray || i.result || []);
+                        const allDecayArrays = groupedByPrice[price].flatMap(i => i.result || []);
 
                         if (allDecayArrays.length === 0) {
                             const row = document.createElement("div");
@@ -2483,53 +3012,48 @@
                             row.style.gap = "16px";
                             row.style.padding = "1px 0";
                             row.innerHTML = `
-                                <div style="width:60px">已全部衰减</div>
+                                <div style="width:100px">已全部衰减</div>
                                 <div style="width:130px">-</div>
-                                <div style="width:80px">∞</div>
                             `;
-                            qualityContent.appendChild(row);
+                            priceContent.appendChild(row);
                         } else {
-                            allDecayArrays.forEach(({ amount, time, unitCost }) => {
+                            allDecayArrays.forEach(({ amount, time }) => {
                                 const row = document.createElement("div");
                                 row.style.display = "flex";
                                 row.style.gap = "16px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:60px">${amount}</div>
+                                    <div style="width:100px">${amount}</div>
                                     <div style="width:130px">${time}</div>
-                                    <div style="width:80px">${unitCost === Infinity
-                                        ? '∞'
-                                        : (typeof unitCost === 'number' ? unitCost.toFixed(3) : '∞')
-                                    }</div>
                                 `;
-                                qualityContent.appendChild(row);
+                                priceContent.appendChild(row);
                             });
                         }
 
-
-                        kindContent.appendChild(createToggleSection(`品质 ${quality}`, qualityContent, false));
+                        qualityContent.appendChild(createToggleSection(`单价 $${price}`, priceContent, false));
                     }
 
-                    containerDiv.appendChild(createToggleSection(kindName, kindContent, true));
+                    kindContent.appendChild(createToggleSection(`品质 ${quality}`, qualityContent, false));
                 }
 
-                return createToggleSection(label, containerDiv, true);
-            };
+                containerDiv.appendChild(createToggleSection(kindName, kindContent, true));
+            }
 
-            content.appendChild(makeSection("📦 库存数据", data.inventory));
-        };
+            return createToggleSection(label, containerDiv, true);
+        }
 
         const init = () => {
             const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+            let resizer;
 
             container = document.createElement("div");
             container.id = 'decayDataPanel';
             container.style.cssText = `
                 position: fixed;
-                left: ${isMobile ? '5vw' : 'calc(100% - 330px)'};
+                left: ${isMobile ? '5vw' : 'calc(100% - 510px)'};
                 top: ${isMobile ? '20px' : 'calc(100vh - 60px - 300px)'};
-                width: ${isMobile ? '80vw' : '320px'};
-                height: ${isMobile ? '50vh' : '300px'};
+                width: ${isMobile ? '80vw' : '500px'};
+                height: ${isMobile ? '50vh' : '350px'};
                 max-height: 80%;
                 overflow: hidden;
                 background: #222;
@@ -2552,17 +3076,23 @@
 
             // 折叠逻辑
             let isCollapsed = false;
+            let lastKnownHeight = isMobile ? '50vh' : '350px';
             header.addEventListener('click', (e) => {
-                if (e.target === calcBtn || e.target === closeBtn) return; // 忽略按钮
+                if (e.target === calcBtn || e.target === closeBtn) return;
+
                 isCollapsed = !isCollapsed;
 
-                // 展示与隐藏整个内容部分（包括 header 以外所有）
-                content.style.display = isCollapsed ? 'none' : 'block';
+                if (isCollapsed) {
+                    content.style.display = 'none';
+                    container.style.height = `${header.offsetHeight + 2}px`;
+                    if (resizer) resizer.style.display = 'none';
+                } else {
+                    content.style.display = 'block';
+                    container.style.height = lastKnownHeight;
+                    if (resizer) resizer.style.display = 'block';
+                    content.style.height = `calc(100% - ${header.offsetHeight}px)`;
+                }
 
-                // 调整 container 高度（标题栏约 40px）
-                container.style.height = isCollapsed ? `${header.offsetHeight + 2}px` : (isMobile ? '50vh' : '300px');
-
-                // 更新箭头方向
                 headerTitle.textContent = isCollapsed ? '未来衰减量 ▸' : '未来衰减量 ▾';
             });
             header.style.cssText = `
@@ -2593,7 +3123,7 @@
                 calcBtn.disabled = true;
                 calcBtn.textContent = '⏳';
                 try {
-                    await window.calculateAllDecayResources();
+                    await window.calculateAll();
                     DecayResultViewer.show();
                 } catch (e) {
                     console.error("资源计算失败", e);
@@ -2665,7 +3195,7 @@
                     container.style.bottom = 'auto';
                 });
 
-                const resizer = document.createElement('div');
+                resizer = document.createElement('div');
                 resizer.style.cssText = `
                     width: 14px;
                     height: 14px;
@@ -2709,7 +3239,10 @@
                 });
 
                 window.addEventListener('mouseup', () => {
-                    isResizing = false;
+                    if (isResizing) {
+                        lastKnownHeight = container.style.height;
+                        isResizing = false;
+                    }
                 });
             }
             if (isMobile) {
@@ -2743,12 +3276,28 @@
                     container.style.top = newTop + 'px';
                     container.style.bottom = 'auto';
                 }, { passive: true });
-
-                // 简易缩放：双指捏合或额外按钮控制可选（此处不实现复杂捏合）
             }
         };
 
         window.addEventListener('warehouse-updated', () => {
+            if (container && container.style.display !== 'none') {
+                renderResult();
+            }
+        });
+
+        window.addEventListener('marketOrders-updated', () => {
+            if (container && container.style.display !== 'none') {
+                renderResult();
+            }
+        });
+
+        window.addEventListener('contractsOutgoing-updated', () => {
+            if (container && container.style.display !== 'none') {
+                renderResult();
+            }
+        });
+
+        window.addEventListener('contractsIncoming-updated', () => {
             if (container && container.style.display !== 'none') {
                 renderResult();
             }
