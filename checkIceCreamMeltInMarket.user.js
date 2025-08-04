@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         查看交易所冰淇淋融化情况
 // @namespace    https://github.com/gangbaRuby
-// @version      1.1
+// @version      1.0.1
 // @description  查看交易所冰淇淋融化情况
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
