@@ -6,8 +6,8 @@
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @updateURL    https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/autoMaxPPHPL.user.js?v=202508041348
-// @downloadURL  https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/autoMaxPPHPL.user.js?v=202508041348
+// @updateURL    https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js
+// @downloadURL  https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
@@ -3320,7 +3320,7 @@
         const localVersion = GM_info.script.version;
         const timestamp = Date.now();
         const scriptUrl = `https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/autoMaxPPHPL.user.js?v=${timestamp}`;
-        // @changelog    更换更新链接
+        // @changelog    尝试更换成page
 
         fetch(scriptUrl)
             .then(res => {
@@ -3349,5 +3349,5 @@
             });
     }
 
-    setTimeout(checkUpdate, 5000);
+    setTimeout(checkUpdate, 3000);
 })();
