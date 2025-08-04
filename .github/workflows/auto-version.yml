@@ -17,36 +17,20 @@ jobs:
         id: timestamp
         run: echo "ts=$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
 
-      - name: Get changed .user.js files in last commit
-        id: changed_files
+      - name: Replace version timestamp in .user.js files
         run: |
-          FILES=$(git diff-tree --no-commit-id --name-only -r HEAD | grep '\.user\.js$' || true)
-          if [ -n "$FILES" ]; then
-            echo "files<<EOF" >> $GITHUB_OUTPUT
-            echo "$FILES" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "files=" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Debug print changed files
-        run: echo "${{ steps.changed_files.outputs.files }}"
-
-      - name: Replace version timestamp in changed files only
-        if: ${{ steps.changed_files.outputs.files != '' }}
-        run: |
-          for file in ${{ steps.changed_files.outputs.files }}; do
+          FILES=$(find . -name "*.user.js")
+          for file in $FILES; do
             echo "Updating $file"
             sed -i "s/\(cdn\.jsdelivr\.net\/.*\.user\.js?v=\)[0-9]\+/\1${{ steps.timestamp.outputs.ts }}/g" "$file"
           done
 
       - name: Commit and push if changed
-        if: ${{ steps.changed_files.outputs.files != '' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [ -n "$(git status --porcelain)" ]; then
-            git add ${{ steps.changed_files.outputs.files }}
+            git add .
             git commit -m "Auto update @updateURL ?v=${{ steps.timestamp.outputs.ts }}"
             git push
           else
