@@ -1,79 +1,18 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.12.4
-// @changelog    交易所增加显示一级销售用时。由于1.12.1更新修改了命名空间导致同时存在两个插件，如果多次提示更新请手动删除版本为1.12.0的插件🙇。
+// @version      1.13.0
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @updateURL    https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
-// @downloadURL  https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js
+// @updateURL    https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js
+// @downloadURL  https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js
 // @grant        GM_xmlhttpRequest
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        GM_addStyle
-// @connect      hub.sctools.top
-// @connect      raw.sctools.top
 // ==/UserScript==
 
 (function () {
     'use strict';
-
-    function compareVersions(v1, v2) {
-        const a = v1.split('.').map(Number);
-        const b = v2.split('.').map(Number);
-        const len = Math.max(a.length, b.length);
-
-        for (let i = 0; i < len; i++) {
-            const num1 = a[i] || 0;
-            const num2 = b[i] || 0;
-            if (num1 > num2) return 1;
-            if (num1 < num2) return -1;
-        }
-        return 0;
-    }
-
-    function checkForUpdate() {
-        const localVersion = GM_info.script.version;
-        const scriptUrl = 'https://hub.sctools.top/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/%E8%87%AA%E5%8A%A8%E8%AE%A1%E7%AE%97%E6%9C%80%E5%A4%A7%E6%97%B6%E5%88%A9%E6%B6%A6.user.js';
-
-        GM_xmlhttpRequest({
-            method: "GET",
-            url: scriptUrl,
-            onload: function (response) {
-                if (response.status !== 200 || !response.responseText) {
-                    console.error("❌ 远程脚本获取失败！");
-                    return;
-                }
-
-                const remoteText = response.responseText;
-                const matchVersion = remoteText.match(/^\s*\/\/\s*@version\s+([0-9.]+)/m);
-                const matchChange = remoteText.match(/^\s*\/\/\s*@changelog\s+(.+)/m);
-
-                if (matchVersion) {
-                    const latestVersion = matchVersion[1];
-                    const changeLog = matchChange[1];
-
-                    if (compareVersions(latestVersion, localVersion) > 0) {
-                        console.log(`📢 检测到新版本 v${latestVersion}`);
-                        if (confirm(`自动计算最大时利润插件检测到新版本 v${latestVersion}，是否前往更新？\n\nv${latestVersion} ${changeLog}\n\n关于版本号说明 1.X.Y ，X为增添新功能或修复不可用，Y为细节修改不影响功能，如不需更新可将Y或其它位置修改为较大值。`)) {
-                            window.location.href = scriptUrl;
-                        }
-                    } else {
-                        console.log("✅ 当前已是最新版本");
-                    }
-                } else {
-                    console.warn("⚠️ 远程脚本未找到 @version！");
-                }
-            },
-            onerror: function () {
-                console.error("❌ 获取远程版本号失败！");
-            }
-        });
-    }
-
-    checkForUpdate();
 
     // ======================
     // 计算用到的函数
@@ -172,7 +111,6 @@
     // ======================
     // 模块2：领域数据模块
     // ======================
-
     const RegionData = (() => {
         // 公司信息
         const getAuthInfo = async () => {
@@ -623,77 +561,77 @@
         const injectStyles = () => {
             const style = document.createElement('style');
             style.textContent = `
-            .SimcompaniesRetailCalculation-mini-panel {
-                position: fixed;
-                left: 10px;
-                bottom: 55px;
-                z-index: 9999;
-                font-family: Arial, sans-serif;
-            }
-            .SimcompaniesRetailCalculation-trigger-btn {
-                width: 32px;
-                height: 32px;
-                background: #4CAF50;
-                border-radius: 50%;
-                border: none;
-                cursor: pointer;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-size: 18px;
-            }
-            .SimcompaniesRetailCalculation-panel-content {
-                display: none;
-                position: absolute;
-                bottom: 40px;
-                left: 0;
-                background: rgba(40,40,40,0.95);
-                border-radius: 4px;
-                padding: 8px;
-                min-width: 260px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            }
-            .SimcompaniesRetailCalculation-data-row {
-                margin: 6px 0;
-                font-size: 13px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            .SimcompaniesRetailCalculation-region-label {
-                color: #BDBDBD;
-                min-width: 70px;
-            }
-            .SimcompaniesRetailCalculation-region-status {
-                font-family: monospace;
-                margin-left: 10px;
-                text-align: right;
-                flex-grow: 1;
-            }
-            .SimcompaniesRetailCalculation-btn-group {
-                margin-top: 8px;
-                display: grid;
-                gap: 6px;
-            }
-            .SimcompaniesRetailCalculation-action-btn {
-                background: #2196F3;
-                border: none;
-                color: white;
-                padding: 6px 10px;
-                border-radius: 3px;
-                cursor: pointer;
-                font-size: 12px;
-                white-space: nowrap;
-            }
-            .SimcompaniesRetailCalculation-action-btn:disabled {
-                background: #607D8B;
-                cursor: not-allowed;
-            }
-            .SimcompaniesRetailCalculation-no-data { color: #f44336; }
-            .SimcompaniesRetailCalculation-has-data { color: #4CAF50; }
-        `;
+              .SimcompaniesRetailCalculation-mini-panel {
+                  position: fixed;
+                  left: 10px;
+                  bottom: 55px;
+                  z-index: 9999;
+                  font-family: Arial, sans-serif;
+              }
+              .SimcompaniesRetailCalculation-trigger-btn {
+                  width: 32px;
+                  height: 32px;
+                  background: #4CAF50;
+                  border-radius: 50%;
+                  border: none;
+                  cursor: pointer;
+                  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  color: white;
+                  font-size: 18px;
+              }
+              .SimcompaniesRetailCalculation-panel-content {
+                  display: none;
+                  position: absolute;
+                  bottom: 40px;
+                  left: 0;
+                  background: rgba(40,40,40,0.95);
+                  border-radius: 4px;
+                  padding: 8px;
+                  min-width: 260px;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+              }
+              .SimcompaniesRetailCalculation-data-row {
+                  margin: 6px 0;
+                  font-size: 13px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+              }
+              .SimcompaniesRetailCalculation-region-label {
+                  color: #BDBDBD;
+                  min-width: 70px;
+              }
+              .SimcompaniesRetailCalculation-region-status {
+                  font-family: monospace;
+                  margin-left: 10px;
+                  text-align: right;
+                  flex-grow: 1;
+              }
+              .SimcompaniesRetailCalculation-btn-group {
+                  margin-top: 8px;
+                  display: grid;
+                  gap: 6px;
+              }
+              .SimcompaniesRetailCalculation-action-btn {
+                  background: #2196F3;
+                  border: none;
+                  color: white;
+                  padding: 6px 10px;
+                  border-radius: 3px;
+                  cursor: pointer;
+                  font-size: 12px;
+                  white-space: nowrap;
+              }
+              .SimcompaniesRetailCalculation-action-btn:disabled {
+                  background: #607D8B;
+                  cursor: not-allowed;
+              }
+              .SimcompaniesRetailCalculation-no-data { color: #f44336; }
+              .SimcompaniesRetailCalculation-has-data { color: #4CAF50; }
+          `;
             document.head.appendChild(style);
         };
 
@@ -996,10 +934,10 @@
             const version = GM_info?.script?.version || '未知版本';
 
             info.innerHTML = `
-                作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" style="color:#6cf;">Rabbit House</a> 反馈请说明问题<br>
-                源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub</a> ⭐🙇<br>
-                版本：${version} 
-            `;
+                  作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" style="color:#6cf;">Rabbit House</a> 反馈请说明问题<br>
+                  源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub</a> ⭐🙇<br>
+                  版本：${version} 
+              `;
 
             content.appendChild(info);
             panel.append(trigger, content);
@@ -1166,15 +1104,15 @@
                     btn.textContent = '最大时利润';
                     btn.type = 'button';
                     btn.style = `
-                        margin-top: 5px;
-                        background: #2196F3;
-                        color: white;
-                        border: none;
-                        padding: 5px 10px;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        width: 100%;
-                     `;
+                          margin-top: 5px;
+                          background: #2196F3;
+                          color: white;
+                          border: none;
+                          padding: 5px 10px;
+                          border-radius: 4px;
+                          cursor: pointer;
+                          width: 100%;
+                       `;
 
                     btn.onclick = (e) => {
                         e.preventDefault();
@@ -1267,13 +1205,13 @@
                         profitDisplay.className = 'auto-profit-display';
                         profitDisplay.textContent = `每级时利润: ${((maxProfit / size) * 3600).toFixed(2)}`;
                         profitDisplay.style = `
-                            margin-top: 5px;
-                            font-size: 14px;
-                            color: white;
-                            background: gray;
-                            padding: 4px 8px;
-                            text-align: center;
-                        `;
+                              margin-top: 5px;
+                              font-size: 14px;
+                              color: white;
+                              background: gray;
+                              padding: 4px 8px;
+                              text-align: center;
+                          `;
 
                         // 插入按钮下方
                         btn.parentNode.insertBefore(profitDisplay, btn.nextSibling);
@@ -1353,128 +1291,128 @@
 
         // Create worker blob: calculations move into worker's onmessage
         const workerCode = `
-        self.onmessage = function(e) {
-        const { rowId, order, SCD, SRC } = e.data;
-        const { price, quantity, quality, resourceId: resource } = order;
-        // bring constants into worker scope
-        const lwe = SCD.retailInfo;
-        const zn = SCD.data;
-
-        // Utility functions defined inside to use local lwe and zn
-        const Ul = (overhead, skillCOO) => {
-            const r = overhead || 1;
-            return r - (r - 1) * skillCOO / 100;
-        };
-        const wv = (e, t, r) => {
-            return r === null ? lwe[e][t] : lwe[e][t].quality[r];
-        };
-        const Upt = (e, t, r, n) => t + (e + n) / r;
-        const Hpt = (e, t, r, n, a) => {
-            const o = (n + e) / ((t - a) * (t - a));
-            return e - (r - t) * (r - t) * o;
-        };
-        const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
-        const Bpt = (e, t, r, n, a, o) => {
-            const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
-            const s = Math.min(Math.max(2 - n, 0), 2),
-                  l = s / 2 + 0.5,
-                  c = r / 12;
-            const d = zn.PROFIT_PER_BUILDING_LEVEL *
-                (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
-                g *
-                (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                (t.modeledStoreWages ?? 0);
-            const h = t.modeledUnitsSoldAnHour * l;
-            const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
-            const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
-            return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
-        };
-        const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
-            const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
-            if (u <= 0) return NaN;
-            const d = u / acc / size;
-            let p = d - d * salesModifier / 100;
-            return weather && (p /= weather.sellingSpeedMultiplier), p
-        };
-
-        // Initial debug log
-
-        // profit calculation loop
-        let currentPrice = price,
-            maxProfit = -Infinity,
-            size = 1,
-            acceleration = SRC.acceleration,
-            economyState = SRC.economyState,
-            salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
-            skillCMO = SRC.saleBonus,
-            skillCOO = SRC.adminBonus;
-
-        // compute saturation locally
-        const saturation = (() => {
-            const list = SRC.ResourcesRetailInfo;
-            const m = list.find(item =>
-                item.dbLetter === parseInt(resource) &&
-                (parseInt(resource) !== 150 || item.quality === quality)
-            );
-            return m?.saturation;
-        })();
-
-        const administrationOverhead = SRC.administration;
-        const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
-            ids.includes(parseInt(resource))
-        )?.[0];
-        const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
-        const averageSalary = zn.AVERAGE_SALARY;
-        const wages = averageSalary * salaryModifier;
-        const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
-        const resourceDetail = SCD.constantsResources[parseInt(resource)]
-
-        const v = salesModifierWithRecreationBonus + skillCMO;
-        const b = Ul(administrationOverhead, skillCOO);
-        let selltime;
-
-        while (currentPrice > 0) {
-            const modeledData = wv(economyState, resource, forceQuality ?? null);
-            const w = zL(
-                buildingKind,
-                modeledData,
-                quantity,
-                v,
-                currentPrice,
-                forceQuality === void 0 ? quality : 0,
-                saturation,
-                acceleration,
-                size,
-                resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
-            );
-            const revenue = currentPrice * quantity;
-            const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
-            const secondsToFinish = w;
-            const profit = (!secondsToFinish || secondsToFinish <= 0)
-                ? NaN
-                : (revenue - price * quantity - wagesTotal) / secondsToFinish;
-
-            if (!secondsToFinish || secondsToFinish <= 0) break;
-            if (profit > maxProfit) {
-                maxProfit = profit;
-                selltime = secondsToFinish;
-            } else if (maxProfit > 0 && profit < 0) {
-                break;
-            }
-            // price increment
-            if (currentPrice < 8) {
-                currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-            } else if (currentPrice < 2001) {
-                currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
-            } else {
-                currentPrice = Math.round(currentPrice + 1);
-            }
-
-        }
-
-        self.postMessage({ rowId, maxProfit, selltime});
-    };
-    `;
+          self.onmessage = function(e) {
+          const { rowId, order, SCD, SRC } = e.data;
+          const { price, quantity, quality, resourceId: resource } = order;
+          // bring constants into worker scope
+          const lwe = SCD.retailInfo;
+          const zn = SCD.data;
+  
+          // Utility functions defined inside to use local lwe and zn
+          const Ul = (overhead, skillCOO) => {
+              const r = overhead || 1;
+              return r - (r - 1) * skillCOO / 100;
+          };
+          const wv = (e, t, r) => {
+              return r === null ? lwe[e][t] : lwe[e][t].quality[r];
+          };
+          const Upt = (e, t, r, n) => t + (e + n) / r;
+          const Hpt = (e, t, r, n, a) => {
+              const o = (n + e) / ((t - a) * (t - a));
+              return e - (r - t) * (r - t) * o;
+          };
+          const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
+          const Bpt = (e, t, r, n, a, o) => {
+              const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+              const s = Math.min(Math.max(2 - n, 0), 2),
+                    l = s / 2 + 0.5,
+                    c = r / 12;
+              const d = zn.PROFIT_PER_BUILDING_LEVEL *
+                  (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
+                  g *
+                  (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
+                  (t.modeledStoreWages ?? 0);
+              const h = t.modeledUnitsSoldAnHour * l;
+              const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
+              const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
+              return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
+          };
+          const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
+              const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
+              if (u <= 0) return NaN;
+              const d = u / acc / size;
+              let p = d - d * salesModifier / 100;
+              return weather && (p /= weather.sellingSpeedMultiplier), p
+          };
+  
+          // Initial debug log
+  
+          // profit calculation loop
+          let currentPrice = price,
+              maxProfit = -Infinity,
+              size = 1,
+              acceleration = SRC.acceleration,
+              economyState = SRC.economyState,
+              salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
+              skillCMO = SRC.saleBonus,
+              skillCOO = SRC.adminBonus;
+  
+          // compute saturation locally
+          const saturation = (() => {
+              const list = SRC.ResourcesRetailInfo;
+              const m = list.find(item =>
+                  item.dbLetter === parseInt(resource) &&
+                  (parseInt(resource) !== 150 || item.quality === quality)
+              );
+              return m?.saturation;
+          })();
+  
+          const administrationOverhead = SRC.administration;
+          const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
+              ids.includes(parseInt(resource))
+          )?.[0];
+          const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+          const averageSalary = zn.AVERAGE_SALARY;
+          const wages = averageSalary * salaryModifier;
+          const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
+          const resourceDetail = SCD.constantsResources[parseInt(resource)]
+  
+          const v = salesModifierWithRecreationBonus + skillCMO;
+          const b = Ul(administrationOverhead, skillCOO);
+          let selltime;
+  
+          while (currentPrice > 0) {
+              const modeledData = wv(economyState, resource, forceQuality ?? null);
+              const w = zL(
+                  buildingKind,
+                  modeledData,
+                  quantity,
+                  v,
+                  currentPrice,
+                  forceQuality === void 0 ? quality : 0,
+                  saturation,
+                  acceleration,
+                  size,
+                  resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
+              );
+              const revenue = currentPrice * quantity;
+              const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
+              const secondsToFinish = w;
+              const profit = (!secondsToFinish || secondsToFinish <= 0)
+                  ? NaN
+                  : (revenue - price * quantity - wagesTotal) / secondsToFinish;
+  
+              if (!secondsToFinish || secondsToFinish <= 0) break;
+              if (profit > maxProfit) {
+                  maxProfit = profit;
+                  selltime = secondsToFinish;
+              } else if (maxProfit > 0 && profit < 0) {
+                  break;
+              }
+              // price increment
+              if (currentPrice < 8) {
+                  currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+              } else if (currentPrice < 2001) {
+                  currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+              } else {
+                  currentPrice = Math.round(currentPrice + 1);
+              }
+  
+          }
+  
+          self.postMessage({ rowId, maxProfit, selltime});
+      };
+      `;
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
 
         // 全局状态与注册器（放最上面，只运行一次）
@@ -1503,7 +1441,7 @@
             if (!row.querySelector('td.auto-profit-info')) {
                 const td = document.createElement('td');
                 td.classList.add('auto-profit-info');
-            
+
                 const span = document.createElement('span');
                 const isMobile = window.innerWidth <= 600;
 
@@ -1514,15 +1452,15 @@
                 span.textContent = isMobile ? (isShowingProfit ? profitText : timeText) : fullText;
 
                 span.style.cssText = `
-                display: inline-block;
-                min-width: 60px;
-                font-size: 16px;
-                color: white;
-                background: gray;
-                padding: 4px 8px;
-                line-height: 1.2;
-                box-sizing: border-box;
-            `.trim();
+                  display: inline-block;
+                  min-width: 60px;
+                  font-size: 16px;
+                  color: white;
+                  background: gray;
+                  padding: 4px 8px;
+                  line-height: 1.2;
+                  box-sizing: border-box;
+              `.trim();
 
                 td.appendChild(span);
                 row.appendChild(td);
@@ -1655,113 +1593,113 @@
 
         // Worker 代码
         const workerCode = `
-        self.onmessage = function(e) {
-            const { cardId, order, SCD, SRC } = e.data;
-            const { price, quantity, quality, resourceId: resource } = order;
-            const lwe = SCD.retailInfo;
-            const zn = SCD.data;
-            const Ul = (overhead, skillCOO) => overhead - (overhead - 1) * skillCOO / 100;
-            const wv = (e, t, r) => r === null ? lwe[e][t] : lwe[e][t].quality[r];
-            const Upt = (e, t, r, n) => t + (e + n) / r;
-            const Hpt = (e, t, r, n, a) => {
-                const o = (n + e) / ((t - a) * (t - a));
-                return e - (r - t) * (r - t) * o;
-            };
-            const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
-            const Bpt = (e, t, r, n, a, o) => {
-                const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
-                const s = Math.min(Math.max(2 - n, 0), 2),
-                      l = s / 2 + 0.5,
-                      c = r / 12;
-                const d = zn.PROFIT_PER_BUILDING_LEVEL *
-                    (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
-                    g *
-                    (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                    (t.modeledStoreWages ?? 0);
-                const h = t.modeledUnitsSoldAnHour * l;
-                const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
-                const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
-                return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
-            };
-            const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
-                const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
-                if (u <= 0) return NaN;
-                const d = u / acc / size;
-                let p = d - d * salesModifier / 100;
-                return weather && (p /= weather.sellingSpeedMultiplier), p
-            };
-
-            let currentPrice = price,
-                maxProfit = -Infinity,
-                size = 1,
-                acceleration = SRC.acceleration,
-                economyState = SRC.economyState,
-                salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
-                skillCMO = SRC.saleBonus,
-                skillCOO = SRC.adminBonus;
-
-            const saturation = (() => {
-                const list = SRC.ResourcesRetailInfo;
-                const m = list.find(item =>
-                    item.dbLetter === parseInt(resource) &&
-                    (parseInt(resource) !== 150 || item.quality === quality)
-                );
-                return m?.saturation;
-            })();
-
-            const administrationOverhead = SRC.administration;
-            const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
-                ids.includes(parseInt(resource))
-            )?.[0];
-            const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
-            const averageSalary = zn.AVERAGE_SALARY;
-            const wages = averageSalary * salaryModifier;
-            const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
-            const resourceDetail = SCD.constantsResources[parseInt(resource)]
-
-            const v = salesModifierWithRecreationBonus + skillCMO;
-            const b = Ul(administrationOverhead, skillCOO);
-
-            while (currentPrice > 0) {
-                const modeledData = wv(economyState, resource, forceQuality ?? null);
-                const w = zL(
-                    buildingKind,
-                    modeledData,
-                    quantity,
-                    v,
-                    currentPrice,
-                    forceQuality === void 0 ? quality : 0,
-                    saturation,
-                    acceleration,
-                    size,
-                    resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
-                );
-                const revenue = currentPrice * quantity;
-                const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
-                const secondsToFinish = w;
-                const profit = (!secondsToFinish || secondsToFinish <= 0)
-                    ? NaN
-                    : (revenue - price * quantity - wagesTotal) / secondsToFinish;
-
-                if (!secondsToFinish || secondsToFinish <= 0) break;
-                if (profit > maxProfit) {
-                    maxProfit = profit;
-                } else if (maxProfit > 0 && profit < 0) {
-                    break;
-                }
-
-                if (currentPrice < 8) {
-                    currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-                } else if (currentPrice < 2001) {
-                    currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
-                } else {
-                    currentPrice = Math.round(currentPrice + 1);
-                }
-            }
-
-            self.postMessage({ cardId, maxProfit });
-        };
-        `;
+          self.onmessage = function(e) {
+              const { cardId, order, SCD, SRC } = e.data;
+              const { price, quantity, quality, resourceId: resource } = order;
+              const lwe = SCD.retailInfo;
+              const zn = SCD.data;
+              const Ul = (overhead, skillCOO) => overhead - (overhead - 1) * skillCOO / 100;
+              const wv = (e, t, r) => r === null ? lwe[e][t] : lwe[e][t].quality[r];
+              const Upt = (e, t, r, n) => t + (e + n) / r;
+              const Hpt = (e, t, r, n, a) => {
+                  const o = (n + e) / ((t - a) * (t - a));
+                  return e - (r - t) * (r - t) * o;
+              };
+              const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
+              const Bpt = (e, t, r, n, a, o) => {
+                  const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+                  const s = Math.min(Math.max(2 - n, 0), 2),
+                        l = s / 2 + 0.5,
+                        c = r / 12;
+                  const d = zn.PROFIT_PER_BUILDING_LEVEL *
+                      (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
+                      g *
+                      (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
+                      (t.modeledStoreWages ?? 0);
+                  const h = t.modeledUnitsSoldAnHour * l;
+                  const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
+                  const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
+                  return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
+              };
+              const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
+                  const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
+                  if (u <= 0) return NaN;
+                  const d = u / acc / size;
+                  let p = d - d * salesModifier / 100;
+                  return weather && (p /= weather.sellingSpeedMultiplier), p
+              };
+  
+              let currentPrice = price,
+                  maxProfit = -Infinity,
+                  size = 1,
+                  acceleration = SRC.acceleration,
+                  economyState = SRC.economyState,
+                  salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
+                  skillCMO = SRC.saleBonus,
+                  skillCOO = SRC.adminBonus;
+  
+              const saturation = (() => {
+                  const list = SRC.ResourcesRetailInfo;
+                  const m = list.find(item =>
+                      item.dbLetter === parseInt(resource) &&
+                      (parseInt(resource) !== 150 || item.quality === quality)
+                  );
+                  return m?.saturation;
+              })();
+  
+              const administrationOverhead = SRC.administration;
+              const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
+                  ids.includes(parseInt(resource))
+              )?.[0];
+              const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+              const averageSalary = zn.AVERAGE_SALARY;
+              const wages = averageSalary * salaryModifier;
+              const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
+              const resourceDetail = SCD.constantsResources[parseInt(resource)]
+  
+              const v = salesModifierWithRecreationBonus + skillCMO;
+              const b = Ul(administrationOverhead, skillCOO);
+  
+              while (currentPrice > 0) {
+                  const modeledData = wv(economyState, resource, forceQuality ?? null);
+                  const w = zL(
+                      buildingKind,
+                      modeledData,
+                      quantity,
+                      v,
+                      currentPrice,
+                      forceQuality === void 0 ? quality : 0,
+                      saturation,
+                      acceleration,
+                      size,
+                      resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
+                  );
+                  const revenue = currentPrice * quantity;
+                  const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
+                  const secondsToFinish = w;
+                  const profit = (!secondsToFinish || secondsToFinish <= 0)
+                      ? NaN
+                      : (revenue - price * quantity - wagesTotal) / secondsToFinish;
+  
+                  if (!secondsToFinish || secondsToFinish <= 0) break;
+                  if (profit > maxProfit) {
+                      maxProfit = profit;
+                  } else if (maxProfit > 0 && profit < 0) {
+                      break;
+                  }
+  
+                  if (currentPrice < 8) {
+                      currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                  } else if (currentPrice < 2001) {
+                      currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                  } else {
+                      currentPrice = Math.round(currentPrice + 1);
+                  }
+              }
+  
+              self.postMessage({ cardId, maxProfit });
+          };
+          `;
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
         profitWorker.onmessage = function (e) {
             const { cardId, maxProfit } = e.data;
@@ -2017,12 +1955,10 @@
         handlePage();
     })();
 
-
     // ======================
     // 模块10：自动或定时更新数据 SimcompaniesConstantsData SimcompaniesRetailCalculation超过一小时就更新
     // 只在打开新标签页和切换领域是才会判断时间更新 更新数据无锁
     // ======================
-
     // 使用 MutationObserver 监听 DOM 变化并提取 realmId
     const observer = new MutationObserver(() => {
         const realmId = getRealmIdFromLink();
@@ -2209,79 +2145,79 @@
                 const now = Date.now();
 
                 const workerCode = `
-                self.onmessage = function(e) {
-                  const { data, now, companyId } = e.data;
-          
-                  function fo(entry, t) {
-                    const n = Date.parse(entry.datetime);
-                    const a = Math.abs(t - n);
-                    const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
-                    return Math.floor(entry.amount * Math.pow(1 - 0.05, o));
-                  }
-          
-                  function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
-                    const originalDate = new Date(originalTimeStr);
-                    const nowDate = new Date(nowTimestamp);
-                    const originalSeconds = originalDate.getSeconds();
-                    const originalMilliseconds = originalDate.getMilliseconds();
-                    const alignedDate = new Date(nowDate);
-                    alignedDate.setSeconds(originalSeconds, originalMilliseconds);
-                    if (alignedDate.getTime() > nowTimestamp) {
-                      alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                  self.onmessage = function(e) {
+                    const { data, now, companyId } = e.data;
+            
+                    function fo(entry, t) {
+                      const n = Date.parse(entry.datetime);
+                      const a = Math.abs(t - n);
+                      const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+                      return Math.floor(entry.amount * Math.pow(1 - 0.05, o));
                     }
-                    return alignedDate.getTime();
-                  }
-          
-                  function formatLocalDateSimple(date) {
-                    const pad = (n) => String(n).padStart(2, '0');
-                    return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
-                  }
-          
-                  function calculate(entry) {
-                    const decayTime = Date.parse(entry.datetime);
-                    const quantity = entry.amount;
-                    const totalCost = Object.values(entry.cost || {}).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
-                    let lastAmount = fo(entry, now);
-                    const results = [];
-                    let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
-          
-                    for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
-                      const diff = Math.abs(currentTime - decayTime);
-                      const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
-                      const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
-                      if (amount !== lastAmount) {
-                        const dateStr = formatLocalDateSimple(new Date(currentTime));
-                        const unitCost = amount === 0 ? Infinity : Number((totalCost / amount).toFixed(3));
-                        results.push({
-                          time: dateStr,
-                          amount,
-                          unitCost
-                        });
-                        lastAmount = amount;
-                        if (amount === 0) break;
+            
+                    function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+                      const originalDate = new Date(originalTimeStr);
+                      const nowDate = new Date(nowTimestamp);
+                      const originalSeconds = originalDate.getSeconds();
+                      const originalMilliseconds = originalDate.getMilliseconds();
+                      const alignedDate = new Date(nowDate);
+                      alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+                      if (alignedDate.getTime() > nowTimestamp) {
+                        alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                      }
+                      return alignedDate.getTime();
+                    }
+            
+                    function formatLocalDateSimple(date) {
+                      const pad = (n) => String(n).padStart(2, '0');
+                      return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
+                    }
+            
+                    function calculate(entry) {
+                      const decayTime = Date.parse(entry.datetime);
+                      const quantity = entry.amount;
+                      const totalCost = Object.values(entry.cost || {}).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
+                      let lastAmount = fo(entry, now);
+                      const results = [];
+                      let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
+            
+                      for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+                        const diff = Math.abs(currentTime - decayTime);
+                        const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+                        const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+                        if (amount !== lastAmount) {
+                          const dateStr = formatLocalDateSimple(new Date(currentTime));
+                          const unitCost = amount === 0 ? Infinity : Number((totalCost / amount).toFixed(3));
+                          results.push({
+                            time: dateStr,
+                            amount,
+                            unitCost
+                          });
+                          lastAmount = amount;
+                          if (amount === 0) break;
+                        }
+                      }
+            
+                      return {
+                        kind: entry.kind,
+                        quality: entry.quality,
+                        result: results
+                      };
+                    }
+            
+                    const output = {};
+                    for (const entry of data) {
+                      if ([153, 154].includes(entry.kind)) {
+                        if (!output[entry.kind]) output[entry.kind] = {};
+                        if (!output[entry.kind][entry.quality]) {
+                          output[entry.kind][entry.quality] = calculate(entry);
+                        }
                       }
                     }
-          
-                    return {
-                      kind: entry.kind,
-                      quality: entry.quality,
-                      result: results
-                    };
-                  }
-          
-                  const output = {};
-                  for (const entry of data) {
-                    if ([153, 154].includes(entry.kind)) {
-                      if (!output[entry.kind]) output[entry.kind] = {};
-                      if (!output[entry.kind][entry.quality]) {
-                        output[entry.kind][entry.quality] = calculate(entry);
-                      }
-                    }
-                  }
-          
-                  self.postMessage({ companyId, output });
-                };
-              `;
+            
+                    self.postMessage({ companyId, output });
+                  };
+                `;
 
                 const blob = new Blob([workerCode], { type: 'application/javascript' });
                 const worker = new Worker(URL.createObjectURL(blob));
@@ -2317,80 +2253,80 @@
                 const now = Date.now();
 
                 const workerCode = `
-                self.onmessage = function(e) {
-                  const { data, now, companyId } = e.data;
-          
-                  function fo(entry, t) {
-                    const n = Date.parse(entry.datetime);
-                    const a = Math.abs(t - n);
-                    const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
-                    return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
-                  }
-          
-                  function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
-                    const originalDate = new Date(originalTimeStr);
-                    const nowDate = new Date(nowTimestamp);
-                    const originalSeconds = originalDate.getSeconds();
-                    const originalMilliseconds = originalDate.getMilliseconds();
-                    const alignedDate = new Date(nowDate);
-                    alignedDate.setSeconds(originalSeconds, originalMilliseconds);
-                    if (alignedDate.getTime() > nowTimestamp) {
-                      alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                  self.onmessage = function(e) {
+                    const { data, now, companyId } = e.data;
+            
+                    function fo(entry, t) {
+                      const n = Date.parse(entry.datetime);
+                      const a = Math.abs(t - n);
+                      const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+                      return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
                     }
-                    return alignedDate.getTime();
-                  }
-          
-                  function formatLocalDateSimple(date) {
-                    const pad = (n) => String(n).padStart(2, '0');
-                    return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
-                  }
-          
-                  function calculate(entry) {
-                    const decayTime = Date.parse(entry.datetime);
-                    const quantity = entry.quantity;
-                    let lastAmount = fo(entry, now);
-                    const results = [];
-                    let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
-          
-                    for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
-                      const diff = Math.abs(currentTime - decayTime);
-                      const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
-                      const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
-                      if (amount !== lastAmount) {
-                        const dateStr = formatLocalDateSimple(new Date(currentTime));
-                        results.push({
-                          time: dateStr,
-                          amount,
-                        });
-                        lastAmount = amount;
-                        if (amount === 0) break;
+            
+                    function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+                      const originalDate = new Date(originalTimeStr);
+                      const nowDate = new Date(nowTimestamp);
+                      const originalSeconds = originalDate.getSeconds();
+                      const originalMilliseconds = originalDate.getMilliseconds();
+                      const alignedDate = new Date(nowDate);
+                      alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+                      if (alignedDate.getTime() > nowTimestamp) {
+                        alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                      }
+                      return alignedDate.getTime();
+                    }
+            
+                    function formatLocalDateSimple(date) {
+                      const pad = (n) => String(n).padStart(2, '0');
+                      return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
+                    }
+            
+                    function calculate(entry) {
+                      const decayTime = Date.parse(entry.datetime);
+                      const quantity = entry.quantity;
+                      let lastAmount = fo(entry, now);
+                      const results = [];
+                      let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
+            
+                      for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+                        const diff = Math.abs(currentTime - decayTime);
+                        const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+                        const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+                        if (amount !== lastAmount) {
+                          const dateStr = formatLocalDateSimple(new Date(currentTime));
+                          results.push({
+                            time: dateStr,
+                            amount,
+                          });
+                          lastAmount = amount;
+                          if (amount === 0) break;
+                        }
+                      }
+            
+                      return {
+                        kind: entry.kind,
+                        buyer: entry.buyer.company,
+                        quality: entry.quality,
+                        quantity: entry.quantity,
+                        price: entry.price,
+                        datetime: entry.datetime,
+                        rawTime: decayTime,
+                        result: results
+                      };
+                    }
+            
+                    const output = {};
+                    for (const entry of data) {
+                      if ([153, 154].includes(entry.kind) && entry.datetime) {
+                          if (!output[entry.kind]) output[entry.kind] = {};
+                          if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];                        
+                          output[entry.kind][entry.buyer.company].push(calculate(entry));
                       }
                     }
-          
-                    return {
-                      kind: entry.kind,
-                      buyer: entry.buyer.company,
-                      quality: entry.quality,
-                      quantity: entry.quantity,
-                      price: entry.price,
-                      datetime: entry.datetime,
-                      rawTime: decayTime,
-                      result: results
-                    };
-                  }
-          
-                  const output = {};
-                  for (const entry of data) {
-                    if ([153, 154].includes(entry.kind) && entry.datetime) {
-                        if (!output[entry.kind]) output[entry.kind] = {};
-                        if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];                        
-                        output[entry.kind][entry.buyer.company].push(calculate(entry));
-                    }
-                  }
-          
-                  self.postMessage({ companyId, output });
-                };
-              `;
+            
+                    self.postMessage({ companyId, output });
+                  };
+                `;
 
                 const blob = new Blob([workerCode], { type: 'application/javascript' });
                 const worker = new Worker(URL.createObjectURL(blob));
@@ -2427,80 +2363,80 @@
                 const now = Date.now();
 
                 const workerCode = `
-                self.onmessage = function(e) {
-                  const { data, now, companyId } = e.data;
-          
-                  function fo(entry, t) {
-                    const n = Date.parse(entry.datetime);
-                    const a = Math.abs(t - n);
-                    const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
-                    return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
-                  }
-          
-                  function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
-                    const originalDate = new Date(originalTimeStr);
-                    const nowDate = new Date(nowTimestamp);
-                    const originalSeconds = originalDate.getSeconds();
-                    const originalMilliseconds = originalDate.getMilliseconds();
-                    const alignedDate = new Date(nowDate);
-                    alignedDate.setSeconds(originalSeconds, originalMilliseconds);
-                    if (alignedDate.getTime() > nowTimestamp) {
-                      alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                  self.onmessage = function(e) {
+                    const { data, now, companyId } = e.data;
+            
+                    function fo(entry, t) {
+                      const n = Date.parse(entry.datetime);
+                      const a = Math.abs(t - n);
+                      const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+                      return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
                     }
-                    return alignedDate.getTime();
-                  }
-          
-                  function formatLocalDateSimple(date) {
-                    const pad = (n) => String(n).padStart(2, '0');
-                    return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
-                  }
-          
-                  function calculate(entry) {
-                    const decayTime = Date.parse(entry.datetime);
-                    const quantity = entry.quantity;
-                    let lastAmount = fo(entry, now);
-                    const results = [];
-                    let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
-          
-                    for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
-                      const diff = Math.abs(currentTime - decayTime);
-                      const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
-                      const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
-                      if (amount !== lastAmount) {
-                        const dateStr = formatLocalDateSimple(new Date(currentTime));
-                        results.push({
-                          time: dateStr,
-                          amount,
-                        });
-                        lastAmount = amount;
-                        if (amount === 0) break;
+            
+                    function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+                      const originalDate = new Date(originalTimeStr);
+                      const nowDate = new Date(nowTimestamp);
+                      const originalSeconds = originalDate.getSeconds();
+                      const originalMilliseconds = originalDate.getMilliseconds();
+                      const alignedDate = new Date(nowDate);
+                      alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+                      if (alignedDate.getTime() > nowTimestamp) {
+                        alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                      }
+                      return alignedDate.getTime();
+                    }
+            
+                    function formatLocalDateSimple(date) {
+                      const pad = (n) => String(n).padStart(2, '0');
+                      return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
+                    }
+            
+                    function calculate(entry) {
+                      const decayTime = Date.parse(entry.datetime);
+                      const quantity = entry.quantity;
+                      let lastAmount = fo(entry, now);
+                      const results = [];
+                      let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
+            
+                      for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+                        const diff = Math.abs(currentTime - decayTime);
+                        const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+                        const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+                        if (amount !== lastAmount) {
+                          const dateStr = formatLocalDateSimple(new Date(currentTime));
+                          results.push({
+                            time: dateStr,
+                            amount,
+                          });
+                          lastAmount = amount;
+                          if (amount === 0) break;
+                        }
+                      }
+            
+                      return {
+                          kind: entry.kind,
+                          seller: entry.seller.company,
+                          quality: entry.quality,
+                          quantity: entry.quantity,
+                          price: entry.price,
+                          datetime: entry.datetime,
+                          rawTime: decayTime,
+                          result: results
+                        };
+                    }
+            
+                    const output = {};
+                    for (const entry of data) {
+                      if ([153, 154].includes(entry.kind) && entry.datetime) {
+                          if (!output[entry.kind]) output[entry.kind] = {};
+                          if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];                        
+                          output[entry.kind][entry.buyer.company].push(calculate(entry));
                       }
                     }
-          
-                    return {
-                        kind: entry.kind,
-                        seller: entry.seller.company,
-                        quality: entry.quality,
-                        quantity: entry.quantity,
-                        price: entry.price,
-                        datetime: entry.datetime,
-                        rawTime: decayTime,
-                        result: results
-                      };
-                  }
-          
-                  const output = {};
-                  for (const entry of data) {
-                    if ([153, 154].includes(entry.kind) && entry.datetime) {
-                        if (!output[entry.kind]) output[entry.kind] = {};
-                        if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];                        
-                        output[entry.kind][entry.buyer.company].push(calculate(entry));
-                    }
-                  }
-          
-                  self.postMessage({ companyId, output });
-                };
-              `;
+            
+                    self.postMessage({ companyId, output });
+                  };
+                `;
 
                 const blob = new Blob([workerCode], { type: 'application/javascript' });
                 const worker = new Worker(URL.createObjectURL(blob));
@@ -2535,78 +2471,78 @@
                 const now = Date.now();
 
                 const workerCode = `
-                self.onmessage = function(e) {
-                  const { data, now, companyId } = e.data;
-          
-                  function fo(entry, t) {
-                    const n = Date.parse(entry.datetimeDecayUpdated);
-                    const a = Math.abs(t - n);
-                    const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
-                    return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
-                  }
-          
-                  function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
-                    const originalDate = new Date(originalTimeStr);
-                    const nowDate = new Date(nowTimestamp);
-                    const originalSeconds = originalDate.getSeconds();
-                    const originalMilliseconds = originalDate.getMilliseconds();
-                    const alignedDate = new Date(nowDate);
-                    alignedDate.setSeconds(originalSeconds, originalMilliseconds);
-                    if (alignedDate.getTime() > nowTimestamp) {
-                      alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                  self.onmessage = function(e) {
+                    const { data, now, companyId } = e.data;
+            
+                    function fo(entry, t) {
+                      const n = Date.parse(entry.datetimeDecayUpdated);
+                      const a = Math.abs(t - n);
+                      const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
+                      return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
                     }
-                    return alignedDate.getTime();
-                  }
-          
-                  function formatLocalDateSimple(date) {
-                    const pad = (n) => String(n).padStart(2, '0');
-                    return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
-                  }
-          
-                  function calculate(entry) {
-                    const decayTime = Date.parse(entry.datetimeDecayUpdated);
-                    const quantity = entry.quantity;
-                    let lastAmount = fo(entry, now);
-                    const results = [];
-                    let currentTime = alignTimeToOriginalSeconds(entry.datetimeDecayUpdated, now);
-          
-                    for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
-                      const diff = Math.abs(currentTime - decayTime);
-                      const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
-                      const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
-                      if (amount !== lastAmount) {
-                        const dateStr = formatLocalDateSimple(new Date(currentTime));
-                        results.push({
-                          time: dateStr,
-                          amount,
-                        });
-                        lastAmount = amount;
-                        if (amount === 0) break;
+            
+                    function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
+                      const originalDate = new Date(originalTimeStr);
+                      const nowDate = new Date(nowTimestamp);
+                      const originalSeconds = originalDate.getSeconds();
+                      const originalMilliseconds = originalDate.getMilliseconds();
+                      const alignedDate = new Date(nowDate);
+                      alignedDate.setSeconds(originalSeconds, originalMilliseconds);
+                      if (alignedDate.getTime() > nowTimestamp) {
+                        alignedDate.setMinutes(alignedDate.getMinutes() - 1);
+                      }
+                      return alignedDate.getTime();
+                    }
+            
+                    function formatLocalDateSimple(date) {
+                      const pad = (n) => String(n).padStart(2, '0');
+                      return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
+                    }
+            
+                    function calculate(entry) {
+                      const decayTime = Date.parse(entry.datetimeDecayUpdated);
+                      const quantity = entry.quantity;
+                      let lastAmount = fo(entry, now);
+                      const results = [];
+                      let currentTime = alignTimeToOriginalSeconds(entry.datetimeDecayUpdated, now);
+            
+                      for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
+                        const diff = Math.abs(currentTime - decayTime);
+                        const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
+                        const amount = Math.floor(quantity * Math.pow(1 - 0.05, cycleCount));
+                        if (amount !== lastAmount) {
+                          const dateStr = formatLocalDateSimple(new Date(currentTime));
+                          results.push({
+                            time: dateStr,
+                            amount,
+                          });
+                          lastAmount = amount;
+                          if (amount === 0) break;
+                        }
+                      }
+            
+                      return {
+                        kind: entry.kind,
+                        quality: entry.quality,
+                        price: entry.price,
+                        result: results
+                      };
+                    }
+            
+                    const output = {};
+                    for (const entry of data) {
+                      if ([153, 154].includes(entry.kind) && entry.datetimeDecayUpdated) {
+                        if (!output[entry.kind]) output[entry.kind] = {};
+                        if (!output[entry.kind][entry.quality]) output[entry.kind][entry.quality] = {};
+                        if (!output[entry.kind][entry.quality][entry.price]) {
+                          output[entry.kind][entry.quality][entry.price] = calculate(entry);
+                        }
                       }
                     }
-          
-                    return {
-                      kind: entry.kind,
-                      quality: entry.quality,
-                      price: entry.price,
-                      result: results
-                    };
-                  }
-          
-                  const output = {};
-                  for (const entry of data) {
-                    if ([153, 154].includes(entry.kind) && entry.datetimeDecayUpdated) {
-                      if (!output[entry.kind]) output[entry.kind] = {};
-                      if (!output[entry.kind][entry.quality]) output[entry.kind][entry.quality] = {};
-                      if (!output[entry.kind][entry.quality][entry.price]) {
-                        output[entry.kind][entry.quality][entry.price] = calculate(entry);
-                      }
-                    }
-                  }
-          
-                  self.postMessage({ companyId, output });
-                };
-              `;
+            
+                    self.postMessage({ companyId, output });
+                  };
+                `;
 
                 const blob = new Blob([workerCode], { type: 'application/javascript' });
                 const worker = new Worker(URL.createObjectURL(blob));
@@ -2640,7 +2576,6 @@
     // ======================
     // 模块12：展示预测剩余量
     // ======================
-
     const DecayResultViewer = (() => {
         let container, header, content;
 
@@ -2807,10 +2742,10 @@
                         row.style.gap = "16px";
                         row.style.padding = "1px 0";
                         row.innerHTML = `
-                            <div style="width:100px">已全部衰减</div>
-                            <div style="width:130px">-</div>
-                            <div style="width:80px">∞</div>
-                        `;
+                              <div style="width:100px">已全部衰减</div>
+                              <div style="width:130px">-</div>
+                              <div style="width:80px">∞</div>
+                          `;
                         qualityContent.appendChild(row);
                     } else {
                         allDecayArrays.forEach(({ amount, time, unitCost }) => {
@@ -2819,13 +2754,13 @@
                             row.style.gap = "16px";
                             row.style.padding = "1px 0";
                             row.innerHTML = `
-                                <div style="width:100px">${amount}</div>
-                                <div style="width:130px">${time}</div>
-                                <div style="width:80px">${unitCost === Infinity
+                                  <div style="width:100px">${amount}</div>
+                                  <div style="width:130px">${time}</div>
+                                  <div style="width:80px">${unitCost === Infinity
                                     ? '∞'
                                     : (typeof unitCost === 'number' ? unitCost.toFixed(3) : '∞')
                                 }</div>
-                            `;
+                              `;
                             qualityContent.appendChild(row);
                         });
                     }
@@ -2874,9 +2809,9 @@
                         headerRow.style.gap = '12px';
                         headerRow.style.padding = '2px 0';
                         headerRow.innerHTML = `
-                            <div style="width:100px">剩余量</div>
-                            <div style="width:150px">达成时间</div>
-                        `;
+                              <div style="width:100px">剩余量</div>
+                              <div style="width:150px">达成时间</div>
+                          `;
                         contractContent.appendChild(headerRow);
 
                         if (!contract.result || contract.result.length === 0) {
@@ -2891,9 +2826,9 @@
                                 row.style.gap = "12px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:150px">${time}</div>
-                                `;
+                                      <div style="width:100px">${amount}</div>
+                                      <div style="width:150px">${time}</div>
+                                  `;
                                 contractContent.appendChild(row);
                             });
                         }
@@ -2954,9 +2889,9 @@
                         headerRow.style.gap = '12px';
                         headerRow.style.padding = '2px 0';
                         headerRow.innerHTML = `
-                            <div style="width:100px">剩余量</div>
-                            <div style="width:150px">达成时间</div>
-                        `;
+                              <div style="width:100px">剩余量</div>
+                              <div style="width:150px">达成时间</div>
+                          `;
                         contractContent.appendChild(headerRow);
 
                         if (!contract.result || contract.result.length === 0) {
@@ -2971,9 +2906,9 @@
                                 row.style.gap = "12px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:150px">${time}</div>
-                                `;
+                                      <div style="width:100px">${amount}</div>
+                                      <div style="width:150px">${time}</div>
+                                  `;
                                 contractContent.appendChild(row);
                             });
                         }
@@ -3056,9 +2991,9 @@
                             row.style.gap = "16px";
                             row.style.padding = "1px 0";
                             row.innerHTML = `
-                                <div style="width:100px">已全部衰减</div>
-                                <div style="width:130px">-</div>
-                            `;
+                                  <div style="width:100px">已全部衰减</div>
+                                  <div style="width:130px">-</div>
+                              `;
                             priceContent.appendChild(row);
                         } else {
                             allDecayArrays.forEach(({ amount, time }) => {
@@ -3067,9 +3002,9 @@
                                 row.style.gap = "16px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:130px">${time}</div>
-                                `;
+                                      <div style="width:100px">${amount}</div>
+                                      <div style="width:130px">${time}</div>
+                                  `;
                                 priceContent.appendChild(row);
                             });
                         }
@@ -3093,24 +3028,24 @@
             container = document.createElement("div");
             container.id = 'decayDataPanel';
             container.style.cssText = `
-                position: fixed;
-                left: ${isMobile ? '5vw' : 'calc(100% - 510px)'};
-                top: ${isMobile ? '20px' : 'calc(100vh - 60px - 300px)'};
-                width: ${isMobile ? '80vw' : '500px'};
-                height: ${isMobile ? '50vh' : '350px'};
-                max-height: 80%;
-                overflow: hidden;
-                background: #222;
-                color: white;
-                padding: 10px;
-                z-index: 10000;
-                border-radius: 6px;
-                font-size: clamp(12px, 1.5vw, 16px);
-                box-shadow: 0 0 10px #000;
-                user-select: none;
-                display: flex;
-                flex-direction: column;
-            `;
+                  position: fixed;
+                  left: ${isMobile ? '5vw' : 'calc(100% - 510px)'};
+                  top: ${isMobile ? '20px' : 'calc(100vh - 60px - 300px)'};
+                  width: ${isMobile ? '80vw' : '500px'};
+                  height: ${isMobile ? '50vh' : '350px'};
+                  max-height: 80%;
+                  overflow: hidden;
+                  background: #222;
+                  color: white;
+                  padding: 10px;
+                  z-index: 10000;
+                  border-radius: 6px;
+                  font-size: clamp(12px, 1.5vw, 16px);
+                  box-shadow: 0 0 10px #000;
+                  user-select: none;
+                  display: flex;
+                  flex-direction: column;
+              `;
 
             // 标题栏：拖动区域
             header = document.createElement('div');
@@ -3140,29 +3075,29 @@
                 headerTitle.textContent = isCollapsed ? '未来衰减量 ▸' : '未来衰减量 ▾';
             });
             header.style.cssText = `
-                background: #444;
-                padding: 8px 10px;
-                font-weight: bold;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                flex-shrink: 0;
-                position: relative;
-                ${isMobile ? '' : 'cursor: move;'}
-            `;
+                  background: #444;
+                  padding: 8px 10px;
+                  font-weight: bold;
+                  border-top-left-radius: 6px;
+                  border-top-right-radius: 6px;
+                  flex-shrink: 0;
+                  position: relative;
+                  ${isMobile ? '' : 'cursor: move;'}
+              `;
 
             const calcBtn = document.createElement('button');
             calcBtn.textContent = '🔄';
             calcBtn.title = '重新计算资源剩余量';
             calcBtn.style.cssText = `
-                float: right;
-                margin-right: 6px;
-                background: transparent;
-                border: none;
-                color: white;
-                font-size: 16px;
-                cursor: pointer;
-                user-select: none;
-            `;
+                  float: right;
+                  margin-right: 6px;
+                  background: transparent;
+                  border: none;
+                  color: white;
+                  font-size: 16px;
+                  cursor: pointer;
+                  user-select: none;
+              `;
             calcBtn.onclick = async () => {
                 calcBtn.disabled = true;
                 calcBtn.textContent = '⏳';
@@ -3182,25 +3117,25 @@
             closeBtn.textContent = '×';
             closeBtn.title = '关闭面板';
             closeBtn.style.cssText = `
-                position: absolute;
-                right: 8px;
-                top: 6px;
-                background: transparent;
-                border: none;
-                color: white;
-                font-size: 16px;
-                cursor: pointer;
-                user-select: none;
-            `;
+                  position: absolute;
+                  right: 8px;
+                  top: 6px;
+                  background: transparent;
+                  border: none;
+                  color: white;
+                  font-size: 16px;
+                  cursor: pointer;
+                  user-select: none;
+              `;
             closeBtn.onclick = () => { container.style.display = 'none'; };
             header.appendChild(closeBtn);
 
             content = document.createElement('div');
             content.style.cssText = `
-                flex: 1 1 auto;
-                overflow: auto;
-                padding: 10px;
-            `;
+                  flex: 1 1 auto;
+                  overflow: auto;
+                  padding: 10px;
+              `;
 
             container.appendChild(header);
             container.appendChild(content);
@@ -3241,16 +3176,16 @@
 
                 resizer = document.createElement('div');
                 resizer.style.cssText = `
-                    width: 14px;
-                    height: 14px;
-                    background: transparent;
-                    position: absolute;
-                    right: 2px;
-                    bottom: 2px;
-                    cursor: se-resize;
-                    user-select: none;
-                    z-index: 10001;
-                `;
+                      width: 14px;
+                      height: 14px;
+                      background: transparent;
+                      position: absolute;
+                      right: 2px;
+                      bottom: 2px;
+                      cursor: se-resize;
+                      user-select: none;
+                      z-index: 10001;
+                  `;
                 container.appendChild(resizer);
 
                 let isResizing = false;
@@ -3363,4 +3298,55 @@
         };
     })();
 
+    // ======================
+    // 检测更新
+    // ======================
+    function compareVersions(v1, v2) {
+        const a = v1.split('.').map(Number);
+        const b = v2.split('.').map(Number);
+        const len = Math.max(a.length, b.length);
+
+        for (let i = 0; i < len; i++) {
+            const num1 = a[i] || 0;
+            const num2 = b[i] || 0;
+            if (num1 > num2) return 1;
+            if (num1 < num2) return -1;
+        }
+        return 0;
+    }
+
+    function checkUpdate() {
+        const localVersion = GM_info.script.version;
+        const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
+        const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
+        // @changelog    修改更新链接
+
+        fetch(scriptUrl)
+            .then(res => {
+                if (!res.ok) throw new Error('获取失败');
+                return res.text();
+            })
+            .then(remoteText => {
+                const matchVersion = remoteText.match(/^\s*\/\/\s*@version\s+([0-9.]+)/m);
+                const matchChange = remoteText.match(/^\s*\/\/\s*@changelog\s+(.+)/m);
+                if (!matchVersion) return;
+
+                const latestVersion = matchVersion[1];
+                const changeLog = matchChange ? matchChange[1] : '';
+
+                if (compareVersions(latestVersion, localVersion) > 0) {
+                    console.log(`📢 检测到新版本 v${latestVersion}`);
+                    if (confirm(`自动计算最大时利润插件检测到新版本 v${latestVersion}，是否前往更新？\n\nv${latestVersion} ${changeLog}\n\n关于版本号说明 1.X.Y ，X为增添新功能或修复不可用，Y为细节修改不影响功能，如不需更新可将Y或其它位置修改为较大值。`)) {
+                        window.open(downloadUrl, '_blank');
+                    }
+                } else {
+                    console.log("✅ 当前已是最新版本");
+                }
+            })
+            .catch(err => {
+                console.warn('检查更新失败：', err);
+            });
+    }
+
+    setTimeout(checkUpdate, 3000);
 })();

@@ -221,35 +221,35 @@
   const downloadUrl = 'https://simcompanies-scripts.pages.dev/showExecTrainingLogs.user.js';
 
   function compareVersions(v1, v2) {
-      const a = v1.split('.').map(Number);
-      const b = v2.split('.').map(Number);
-      const len = Math.max(a.length, b.length);
-      for (let i = 0; i < len; i++) {
-          const n1 = a[i] || 0;
-          const n2 = b[i] || 0;
-          if (n1 > n2) return 1;
-          if (n1 < n2) return -1;
-      }
-      return 0;
+    const a = v1.split('.').map(Number);
+    const b = v2.split('.').map(Number);
+    const len = Math.max(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+      const n1 = a[i] || 0;
+      const n2 = b[i] || 0;
+      if (n1 > n2) return 1;
+      if (n1 < n2) return -1;
+    }
+    return 0;
   }
 
   function checkUpdate() {
-      fetch(scriptUrl)
-          .then(r => r.text())
-          .then(text => {
-              const match = text.match(/@version\s+([0-9.]+)/);
-              if (!match) return;
+    fetch(scriptUrl)
+      .then(r => r.text())
+      .then(text => {
+        const match = text.match(/@version\s+([0-9.]+)/);
+        if (!match) return;
 
-              const remoteVersion = match[1];
-              if (compareVersions(remoteVersion, localVersion) > 0) {
-                  if (confirm(`显示高管培训记录插件发现新版本 v${remoteVersion}，是否前往更新？`)) {
-                      window.open(downloadUrl, '_blank');
-                  }
-              }
-          })
-          .catch(err => {
-              console.warn('检查更新失败：', err);
-          });
+        const remoteVersion = match[1];
+        if (compareVersions(remoteVersion, localVersion) > 0) {
+          if (confirm(`显示高管培训记录插件发现新版本 v${remoteVersion}，是否前往更新？`)) {
+            window.open(downloadUrl, '_blank');
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('检查更新失败：', err);
+      });
   }
 
   setTimeout(checkUpdate, 3000);
