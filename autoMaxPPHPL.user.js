@@ -111,7 +111,6 @@
     // ======================
     // 模块2：领域数据模块
     // ======================
-
     const RegionData = (() => {
         // 公司信息
         const getAuthInfo = async () => {
@@ -1956,7 +1955,6 @@
         handlePage();
     })();
 
-
     // ======================
     // 模块10：自动或定时更新数据 SimcompaniesConstantsData SimcompaniesRetailCalculation超过一小时就更新
     // 只在打开新标签页和切换领域是才会判断时间更新 更新数据无锁
@@ -2579,7 +2577,6 @@
     // ======================
     // 模块12：展示预测剩余量
     // ======================
-
     const DecayResultViewer = (() => {
         let container, header, content;
 
@@ -3302,8 +3299,9 @@
         };
     })();
 
-
+    // ======================
     // 检测更新
+    // ======================
     function compareVersions(v1, v2) {
         const a = v1.split('.').map(Number);
         const b = v2.split('.').map(Number);

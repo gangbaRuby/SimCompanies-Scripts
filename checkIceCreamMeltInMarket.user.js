@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         查看交易所冰淇淋融化情况
 // @namespace    https://github.com/gangbaRuby
-// @version      1.0.2
+// @version      1.0.3
 // @description  查看交易所冰淇淋融化情况
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
-// @updateURL    https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/checkIceCreamMeltInMarket.user.js?v=202508041313
-// @downloadURL  https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/checkIceCreamMeltInMarket.user.js?v=202508041313
+// @updateURL    https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js
+// @downloadURL  https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
 // @grant        none
 // ==/UserScript==
@@ -588,8 +588,7 @@
     createFloatingBox(true);
 
     const localVersion = GM_info.script.version;
-    const timestamp = Date.now();
-    const scriptUrl = `https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/checkIceCreamMeltInMarket.user.js?v=${timestamp}`;
+    const scriptUrl = `https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js`;
 
     function compareVersions(v1, v2) {
         const a = v1.split('.').map(Number);
