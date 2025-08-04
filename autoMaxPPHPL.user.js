@@ -3351,5 +3351,5 @@
             });
     }
 
-    setTimeout(checkUpdate, 5000);
+    setTimeout(checkUpdate, 3000);
 })();
