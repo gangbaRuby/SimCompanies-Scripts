@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.12.9
+// @version      1.13.0
 // @description  自动计算最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -3322,7 +3322,7 @@
         const localVersion = GM_info.script.version;
         const timestamp = Date.now();
         const scriptUrl = `https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/autoMaxPPHPL.user.js?v=${timestamp}`;
-        // @changelog    尝试更换更新链接
+        // @changelog    更换更新链接
 
         fetch(scriptUrl)
             .then(res => {
