@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         查看交易所冰淇淋融化情况
 // @namespace    https://github.com/gangbaRuby
-// @version      1.0
+// @version      1.1
 // @description  查看交易所冰淇淋融化情况
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
@@ -587,4 +587,51 @@
     createToggleButton();
     createFloatingBox(true);
 
+    const localVersion = GM_info.script.version;
+    const timestamp = Date.now();
+    const scriptUrl = `https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/checkIceCreamMeltInMarket.user.js?v=${timestamp}`;
+
+    function compareVersions(v1, v2) {
+        const a = v1.split('.').map(Number);
+        const b = v2.split('.').map(Number);
+        const len = Math.max(a.length, b.length);
+        for (let i = 0; i < len; i++) {
+            const n1 = a[i] || 0;
+            const n2 = b[i] || 0;
+            if (n1 > n2) return 1;
+            if (n1 < n2) return -1;
+        }
+        return 0;
+    }
+
+    function checkUpdate() {
+        fetch(scriptUrl)
+            .then(r => r.text())
+            .then(text => {
+                const match = text.match(/@version\s+([0-9.]+)/);
+                if (!match) return;
+
+                const remoteVersion = match[1];
+                if (compareVersions(remoteVersion, localVersion) > 0) {
+                    if (confirm(`发现新版本 v${remoteVersion}，是否前往更新？`)) {
+                        window.open(scriptUrl, '_blank');
+                    }
+                }
+            })
+            .catch(err => {
+                console.warn('检查更新失败：', err);
+            });
+    }
+
+    // 取消频率限制，直接检测
+    setTimeout(checkUpdate, 3000);
+
+    // 注释掉频率限制代码段
+    // const CHECK_INTERVAL = 1000 * 60 * 60 * 6;
+    // const lastCheck = GM_getValue('lastUpdateCheck', 0);
+    // const now = Date.now();
+    // if (now - lastCheck > CHECK_INTERVAL) {
+    //     GM_setValue('lastUpdateCheck', now);
+    //     setTimeout(checkUpdate, 3000);
+    // }
 })();
