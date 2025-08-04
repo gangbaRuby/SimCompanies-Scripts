@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         查看交易所冰淇淋融化情况
 // @namespace    https://github.com/gangbaRuby
-// @version      1.0.4
+// @version      1.0.0
 // @description  查看交易所冰淇淋融化情况
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @updateURL    https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js
 // @downloadURL  https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @grant        none
+// @grant        GM_info
 // ==/UserScript==
 
 (function () {
@@ -588,7 +588,8 @@
     createFloatingBox(true);
 
     const localVersion = GM_info.script.version;
-    const scriptUrl = `https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js`;
+    const scriptUrl = 'https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js?t=' + Date.now();
+    const downloadUrl = 'https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js';
 
     function compareVersions(v1, v2) {
         const a = v1.split('.').map(Number);
@@ -612,8 +613,8 @@
 
                 const remoteVersion = match[1];
                 if (compareVersions(remoteVersion, localVersion) > 0) {
-                    if (confirm(`发现新版本 v${remoteVersion}，是否前往更新？`)) {
-                        window.open(scriptUrl, '_blank');
+                    if (confirm(`查看交易所冰淇淋融化情况插件发现新版本 v${remoteVersion}，是否前往更新？`)) {
+                        window.open(downloadUrl, '_blank');
                     }
                 }
             })
@@ -622,15 +623,6 @@
             });
     }
 
-    // 取消频率限制，直接检测
     setTimeout(checkUpdate, 3000);
 
-    // 注释掉频率限制代码段
-    // const CHECK_INTERVAL = 1000 * 60 * 60 * 6;
-    // const lastCheck = GM_getValue('lastUpdateCheck', 0);
-    // const now = Date.now();
-    // if (now - lastCheck > CHECK_INTERVAL) {
-    //     GM_setValue('lastUpdateCheck', now);
-    //     setTimeout(checkUpdate, 3000);
-    // }
 })();

@@ -3319,7 +3319,8 @@
     function checkUpdate() {
         const localVersion = GM_info.script.version;
         const timestamp = Date.now();
-        const scriptUrl = `https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts@main/autoMaxPPHPL.user.js?v=${timestamp}`;
+        const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
+        const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
         // @changelog    尝试更换成page
 
         fetch(scriptUrl)
