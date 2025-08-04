@@ -5,8 +5,8 @@
 // @description  查看交易所冰淇淋融化情况
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
-// @updateURL    https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/checkIceCreamMeltInMarket.user.js?v=202508040910
-// @downloadURL  https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/checkIceCreamMeltInMarket.user.js?v=202508040910
+// @updateURL    https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/checkIceCreamMeltInMarket.user.js?v=202508041013
+// @downloadURL  https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/checkIceCreamMeltInMarket.user.js?v=202508041013
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
 // @grant        none
 // ==/UserScript==

@@ -6,8 +6,8 @@
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @updateURL    https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/autoMaxPPHPL.user.js?v=250804
-// @downloadURL  https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/autoMaxPPHPL.user.js?v=250804
+// @updateURL    https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/autoMaxPPHPL.user.js?v=202508041013
+// @downloadURL  https://cdn.jsdelivr.net/gh/gangbaRuby/SimCompanies-Scripts/raw/refs/heads/main/autoMaxPPHPL.user.js?v=202508041013
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
