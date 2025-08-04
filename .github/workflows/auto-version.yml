@@ -1,0 +1,38 @@
+name: Update Script Version Timestamp (Minute-level)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-timestamp:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set version string (YYYYMMDDHHMM)
+        id: timestamp
+        run: echo "ts=$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
+
+      - name: Replace version timestamp in .user.js files
+        run: |
+          FILES=$(find . -name "*.user.js")
+          for file in $FILES; do
+            echo "Updating $file"
+            sed -i "s/\(cdn\.jsdelivr\.net\/.*\.user\.js?v=\)[0-9]\+/\1${{ steps.timestamp.outputs.ts }}/g" "$file"
+          done
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "Auto update @updateURL ?v=${{ steps.timestamp.outputs.ts }}"
+            git push
+          else
+            echo "No changes to commit."
+          fi
