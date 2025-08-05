@@ -2,6 +2,7 @@
 // @name         查看交易所冰淇淋融化情况
 // @namespace    https://github.com/gangbaRuby
 // @version      1.0.0
+// @license      AGPL-3.0
 // @description  查看交易所冰淇淋融化情况
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
