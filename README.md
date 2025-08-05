@@ -8,4 +8,4 @@
 # showExecTrainingLogs
 在高管详情页和公司主页的高管详情页展示高管在所有公司的培训记录。
 # checkIceCreamMeltInMarket
-查看当前交易所冰淇淋的融化情况。
+查看交易所此刻冰淇淋的融化情况，没有实际意义只是为了看多少冤种。

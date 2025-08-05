@@ -3,7 +3,7 @@
 // @namespace    https://github.com/gangbaRuby
 // @version      1.0.0
 // @license      AGPL-3.0
-// @description  在高管详情页和公司主页的高管详情页展示公司高管培训记录
+// @description  在高管详情页和公司主页的高管详情页展示高管在所有公司的培训记录
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @updateURL    https://simcompanies-scripts.pages.dev/showExecTrainingLogs.user.js
