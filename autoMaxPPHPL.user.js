@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.14.0
+// @version      1.14.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -849,20 +849,56 @@
 
             // 容器
             saturationTableElement = document.createElement("div");
-            saturationTableElement.style.cssText = "position:fixed;left:10px;top:50px;z-index:9999;background:#222;padding:6px;border-radius:4px;max-height:400px;overflow:auto;";
-            saturationTableElement.appendChild(table);
+            saturationTableElement.style.cssText = `
+                position:fixed;
+                left:10px;
+                top:50px;
+                z-index:9998;
+                background:#2c2c2c;
+                color:#fff;
+                padding:12px;
+                border-radius:8px;
+                max-height:400px;
+                overflow:auto;
+                box-shadow:0 4px 15px rgba(0,0,0,0.5);
+                font-family:Arial, sans-serif;
+            `;
 
             // 关闭按钮
             const closeBtn = document.createElement("button");
-            closeBtn.textContent = "关闭";
-            closeBtn.style.cssText = "margin-top:6px;padding:4px 8px;background:#c00;color:white;border:none;border-radius:3px;cursor:pointer;";
+            closeBtn.textContent = "×";
+            closeBtn.style.cssText = `
+                position:absolute;
+                top:6px;
+                right:6px;
+                background:#e74c3c;
+                color:white;
+                border:none;
+                border-radius:50%;
+                width:24px;
+                height:24px;
+                font-size:16px;
+                cursor:pointer;
+                line-height:24px;
+                text-align:center;
+                padding:0;
+                transition: background 0.2s;
+            `;
+            closeBtn.onmouseover = () => closeBtn.style.background = "#ff6666";
+            closeBtn.onmouseout = () => closeBtn.style.background = "#e74c3c";
             closeBtn.onclick = () => {
                 saturationTableElement.remove();
                 saturationTableElement = null;
             };
             saturationTableElement.appendChild(closeBtn);
 
+            // 表格
+            table.style.background = "#333";
+            table.style.color = "#fff";
+            saturationTableElement.appendChild(table);
+
             document.body.appendChild(saturationTableElement);
+
         };
 
         // 创建界面元素
@@ -1080,7 +1116,7 @@
                 padding: 12px;
                 border-radius: 6px;
                 box-shadow: 0 0 15px rgba(0,0,0,0.7);
-                z-index: 10000;
+                z-index: 9998;
                 overflow: hidden;
                 font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
                 font-size: 14px;
@@ -3352,7 +3388,7 @@
                 background: #222;
                 color: white;
                 padding: 10px;
-                z-index: 10000;
+                z-index: 9998;
                 border-radius: 6px;
                 font-size: clamp(12px, 1.5vw, 16px);
                 box-shadow: 0 0 10px #000;
@@ -3498,7 +3534,7 @@
                     bottom: 2px;
                     cursor: se-resize;
                     user-select: none;
-                    z-index: 10001;
+                    z-index: 9998;
                 `;
                 container.appendChild(resizer);
 
@@ -3883,7 +3919,7 @@
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    随公式更新，Math.max(.9, s / 2 + .5)
+        // @changelog    微调饱和度的展示
 
         fetch(scriptUrl)
             .then(res => {
