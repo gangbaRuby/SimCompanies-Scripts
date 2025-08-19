@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.15.0
+// @version      1.15.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1108,7 +1108,7 @@
                 position: fixed;
                 left: 25px;
                 top: 50px;
-                width: 450px;
+                width: min(450px, 90vw);
                 max-height: 70vh;
                 background: #222;
                 color: #eee;
@@ -1164,7 +1164,7 @@
 
                 inputWrapper.innerHTML = `
                 <span style="flex: 0 0 auto;">MP-</span>
-                <input id="mp-percent-input" type="number" min="0" step="0.1" value="${inputPercent}" style="background: #2c3e50; color: #fff; min-width: 40px;">
+                <input id="mp-percent-input" type="number" min="0" step="0.1" value="${inputPercent}" style="background: #2c3e50; color: #fff; width: 40px;">
                 <span style="flex: 0 0 auto;">% 输入负数为直接减去</span>
                 <button id="mp-calc-btn" style="background: #2196F3; color: white; flex: 0 0 auto; margin-left: 12px; cursor: pointer;">计算</button>
               `;
@@ -1197,6 +1197,30 @@
                 box.appendChild(tableContainer);
 
                 document.body.appendChild(box);
+
+                // 表格样式：固定第一列，其他列自适应
+                const style = document.createElement('style');
+                style.textContent = `
+                    #mp-table-container table {
+                        width: 100%;
+                        table-layout: fixed;
+                        word-break: break-word;
+                    }
+                    #mp-table-container table th:first-child,
+                    #mp-table-container table td:first-child {
+                        width: 50px;
+                        text-align: center;
+                    }
+                    #mp-floating-box div {
+                        flex-wrap: wrap;   /* 小屏幕自动换行 */
+                    }
+                    #mp-floating-box input,
+                    #mp-floating-box button,
+                    #mp-floating-box span {
+                        flex-shrink: 1;    /* 缩小避免撑出 */
+                    }
+                `;
+                document.head.appendChild(style);
 
                 // 计算按钮事件
                 const calcBtn = document.getElementById('mp-calc-btn');
@@ -3936,7 +3960,7 @@
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    增加对英文的支持
+        // @changelog    增加对英文的支持，优化MP-?%在小屏上的使用
 
         fetch(scriptUrl)
             .then(res => {
