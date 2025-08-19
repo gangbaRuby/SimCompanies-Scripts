@@ -18,7 +18,6 @@
     // ======================
     // 计算用到的函数
     // ======================
-    let GLOBAL_REALM_ID = null;
     let zn, lwe; //使用SimcompaniesConstantsData内数据
     let size, acceleration, economyState, resource,
         salesModifierWithRecreationBonus, skillCMO, skillCOO,
@@ -1208,7 +1207,7 @@
                     inputPercent = parseFloat(percentInput.value) || 0;
                     localStorage.setItem('mp_inputPercent', inputPercent);
 
-                    const realm = GLOBAL_REALM_ID;
+                    const realm = getRealmIdFromLink();
                     const resourceId = getCurrentResourceId();
                     const name = resourceIdNameMap[resourceId] || `未知(${resourceId})`;
                     if (realm === null || resourceId === null) {
@@ -1242,7 +1241,7 @@
                             calcBtn.disabled = false;
                             return;
                         }
-                        const result = await window.MarketInterceptor.calculateProfit(inputPercent, data, GLOBAL_REALM_ID);
+                        const result = await window.MarketInterceptor.calculateProfit(inputPercent, data, getRealmIdFromLink());
                         updateContent(`计算完成,当前产品为：${name}`);
                         document.getElementById('mp-table-container').innerHTML = renderResultTable(result);
                         enableTableFeatures();
@@ -1833,15 +1832,35 @@
         }
 
         function extractNumbersFromAriaLabel(label) {
-            const cleanedLabel = label.replace(/,/g, ''); // 去除千位分隔符
-            const nums = cleanedLabel.match(/[\d.]+/g);
-            if (!nums || nums.length < 3) return null;
-            const lastThree = nums.slice(-3).map(x => Number(x));
+            if (!label || typeof label !== 'string') return null;
+
+            let nums = [];
+            let lastThree = [];
+
+            // 中文直接用原逻辑
+            if (/由.*公司提供/.test(label)) {
+                const cleanedLabel = label.replace(/,/g, '');
+                nums = cleanedLabel.match(/[\d.]+/g);
+                if (!nums || nums.length < 3) return null;
+                lastThree = nums.slice(-3).map(x => Number(x));
+            }
+            // 英文处理
+            else if (/market order/i.test(label)) {
+                // 提取公司名位置
+                const companyMatch = label.match(/offered by company\s+([^\.,，]*)/i);
+                const companyStart = companyMatch ? companyMatch.index : label.length;
+                // 只取公司名前的文本进行数字匹配，避免公司名里的点或数字干扰
+                const textToParse = label.slice(0, companyStart).replace(/,/g, '');
+                nums = textToParse.match(/[\d.]+/g);
+                if (!nums || nums.length < 3) return null;
+                lastThree = nums.slice(-3).map(x => Number(x));
+            }
+
             const [price, quantity, quality] = lastThree;
             if ([price, quantity, quality].some(n => isNaN(n))) return null;
+
             return { price, quantity, quality };
         }
-
 
         function extractRealmIdOnce(tbody) {
             if (currentRealmId) return;
@@ -2174,6 +2193,7 @@
         }
 
         function parseContractCard(card) {
+            console.log(card)
             const result = {
                 quantity: null,
                 quality: null,
@@ -2185,16 +2205,29 @@
             };
 
             const label = card.getAttribute('aria-label') || '';
-            const numberMatches = [...label.matchAll(/[\d,]+(?:\.\d+)?/g)];
-            const qMatch = label.match(/Q(\d+)/);
 
-            if (numberMatches.length >= 3 && qMatch) {
-                result.totalPrice = parseFloat(numberMatches[numberMatches.length - 1][0].replace(/,/g, ''));
-                result.unitPrice = parseFloat(numberMatches[numberMatches.length - 2][0].replace(/,/g, ''));
-                result.quantity = parseInt(numberMatches[numberMatches.length - 4][0].replace(/,/g, ''));
-                result.quality = parseInt(qMatch[1]);
+            if (/quality/i.test(label)) { // 英文处理
+                const quantityMatch = label.match(/(\d+)\s+[A-Za-z ]+quality/i);
+                const qualityMatch = label.match(/quality\s*(\d+)/i);
+                const unitPriceMatch = label.match(/at\s+\$([\d,.]+)\s+per unit/i);
+                const totalPriceMatch = label.match(/total price\s+\$([\d,.]+)/i);
+
+                if (quantityMatch) result.quantity = parseInt(quantityMatch[1].replace(/,/g, ''));
+                if (qualityMatch) result.quality = parseInt(qualityMatch[1]);
+                if (unitPriceMatch) result.unitPrice = parseFloat(unitPriceMatch[1].replace(/,/g, ''));
+                if (totalPriceMatch) result.totalPrice = parseFloat(totalPriceMatch[1].replace(/,/g, ''));
             } else {
-                console.warn('[合同卡片] aria-label 数字匹配失败:', label);
+                // 中文原逻辑保留
+                const numberMatches = [...label.matchAll(/[\d,]+(?:\.\d+)?/g)];
+                const qMatch = label.match(/Q(\d+)/);
+                if (numberMatches.length >= 3 && qMatch) {
+                    result.totalPrice = parseFloat(numberMatches[numberMatches.length - 1][0].replace(/,/g, ''));
+                    result.unitPrice = parseFloat(numberMatches[numberMatches.length - 2][0].replace(/,/g, ''));
+                    result.quantity = parseInt(numberMatches[numberMatches.length - 4][0].replace(/,/g, ''));
+                    result.quality = parseInt(qMatch[1]);
+                } else {
+                    console.warn('[合同卡片] aria-label 数字匹配失败:', label);
+                }
             }
 
             const img = card.querySelector('img[src^="/static/images/resources/"]');
@@ -2264,18 +2297,18 @@
     (function () {
         const PAGE_ACTIONS = {
             marketPage: {
-                pattern: /^https:\/\/www\.simcompanies\.com\/[^\/]+\/market\/resource\/(\d+)\/?$/,
+                pattern: /^https:\/\/www\.simcompanies\.com(?:\/[^\/]+)?\/market\/resource\/(\d+)\/?$/,
                 action: (url) => {
                     const match = url.match(/\/resource\/(\d+)\/?/);
                     const resourceId = match ? match[1] : null;
                     if (resourceId) {
-                        // console.log('进入 market 页面，资源ID：', resourceId);
+                        console.log('进入 market 页面，资源ID：', resourceId);
                         ResourceMarketHandler.init(resourceId);
                     }
                 }
             },
             contractPage: {
-                pattern: /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/,
+                pattern: /^https:\/\/www\.simcompanies\.com(?:\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/,
                 action: (url) => {
                     console.log('[合同页面识别] 已进入合同页面');
                     incomingContractsHandler.init();
@@ -2310,23 +2343,6 @@
     // 只在打开新标签页和切换领域是才会判断时间更新 更新数据无锁
     // ======================
     // 使用 MutationObserver 监听 DOM 变化并提取 realmId
-    const observer = new MutationObserver(() => {
-        const realmId = getRealmIdFromLink();
-        if (realmId !== null) {
-            console.log('[RegionAutoUpdater] 获取到 realmId:', realmId);
-            // 停止监听，因为已经找到了 realmId
-            observer.disconnect();
-
-            // 存到全局变量里
-            GLOBAL_REALM_ID = realmId;
-
-            // 首先执行 ConstantsAutoUpdater 的检查和更新
-            ConstantsAutoUpdater.checkAndUpdate();
-
-            // 然后执行 RegionAutoUpdater 的检查和更新
-            RegionAutoUpdater.checkAndUpdate(realmId);
-        }
-    });
 
     // 提取 realmId 的函数
     function getRealmIdFromLink() {
@@ -2467,11 +2483,12 @@
         return { checkAndUpdate };
     })();
 
-    // 监听页面加载完成后执行，但不再在 onload 直接提取 realmId
-    window.onload = () => {
-        // 开始监听 DOM 变化，直到提取到 realmId
-        observer.observe(document.body, { childList: true, subtree: true });
-    };
+    // 首先执行 ConstantsAutoUpdater 的检查和更新
+    ConstantsAutoUpdater.checkAndUpdate();
+
+    // 然后执行 RegionAutoUpdater 的检查和更新
+    RegionAutoUpdater.checkAndUpdate(0);
+    RegionAutoUpdater.checkAndUpdate(1);
 
     // ======================
     // 模块11：计算预测剩余量
@@ -3827,9 +3844,9 @@
 
         window.MarketInterceptor = {
             profitWorker,
-            calculateProfit(inputPercent, data, GLOBAL_REALM_ID) {
+            calculateProfit(inputPercent, data, realmId) {
                 const SCD = JSON.parse(localStorage.getItem("SimcompaniesConstantsData"));
-                const SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${GLOBAL_REALM_ID}`));
+                const SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
 
                 return new Promise((resolve) => {
                     profitWorker.onmessage = (e) => {
@@ -3919,7 +3936,7 @@
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    同步最新公式
+        // @changelog    增加对英文的支持
 
         fetch(scriptUrl)
             .then(res => {
