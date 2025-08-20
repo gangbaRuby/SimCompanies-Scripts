@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         显示高管培训记录
 // @namespace    https://github.com/gangbaRuby
-// @version      1.0.0
+// @version      1.1.1
 // @license      AGPL-3.0
 // @description  在高管详情页和公司主页的高管详情页展示高管在所有公司的培训记录
 // @author       Rabbit House
@@ -30,20 +30,24 @@
 
   XMLHttpRequest.prototype.send = function () {
     if (this._url && this._url.includes('/api/v4/executives/')) {
-      //console.log(`[培训补全脚本] 捕获XHR executive数据请求：${this._url}`);
       this.addEventListener('load', function () {
         try {
           const data = JSON.parse(this.responseText);
-          //console.log('[培训补全脚本] 成功捕获executive数据：', data);
-          capturedData = data;
-          // 同时尝试渲染培训记录和补全文字块
-          if (document.querySelector('.progress.css-g21kl4.ewwt81t1')) {
-            renderTrainings();
+          // 捕获executive数据
+          if (!this._url.includes('/note')) {
+            capturedData = data;
+            // 这里只保存数据，不调用renderTrainings()
+            observeAndPatchTrainingBlocks();
           } else {
-            waitForElement('.progress.css-g21kl4.ewwt81t1', renderTrainings);
+            // note 数据返回后，再执行渲染
+            if (capturedData) {
+              if (document.querySelector('.progress.css-g21kl4.ewwt81t1')) {
+                renderTrainings();
+              } else {
+                waitForElement('.progress.css-g21kl4.ewwt81t1', renderTrainings);
+              }
+            }
           }
-          // 观察并补全所有文字培训块
-          observeAndPatchTrainingBlocks();
         } catch (err) {
           //console.error('[培训补全脚本] 解析executive XHR数据失败：', err);
         }
