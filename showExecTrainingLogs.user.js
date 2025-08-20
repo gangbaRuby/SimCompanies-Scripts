@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         显示高管培训记录
 // @namespace    https://github.com/gangbaRuby
-// @version      1.0.0
+// @version      1.1.0
 // @license      AGPL-3.0
 // @description  在高管详情页和公司主页的高管详情页展示高管在所有公司的培训记录
 // @author       Rabbit House
@@ -75,81 +75,83 @@
 
   // 渲染培训记录（原进度条旁）
   function renderTrainings() {
-    try {
-      if (!capturedData) {
-        //console.warn('[培训补全脚本] 未捕获executive数据，无法渲染培训记录');
-        return;
-      }
+    if (!capturedData) return;
 
-      const trainings = capturedData.trainings;
-      const progressBlock = document.querySelector('.progress.css-g21kl4.ewwt81t1');
-      if (!progressBlock) {
-        //console.warn('[培训补全脚本] 找不到进度条块');
-        return;
-      }
+    const trainings = capturedData.trainings;
+    const progressBlock = document.querySelector('.progress.css-g21kl4.ewwt81t1');
+    if (!progressBlock) return;
 
-      const container = progressBlock.closest('div[class*="css-1x8nqp7"]')?.parentElement;
-      if (!container) {
-        //console.warn('[培训补全脚本] 找不到培训记录容器');
-        return;
-      }
+    const container = progressBlock.closest('div[class*="css-1x8nqp7"]')?.parentElement;
+    if (!container) return;
 
-      //console.log(`[培训补全脚本] 已获取 ${trainings.length} 条培训记录，开始渲染`);
-
-      // 删除旧培训记录块
-      let nextNode = progressBlock.closest('div[class*="css-1x8nqp7"]').nextElementSibling;
-      while (nextNode && nextNode.classList.contains('css-1x8nqp7') && !nextNode.querySelector('.progress')) {
-        const toRemove = nextNode;
-        nextNode = nextNode.nextElementSibling;
-        toRemove.remove();
-      }
-
-      // 插入新培训记录
-      let insertAfter = progressBlock.closest('div[class*="css-1x8nqp7"]');
-      trainings.forEach(item => {
-        try {
-          if (!item.reflected) return;
-
-          let skillsText = '';
-          if (item.skillCoo) skillsText += `<div>管理 +${item.skillCoo}</div>`;
-          if (item.skillCfo) skillsText += `<div>会计 +${item.skillCfo}</div>`;
-          if (item.skillCmo) skillsText += `<div>沟通 +${item.skillCmo}</div>`;
-          if (item.skillCto) skillsText += `<div>科学 +${item.skillCto}</div>`;
-
-          let trainingName = '';
-          if (item.training === 'o') trainingName = '管理培训';
-          if (item.training === 'f') trainingName = '会计课程';
-          if (item.training === 'm') trainingName = '沟通工作室';
-          if (item.training === 't') trainingName = '科学界研讨会';
-          if (item.training === 'g') trainingName = '各领域课程';
-
-          const companyNameSlug = item.employer.company.replace(/\s+/g, '-');
-
-          const div = document.createElement('div');
-          div.className = 'css-1x8nqp7';
-          div.innerHTML = `
-              <div class="pull-right text-right">${skillsText}</div>
-              <b class="text-uppercase">${trainingName}</b><br>
-              在<a href="/zh-cn/company/0/${companyNameSlug}/">
-                <img alt="" width="22" height="22" src="${item.employer.logo}"> ${item.employer.company}
-              </a>
-              <div class="cb"></div>
-            `;
-
-          insertAfter.after(div);
-          insertAfter = div;
-
-        } catch (err) {
-          //console.error('[培训补全脚本] 渲染单条培训记录异常：', item, err);
-        }
-      });
-
-      //console.log('[培训补全脚本] 所有培训记录渲染完成');
-
-    } catch (err) {
-      //console.error('[培训补全脚本] 渲染培训记录过程异常：', err);
+    // 如果已经渲染过，就不再重复
+    if (container.querySelector('.custom-training-block')) {
+      // console.log('[培训补全脚本] 自定义培训块已存在，跳过渲染');
+      return;
     }
+
+    let insertAfter = progressBlock.closest('div[class*="css-1x8nqp7"]');
+    trainings.forEach(item => {
+      if (!item.reflected) return;
+
+      let skillsText = '';
+      if (item.skillCoo) skillsText += `<div>管理 +${item.skillCoo}</div>`;
+      if (item.skillCfo) skillsText += `<div>会计 +${item.skillCfo}</div>`;
+      if (item.skillCmo) skillsText += `<div>沟通 +${item.skillCmo}</div>`;
+      if (item.skillCto) skillsText += `<div>科学 +${item.skillCto}</div>`;
+
+      let trainingName = '';
+      if (item.training === 'o') trainingName = '管理培训';
+      if (item.training === 'f') trainingName = '会计课程';
+      if (item.training === 'm') trainingName = '沟通工作室';
+      if (item.training === 't') trainingName = '科学界研讨会';
+      if (item.training === 'g') trainingName = '各领域课程';
+
+      const companyNameSlug = item.employer.company.replace(/\s+/g, '-');
+
+      const div = document.createElement('div');
+      div.className = 'css-1x8nqp7 custom-training-block';
+      div.innerHTML = `
+        <div class="pull-right text-right">${skillsText}</div>
+        <b class="text-uppercase">${trainingName}</b><br>
+        在<a href="/zh-cn/company/0/${companyNameSlug}/">
+          <img alt="" width="22" height="22" src="${item.employer.logo}"> ${item.employer.company}
+        </a>
+        <div class="cb"></div>
+      `;
+      insertAfter.after(div);
+      insertAfter = div;
+    });
+
+    // console.log('[培训补全脚本] 培训记录渲染完成，确保监控启动');
+    keepTrainingRendered();
   }
+
+  function keepTrainingRendered() {
+    const target = document.querySelector('.progress.css-g21kl4.ewwt81t1')?.closest('div[class*="css-1x8nqp7"]')?.parentElement;
+    if (!target) {
+      // console.log('[培训补全脚本] 暂未找到容器，稍后重试');
+      return;
+    }
+
+    const observer = new MutationObserver((mutations) => {
+      // console.log('[培训补全脚本] MutationObserver 触发：', mutations.length, '条');
+
+      const container = document.querySelector('.progress.css-g21kl4.ewwt81t1')?.closest('div[class*="css-1x8nqp7"]')?.parentElement;
+      if (!container) {
+        // console.log('[培训补全脚本] 容器消失，等待重建');
+        return;
+      }
+
+      if (!container.querySelector('.custom-training-block')) {
+        // console.log('[培训补全脚本] 检测到培训记录丢失，重新渲染');
+        renderTrainings();
+      }
+    });
+    observer.observe(target, { childList: true, subtree: true });
+    // console.log('[培训补全脚本] 已启动 MutationObserver');
+  }
+
 
   // 观察并补全文字培训块（多个）
   function observeAndPatchTrainingBlocks() {
