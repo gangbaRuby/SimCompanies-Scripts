@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.16.0
+// @version      1.16.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -377,15 +377,9 @@
                 // 安全读取技能值，没值就返回0
                 const safeSkill = (position, skillName) => skills[position]?.[skillName] || 0;
 
-                let saleBonus = Math.floor((
-                    safeSkill('m', 'cmo') +
-                    Math.floor(safeSkill('y', 'cmo') / 2) +
-                    Math.floor((
-                        safeSkill('o', 'cmo') +
-                        safeSkill('f', 'cmo') +
-                        safeSkill('t', 'cmo')
-                    ) / 4)
-                ) / 3);
+                let saleBonus = Math.floor(safeSkill('m', 'cmo') +
+                    safeSkill('y', 'cmo') / 2 +
+                    (safeSkill('o', 'cmo') + safeSkill('f', 'cmo') + safeSkill('t', 'cmo')) / 4);
 
                 if (saleBonus > 80) {
                     saleBonus = 80 + Math.floor((saleBonus - 80) / 2);
@@ -393,16 +387,12 @@
                 if (saleBonus > 60) {
                     saleBonus = 60 + Math.floor((saleBonus - 60) / 2);
                 }
+                saleBonus = Math.floor(saleBonus / 3)
 
 
-                let adminBonus =
-                    safeSkill('o', 'coo') +
-                    Math.floor(safeSkill('v', 'coo') / 2) +
-                    Math.floor((
-                        safeSkill('f', 'coo') +
-                        safeSkill('m', 'coo') +
-                        safeSkill('t', 'coo')
-                    ) / 4);
+                let adminBonus = Math.floor(safeSkill('o', 'coo') +
+                    safeSkill('v', 'coo') / 2 +
+                    (safeSkill('f', 'coo') + safeSkill('m', 'coo') + safeSkill('t', 'coo')) / 4);
 
                 if (adminBonus > 80) {
                     adminBonus = 80 + Math.floor((adminBonus - 80) / 2);
@@ -3960,7 +3950,7 @@
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    同步26号公式更新"l = Math.max(.6, s / 2 + .5)"
+        // @changelog    再次修改高管技能计算，仅影响高技能时合同和交易所显示的利润 Thanks Artintel
 
         fetch(scriptUrl)
             .then(res => {
