@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.16.1
+// @version      1.17.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -38,7 +38,7 @@
     const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
     const Bpt = (e, t, r, n, a, o) => {
         const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
-        const s = Math.min(Math.max(2 - n, 0), 2), l = Math.max(0.6, s / 2 + 0.5), c = r / 12;
+        const s = Math.min(Math.max(2 - n, 0), 2), l = Math.max(0.75, s / 2 + 0.5), c = r / 12;
         const d = zn.PROFIT_PER_BUILDING_LEVEL * (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) * g * (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) + (t.modeledStoreWages ?? 0);
         // console.log(`t.buildingLevelsNeededPerUnitPerHour:${t.buildingLevelsNeededPerUnitPerHour}, t.modeledUnitsSoldAnHour:${t.modeledUnitsSoldAnHour}, t.modeledStoreWages:${t.modeledStoreWages} , s:${s} , c:${c}, g:${g}`)
         const h = t.modeledUnitsSoldAnHour * l;
@@ -1678,7 +1678,7 @@
         const Bpt = (e, t, r, n, a, o) => {
             const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
             const s = Math.min(Math.max(2 - n, 0), 2),
-                  l = Math.max(0.6, s / 2 + 0.5),
+                  l = Math.max(0.75, s / 2 + 0.5),
                   c = r / 12;
             const d = zn.PROFIT_PER_BUILDING_LEVEL *
                 (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
@@ -1992,7 +1992,7 @@
             const Bpt = (e, t, r, n, a, o) => {
                 const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
                 const s = Math.min(Math.max(2 - n, 0), 2),
-                      l = Math.max(0.6, s / 2 + 0.5),
+                      l = Math.max(0.75, s / 2 + 0.5),
                       c = r / 12;
                 const d = zn.PROFIT_PER_BUILDING_LEVEL *
                     (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
@@ -3736,7 +3736,7 @@
                 const Bpt = (e, t, r, n, a, o) => {
                     const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
                     const s = Math.min(Math.max(2 - n, 0), 2),
-                          l = Math.max(0.6, s / 2 + 0.5),
+                          l = Math.max(0.75, s / 2 + 0.5),
                           c = r / 12;
                     const d = zn.PROFIT_PER_BUILDING_LEVEL *
                         (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
@@ -3950,7 +3950,7 @@
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    再次修改高管技能计算，仅影响高技能时合同和交易所显示的利润 Thanks Artintel
+        // @changelog    同步28号公式更新 l = Math.max(.6, s / 2 + .5)
 
         fetch(scriptUrl)
             .then(res => {
