@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.17.0
+// @version      1.17.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3950,7 +3950,7 @@
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    同步28号公式更新 l = Math.max(.6, s / 2 + .5)
+        // @changelog    同步28号公式更新 l = Math.max(.75, s / 2 + .5)
 
         fetch(scriptUrl)
             .then(res => {
