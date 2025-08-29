@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.17.1
+// @version      1.17.2
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -807,6 +807,7 @@
             }
             const data = JSON.parse(dataStr);
             const list = data.ResourcesRetailInfo;
+            const weatherSellingSpeedMultiplier = data.sellingSpeedMultiplier.sellingSpeedMultiplier
 
             // 表格
             const table = document.createElement("table");
@@ -835,6 +836,17 @@
                 tbody.appendChild(row);
             });
             table.appendChild(tbody);
+
+            // 在表格上方插入 multiplier 显示
+            const multiplierRow = document.createElement("div");
+            multiplierRow.textContent = `天气销售速度倍率: ${weatherSellingSpeedMultiplier}`;
+            multiplierRow.style.cssText = `
+                margin-bottom:6px;
+                font-size:14px;
+                font-weight:bold;
+                color:#f1c40f;
+                text-align:left;
+            `;
 
             // 容器
             saturationTableElement = document.createElement("div");
@@ -880,6 +892,9 @@
                 saturationTableElement = null;
             };
             saturationTableElement.appendChild(closeBtn);
+
+            // 插入 multiplier 行
+            saturationTableElement.appendChild(multiplierRow);
 
             // 表格
             table.style.background = "#333";
@@ -947,7 +962,7 @@
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
-                    btn.textContent = '当前领域饱和度表';
+                    btn.textContent = '当前领域天气和饱和度表';
                     btn.onclick = showSaturationTable;
                     return btn;
                 })(),
@@ -3950,7 +3965,7 @@
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    同步28号公式更新 l = Math.max(.75, s / 2 + .5)
+        // @changelog    增加当前领域天气加成显示
 
         fetch(scriptUrl)
             .then(res => {
