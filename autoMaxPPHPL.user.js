@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.18.0
+// @version      1.19.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1797,14 +1797,6 @@
         const allProfitSpans = new Set();
         let isShowingProfit = true;
 
-        setInterval(() => {
-            isShowingProfit = !isShowingProfit;
-            for (const span of allProfitSpans) {
-                const { profitText, timeText } = span.dataset;
-                span.textContent = isShowingProfit ? profitText : timeText;
-            }
-        }, 3000);
-
         // 主回调处理
         profitWorker.onmessage = function (e) {
             const { rowId, maxProfit, selltime } = e.data;
@@ -1821,13 +1813,11 @@
                 td.classList.add('auto-profit-info');
 
                 const span = document.createElement('span');
-                const isMobile = window.innerWidth <= 600;
 
                 const profitText = `时利润：${Math.round(profit)}`;
                 const timeText = `用时：${timeStr}`;
-                const fullText = `时利润：${profit} 用时：${timeStr}`;
 
-                span.textContent = isMobile ? (isShowingProfit ? profitText : timeText) : fullText;
+                span.textContent = isShowingProfit ? profitText : timeText
 
                 span.style.cssText = `
                 display: inline-block;
@@ -1843,11 +1833,9 @@
                 td.appendChild(span);
                 row.appendChild(td);
 
-                if (isMobile) {
-                    span.dataset.profitText = profitText;
-                    span.dataset.timeText = timeText;
-                    allProfitSpans.add(span);
-                }
+                span.dataset.profitText = profitText;
+                span.dataset.timeText = timeText;
+                allProfitSpans.add(span);
             }
         };
 
@@ -1863,32 +1851,39 @@
         function extractNumbersFromAriaLabel(label) {
             if (!label || typeof label !== 'string') return null;
 
-            let nums = [];
-            let lastThree = [];
+            let match;
 
-            // 中文直接用原逻辑
-            if (/由.*公司提供/.test(label)) {
-                const cleanedLabel = label.replace(/,/g, '');
-                nums = cleanedLabel.match(/[\d.]+/g);
-                if (!nums || nums.length < 3) return null;
-                lastThree = nums.slice(-3).map(x => Number(x));
+            // === 英文 ===
+            const regexEN = /^market order, price \$?([\d,.]+), quantity ([\d,.]+), quality (\d+), offered by company/i;
+
+            // === 简体中文 ===
+            const regexSC = /^由.*公司提供的市场订单：价格\$?([\d,.]+)，数量([\d,.]+)，质量(\d+)/;
+
+            // === 繁体中文 ===
+            const regexTC = /^由.*公司提供的市場訂單：價格\$?([\d,.]+)，數量([\d,.]+)，品質(\d+)/;
+
+            if (match = label.match(regexEN)) {
+                return {
+                    price: parseFloat(match[1].replace(/,/g, '')),
+                    quantity: parseFloat(match[2].replace(/,/g, '')),
+                    quality: parseInt(match[3])
+                };
+            } else if (match = label.match(regexSC)) {
+                return {
+                    price: parseFloat(match[1].replace(/,/g, '')),
+                    quantity: parseFloat(match[2].replace(/,/g, '')),
+                    quality: parseInt(match[3])
+                };
+            } else if (match = label.match(regexTC)) {
+                return {
+                    price: parseFloat(match[1].replace(/,/g, '')),
+                    quantity: parseFloat(match[2].replace(/,/g, '')),
+                    quality: parseInt(match[3])
+                };
             }
-            // 英文处理
-            else if (/market order/i.test(label)) {
-                // 提取公司名位置
-                const companyMatch = label.match(/offered by company\s+([^\.,，]*)/i);
-                const companyStart = companyMatch ? companyMatch.index : label.length;
-                // 只取公司名前的文本进行数字匹配，避免公司名里的点或数字干扰
-                const textToParse = label.slice(0, companyStart).replace(/,/g, '');
-                nums = textToParse.match(/[\d.]+/g);
-                if (!nums || nums.length < 3) return null;
-                lastThree = nums.slice(-3).map(x => Number(x));
-            }
 
-            const [price, quantity, quality] = lastThree;
-            if ([price, quantity, quality].some(n => isNaN(n))) return null;
-
-            return { price, quantity, quality };
+            // 未匹配
+            return null;
         }
 
         function extractRealmIdOnce(tbody) {
@@ -1900,13 +1895,6 @@
                 currentRealmId = match[1];
                 // console.log('领域ID：', currentRealmId);
             }
-        }
-
-        function formatSeconds(seconds) {
-            const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-            const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-            return `${h}:${m}:${s}`;
         }
 
         async function processNewRows(tbody) {
@@ -1952,6 +1940,31 @@
                             infoText.textContent = '高管、周期变动，会影响计算，记得更新，所有展示内容均为1级建筑。';
                             infoText.dataset.customNotice = 'true'; // 避免重复添加
                             container.appendChild(infoText); // 插入在 form 所在 div 的后面
+
+                            // 找到 form
+                            const form = document.querySelector('form');
+
+                            // 创建切换按钮
+                            const toggleButton = document.createElement('button');
+                            toggleButton.type = 'button'; // 不触发表单提交
+                            toggleButton.textContent = '利润/用时';
+                            toggleButton.style.cssText = `
+                                margin-left: 8px;
+                            `;
+
+                            // 找到 css-zl1inp 内最后一个 div
+                            const lastDiv = form.querySelector('.css-zl1inp > div:last-child');
+                            if (lastDiv) {
+                                lastDiv.insertAdjacentElement('afterend', toggleButton);
+                            }
+
+                            toggleButton.addEventListener('click', () => {
+                                isShowingProfit = !isShowingProfit;
+                                for (const span of allProfitSpans) {
+                                    const { profitText, timeText } = span.dataset;
+                                    span.textContent = isShowingProfit ? profitText : timeText;
+                                }
+                            });
                         }
                     }
 
@@ -2235,28 +2248,29 @@
 
             const label = card.getAttribute('aria-label') || '';
 
-            if (/quality/i.test(label)) { // 英文处理
-                const quantityMatch = label.match(/(\d+)\s+[A-Za-z ]+quality/i);
-                const qualityMatch = label.match(/quality\s*(\d+)/i);
-                const unitPriceMatch = label.match(/at\s+\$([\d,.]+)\s+per unit/i);
-                const totalPriceMatch = label.match(/total price\s+\$([\d,.]+)/i);
+            // 使用文本强制匹配，如果合同不计算，应当查看翻译平台文本是否发生改变
+            const regexEN = /^incoming contract,\s*([\d,]+).*?quality\s+(\d+),\s*at\s*\$([\d,.]+)\s+per unit,\s*total price\s*\$([\d,.]+)/i;
+            const regexSC = /^来自.*?的入库合同，([\d,]+)单位的Q(\d+).*?，价格为\$([\d,.]+)每单位，总价\$([\d,.]+)/;
+            const regexTC = /^來自.*?的入庫合同，([\d,]+)單位的Q(\d+).*?，價格為\$([\d,.]+)每單位，總價\$([\d,.]+)/;
 
-                if (quantityMatch) result.quantity = parseInt(quantityMatch[1].replace(/,/g, ''));
-                if (qualityMatch) result.quality = parseInt(qualityMatch[1]);
-                if (unitPriceMatch) result.unitPrice = parseFloat(unitPriceMatch[1].replace(/,/g, ''));
-                if (totalPriceMatch) result.totalPrice = parseFloat(totalPriceMatch[1].replace(/,/g, ''));
+            let match;
+            if (match = label.match(regexEN)) {
+                result.quantity = parseInt(match[1].replace(/,/g, ''));
+                result.quality = parseInt(match[2]);
+                result.unitPrice = parseFloat(match[3].replace(/,/g, ''));
+                result.totalPrice = parseFloat(match[4].replace(/,/g, ''));
+            } else if (match = label.match(regexSC)) {
+                result.quantity = parseInt(match[1].replace(/,/g, ''));
+                result.quality = parseInt(match[2]);
+                result.unitPrice = parseFloat(match[3].replace(/,/g, ''));
+                result.totalPrice = parseFloat(match[4].replace(/,/g, ''));
+            } else if (match = label.match(regexTC)) {
+                result.quantity = parseInt(match[1].replace(/,/g, ''));
+                result.quality = parseInt(match[2]);
+                result.unitPrice = parseFloat(match[3].replace(/,/g, ''));
+                result.totalPrice = parseFloat(match[4].replace(/,/g, ''));
             } else {
-                // 中文原逻辑保留
-                const numberMatches = [...label.matchAll(/[\d,]+(?:\.\d+)?/g)];
-                const qMatch = label.match(/Q(\d+)/);
-                if (numberMatches.length >= 3 && qMatch) {
-                    result.totalPrice = parseFloat(numberMatches[numberMatches.length - 1][0].replace(/,/g, ''));
-                    result.unitPrice = parseFloat(numberMatches[numberMatches.length - 2][0].replace(/,/g, ''));
-                    result.quantity = parseInt(numberMatches[numberMatches.length - 4][0].replace(/,/g, ''));
-                    result.quality = parseInt(qMatch[1]);
-                } else {
-                    console.warn('[合同卡片] aria-label 数字匹配失败:', label);
-                }
+                console.warn('[合同卡片] aria-label 格式不匹配:', label);
             }
 
             const img = card.querySelector('img[src^="/static/images/resources/"]');
@@ -3965,7 +3979,7 @@
         const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    同步最新计算公式 l = Math.max(.9, s / 2 + .5)
+        // @changelog    修改匹配文本的正则，将用时改为按钮切换显示
 
         fetch(scriptUrl)
             .then(res => {
