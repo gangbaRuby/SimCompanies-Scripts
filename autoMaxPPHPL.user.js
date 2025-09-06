@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.19.0
+// @version      1.19.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -14,6 +14,8 @@
 
 (function () {
     'use strict';
+    let hasNewVersion, latestVersion;
+    let localVersion = GM_info.script.version;
 
     // ======================
     // 计算用到的函数
@@ -984,9 +986,27 @@
 
             info.innerHTML = `
                 作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" style="color:#6cf;">Rabbit House</a> 反馈请说明问题<br>
+                反馈群：798670333 <br>
                 源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub</a> ⭐🙇<br>
-                版本：${version} 
+                版本：<span id="script-version">${version}</span>
             `;
+
+            // 轮询检测 hasNewVersion
+            let checkTimer = setInterval(() => {
+                console.log(hasNewVersion)
+                if (hasNewVersion === true) {
+                    // 更新DOM
+                    const verNode = document.getElementById("script-version");
+                    if (verNode) {
+                        verNode.innerHTML = `${version} <a href="https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js" span style="color:#ff6;">（发现新版本：${latestVersion}）</span>`;
+                    }
+                    clearInterval(checkTimer); // 停止轮询
+                } else if (hasNewVersion === false) {
+                    // 未发现新版本 → 停止轮询
+                    clearInterval(checkTimer);
+                }
+                // 如果是 undefined，则继续轮询
+            }, 500);
 
             content.appendChild(info);
             panel.append(trigger, content);
@@ -1455,6 +1475,8 @@
 
         // 主功能
         function initAutoPricing() {
+            // console.log("initAutoPricing 被执行", document.querySelectorAll('input[name="price"]').length);
+
             try {
                 const input = document.querySelector('input[name="price"]');
                 if (!input) {
@@ -1598,7 +1620,7 @@
                         currentWagesTotal = Math.ceil(zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, bestPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? comp.props.weather : void 0) * wages * acceleration * b / 60 / 60);
                         // console.log(`currentWagesTotal:${currentWagesTotal}, comp.state.wagesTotal: ${comp.state.wagesTotal}`)
                         if (currentWagesTotal !== comp.state.wagesTotal) {
-                            alert("计算利润与显示利润不相符，请先输入数量或请尝试更新基本数据（左下角按钮）");
+                            alert("计算利润与显示利润不相符，请输入具体数量或尝试更新基本数据（左下角按钮）,多次提醒且价格未发生改变请更新脚本或联系作者");
                         }
 
                     };
@@ -1649,9 +1671,23 @@
                 characterData: false // 不需要观察文本变化
             });
 
-            // 初始执行（使用requestAnimationFrame确保DOM已加载）
+            // 初始执行 + 轮询双保险
+            function ensureInputsLoaded() {
+                let tries = 0;
+                const timer = setInterval(() => {
+                    const inputs = document.querySelectorAll('input[name="price"]');
+                    if (inputs.length > 0 || tries > 50) { // 最多等5秒
+                        clearInterval(timer);
+                        if (inputs.length > 0) {
+                            initAutoPricing();
+                        }
+                    }
+                    tries++;
+                }, 100);
+            }
+
             requestAnimationFrame(() => {
-                initAutoPricing();
+                ensureInputsLoaded(); // 启动轮询检测
             });
         }
 
@@ -1814,7 +1850,7 @@
 
                 const span = document.createElement('span');
 
-                const profitText = `时利润：${Math.round(profit)}`;
+                const profitText = `时利润：${profit}`;
                 const timeText = `用时：${timeStr}`;
 
                 span.textContent = isShowingProfit ? profitText : timeText
@@ -2530,8 +2566,9 @@
     ConstantsAutoUpdater.checkAndUpdate();
 
     // 然后执行 RegionAutoUpdater 的检查和更新
-    RegionAutoUpdater.checkAndUpdate(0);
-    RegionAutoUpdater.checkAndUpdate(1);
+    setTimeout(() => {
+        RegionAutoUpdater.checkAndUpdate(getRealmIdFromLink());
+    }, 3000);
 
     // ======================
     // 模块11：计算预测剩余量
@@ -3976,10 +4013,9 @@
     }
 
     function checkUpdate() {
-        const localVersion = GM_info.script.version;
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    修改匹配文本的正则，将用时改为按钮切换显示
+        // @changelog    完善最大时利润按钮的插入，修改领域的自动检查更新
 
         fetch(scriptUrl)
             .then(res => {
@@ -3991,7 +4027,7 @@
                 const matchChange = remoteText.match(/^\s*\/\/\s*@changelog\s+(.+)/m);
                 if (!matchVersion) return;
 
-                const latestVersion = matchVersion[1];
+                latestVersion = matchVersion[1];
                 const changeLog = matchChange ? matchChange[1] : '';
 
                 if (compareVersions(latestVersion, localVersion) > 0) {
@@ -3999,8 +4035,10 @@
                     if (confirm(`自动计算最大时利润插件检测到新版本 v${latestVersion}，是否前往更新？\n\nv${latestVersion} ${changeLog}\n\n关于版本号说明 1.X.Y ，X为增添新功能或修复不可用，Y为细节修改不影响功能，如不需更新可将Y或其它位置修改为较大值。`)) {
                         window.open(downloadUrl, '_blank');
                     }
+                    hasNewVersion = true;
                 } else {
                     console.log("✅ 当前已是最新版本");
+                    hasNewVersion = false;
                 }
             })
             .catch(err => {
