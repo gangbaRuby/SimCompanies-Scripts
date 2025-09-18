@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.19.1
+// @version      1.20.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -2312,14 +2312,16 @@
             const img = card.querySelector('img[src^="/static/images/resources/"]');
             if (img) {
                 result.imageSrc = img.getAttribute('src');
-                result.resourcePath = result.imageSrc.replace(/^\/static\//, '');
+                result.resourcePath = result.imageSrc
+                    .replace(/^\/static\//, '')
+                    .replace(/\.[0-9a-f]{6,}\.(png|jpg|jpeg|gif|svg)$/, '.$1');
 
                 const constants = JSON.parse(localStorage.getItem('SimcompaniesConstantsData') || '{}');
                 const resources = Object.values(constants?.constantsResources || {});
                 const matched = resources.find(r => r.image === result.resourcePath);
                 if (matched) result.dbLetter = matched.dbLetter;
             }
-
+            // console.log(result)
             return result;
         }
 
@@ -4015,7 +4017,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    完善最大时利润按钮的插入，修改领域的自动检查更新
+        // @changelog    修改合同页面的dbLetter获取，去除了多余的hash字段
 
         fetch(scriptUrl)
             .then(res => {
