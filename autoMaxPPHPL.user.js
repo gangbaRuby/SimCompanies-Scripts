@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.20.0
+// @version      1.21.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -57,215 +57,43 @@
     };
 
     // 映射表
-    const resourceIdNameMap = {
-        1: "电力",
-        2: "水",
-        3: "苹果",
-        4: "橘子",
-        5: "葡萄",
-        6: "谷物",
-        7: "牛排",
-        8: "香肠",
-        9: "鸡蛋",
-        10: "原油",
-        11: "汽油",
-        12: "柴油",
-        13: "运输单位",
-        14: "矿物",
-        15: "铝土矿",
-        16: "硅材",
-        17: "化合物",
-        18: "铝材",
-        19: "塑料",
-        20: "处理器",
-        21: "电子元件",
-        22: "电池",
-        23: "显示屏",
-        24: "智能手机",
-        25: "平板电脑",
-        26: "笔记本电脑",
-        27: "显示器",
-        28: "电视机",
-        29: "作物研究",
-        30: "能源研究",
-        31: "采矿研究",
-        32: "电器研究",
-        33: "畜牧研究",
-        34: "化学研究",
-        35: "软件",
-        36: "undefined",
-        37: "undefined",
-        38: "undefined",
-        39: "undefined",
-        40: "棉花",
-        41: "棉布",
-        42: "铁矿石",
-        43: "钢材",
-        44: "沙子",
-        45: "玻璃",
-        46: "皮革",
-        47: "车载电脑",
-        48: "电动马达",
-        49: "豪华车内饰",
-        50: "基本内饰",
-        51: "车身",
-        52: "内燃机",
-        53: "经济电动车",
-        54: "豪华电动车",
-        55: "经济燃油车",
-        56: "豪华燃油车",
-        57: "卡车",
-        58: "汽车研究",
-        59: "时装研究",
-        60: "内衣",
-        61: "手套",
-        62: "裙子",
-        63: "高跟鞋",
-        64: "手袋",
-        65: "运动鞋",
-        66: "种子",
-        67: "圣诞爆竹",
-        68: "金矿石",
-        69: "金条",
-        70: "名牌手表",
-        71: "项链",
-        72: "甘蔗",
-        73: "乙醇",
-        74: "甲烷",
-        75: "碳纤维",
-        76: "碳纤复合材",
-        77: "机身",
-        78: "机翼",
-        79: "精密电子元件",
-        80: "飞行计算机",
-        81: "座舱",
-        82: "姿态控制器",
-        83: "火箭燃料",
-        84: "燃料储罐",
-        85: "固体燃料助推器",
-        86: "火箭发动机",
-        87: "隔热板",
-        88: "离子推进器",
-        89: "喷气发动机",
-        90: "亚轨道二级火箭",
-        91: "亚轨道火箭",
-        92: "轨道助推器",
-        93: "星际飞船",
-        94: "BFR",
-        95: "喷气客机",
-        96: "豪华飞机",
-        97: "单引擎飞机",
-        98: "无人机",
-        99: "人造卫星",
-        100: "航空航天研究",
-        101: "钢筋混凝土",
-        102: "砖块",
-        103: "水泥",
-        104: "黏土",
-        105: "石灰石",
-        106: "木材",
-        107: "钢筋",
-        108: "木板",
-        109: "窗户",
-        110: "工具",
-        111: "建筑预构件",
-        112: "推土机",
-        113: "材料研究",
-        114: "机器人",
-        115: "牛",
-        116: "猪",
-        117: "牛奶",
-        118: "咖啡豆",
-        119: "咖啡粉",
-        120: "蔬菜",
-        121: "面包",
-        122: "芝士",
-        123: "苹果派",
-        124: "橙汁",
-        125: "苹果汁",
-        126: "姜汁汽水",
-        127: "披萨",
-        128: "面条",
-        129: "汉堡包",
-        130: "千层面",
-        131: "肉丸",
-        132: "混合果汁",
-        133: "面粉",
-        134: "黄油",
-        135: "糖",
-        136: "可可",
-        137: "面团",
-        138: "酱汁",
-        139: "动物饲料",
-        140: "巧克力",
-        141: "植物油",
-        142: "沙拉",
-        143: "咖喱角",
-        144: "圣诞装饰品",
-        145: "食谱",
-        146: "南瓜",
-        147: "杰克灯笼",
-        148: "女巫服",
-        149: "南瓜汤",
-        150: "树",
-        151: "复活节兔兔",
-        152: "斋月糖果",
-        153: "巧克力冰淇淋",
-        154: "苹果冰淇淋"
-    };
-
+    const resourceIdNameMap = { 1: "电力", 2: "水", 3: "苹果", 4: "橘子", 5: "葡萄", 6: "谷物", 7: "牛排", 8: "香肠", 9: "鸡蛋", 10: "原油", 11: "汽油", 12: "柴油", 13: "运输单位", 14: "矿物", 15: "铝土矿", 16: "硅材", 17: "化合物", 18: "铝材", 19: "塑料", 20: "处理器", 21: "电子元件", 22: "电池", 23: "显示屏", 24: "智能手机", 25: "平板电脑", 26: "笔记本电脑", 27: "显示器", 28: "电视机", 29: "作物研究", 30: "能源研究", 31: "采矿研究", 32: "电器研究", 33: "畜牧研究", 34: "化学研究", 35: "软件", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "棉花", 41: "棉布", 42: "铁矿石", 43: "钢材", 44: "沙子", 45: "玻璃", 46: "皮革", 47: "车载电脑", 48: "电动马达", 49: "豪华车内饰", 50: "基本内饰", 51: "车身", 52: "内燃机", 53: "经济电动车", 54: "豪华电动车", 55: "经济燃油车", 56: "豪华燃油车", 57: "卡车", 58: "汽车研究", 59: "时装研究", 60: "内衣", 61: "手套", 62: "裙子", 63: "高跟鞋", 64: "手袋", 65: "运动鞋", 66: "种子", 67: "圣诞爆竹", 68: "金矿石", 69: "金条", 70: "名牌手表", 71: "项链", 72: "甘蔗", 73: "乙醇", 74: "甲烷", 75: "碳纤维", 76: "碳纤复合材", 77: "机身", 78: "机翼", 79: "精密电子元件", 80: "飞行计算机", 81: "座舱", 82: "姿态控制器", 83: "火箭燃料", 84: "燃料储罐", 85: "固体燃料助推器", 86: "火箭发动机", 87: "隔热板", 88: "离子推进器", 89: "喷气发动机", 90: "亚轨道二级火箭", 91: "亚轨道火箭", 92: "轨道助推器", 93: "星际飞船", 94: "BFR", 95: "喷气客机", 96: "豪华飞机", 97: "单引擎飞机", 98: "无人机", 99: "人造卫星", 100: "航空航天研究", 101: "钢筋混凝土", 102: "砖块", 103: "水泥", 104: "黏土", 105: "石灰石", 106: "木材", 107: "钢筋", 108: "木板", 109: "窗户", 110: "工具", 111: "建筑预构件", 112: "推土机", 113: "材料研究", 114: "机器人", 115: "牛", 116: "猪", 117: "牛奶", 118: "咖啡豆", 119: "咖啡粉", 120: "蔬菜", 121: "面包", 122: "芝士", 123: "苹果派", 124: "橙汁", 125: "苹果汁", 126: "姜汁汽水", 127: "披萨", 128: "面条", 129: "汉堡包", 130: "千层面", 131: "肉丸", 132: "混合果汁", 133: "面粉", 134: "黄油", 135: "糖", 136: "可可", 137: "面团", 138: "酱汁", 139: "动物饲料", 140: "巧克力", 141: "植物油", 142: "沙拉", 143: "咖喱角", 144: "圣诞装饰品", 145: "食谱", 146: "南瓜", 147: "杰克灯笼", 148: "女巫服", 149: "南瓜汤", 150: "树", 151: "复活节兔兔", 152: "斋月糖果", 153: "巧克力冰淇淋", 154: "苹果冰淇淋" };
 
     // ======================
     // 模块1：网络请求模块
     // ======================
     const Network = (() => {
-        // 通用请求方法
-        const makeRequest = (method, url, responseType, retryCount) => {
-            return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: method,
-                    url: url,
-                    headers: { 'Content-Type': 'application/json' },
-                    onload: res => {
-                        try {
-                            resolve(
-                                responseType === 'json'
-                                    ? JSON.parse(res.responseText)
-                                    : res.responseText
-                            );
-                        } catch (err) {
-                            if (retryCount > 0) {
-                                console.warn(`解析错误 ${url}, 重试中... (${retryCount})`);
-                                makeRequest(method, url, responseType, retryCount - 1)
-                                    .then(resolve)
-                                    .catch(reject);
-                            } else {
-                                reject(`最终解析失败: ${err}`);
-                            }
-                        }
-                    },
-                    onerror: err => {
-                        if (retryCount > 0) {
-                            console.warn(`请求错误 ${url}, 重试中... (${retryCount})`);
-                            makeRequest(method, url, responseType, retryCount - 1)
-                                .then(resolve)
-                                .catch(reject);
-                        } else {
-                            reject(`最终请求失败: ${err}`);
-                        }
-                    }
+        // 通用请求方法（fetch版本）
+        const makeRequest = async (url, responseType, retryCount) => {
+            try {
+                const res = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
                 });
-            });
+    
+                if (!res.ok) throw new Error(`HTTP错误 ${res.status}`);
+    
+                if (responseType === 'json') {
+                    return await res.json();
+                } else {
+                    return await res.text();
+                }
+            } catch (err) {
+                if (retryCount > 0) {
+                    console.warn(`请求错误或解析失败 ${url}, 重试中... (${retryCount})`);
+                    return makeRequest(url, responseType, retryCount - 1);
+                } else {
+                    throw new Error(`最终请求失败: ${err}`);
+                }
+            }
         };
-
+    
         return {
-            // 获取JSON数据（原有功能）
-            requestJson: (url, retryCount = 3) =>
-                makeRequest('GET', url, 'json', retryCount),
-
-            // 新增：获取原始文本（新功能）
-            requestRaw: (url, retryCount = 3) =>
-                makeRequest('GET', url, 'text', retryCount)
+            // 获取JSON数据
+            requestJson: (url, retryCount = 3) => makeRequest(url, 'json', retryCount),
+    
+            // 获取原始文本
+            requestRaw: (url, retryCount = 3) => makeRequest(url, 'text', retryCount)
         };
     })();
 
@@ -286,13 +114,16 @@
             };
         };
 
-        // 休闲加成
-        const getRecreationBonus = async (realmId, company) => {
+        // 休闲加成，管理费
+        const getCompanies_by_company = async (realmId, company) => {
             const formattedCompany = company.replace(/ /g, "-");
             const data = await Network.requestJson(
                 `https://www.simcompanies.com/api/v3/companies-by-company/${realmId}/${formattedCompany}/`
             );
-            return data.infrastructure?.recreationBonus;
+            return {
+                recreationBonus: data.infrastructure?.recreationBonus,
+                administration: data.infrastructure?.administrationOverhead,
+            };
         };
 
         // 高管技能
@@ -311,11 +142,6 @@
                 new Date(exec.currentWorkHistory.start) < threeHoursAgo &&
                 !exec.currentTraining
             );
-        };
-
-        // 管理费
-        const getAdministrationCost = async () => {
-            return Network.requestJson('https://www.simcompanies.com/api/v2/companies/me/administration-overhead/');
         };
 
         // 饱和度
@@ -358,16 +184,31 @@
         // 完整领域数据获取
         const fetchFullRegionData = async () => {
             const auth = await getAuthInfo();
-            const [recreation, executives, administration, resourcesRetailInfo, sellingSpeedMultiplier, weatherUntil] = await Promise.all([
-                getRecreationBonus(auth.realmId, auth.company),
+            const companies_by_company = await getCompanies_by_company(auth.realmId, auth.company);
+            const [executives, resourcesRetailInfo, sellingSpeedMultiplier, weatherUntil] = await Promise.all([
                 getExecutives(),
-                getAdministrationCost(),
                 getResourcesRetailInfo(auth.realmId),
                 getWeather(auth.realmId)
             ]);
 
             // 计算高管加成
             const calculateExecutiveBonus = (executives) => {
+
+                let academyActive = 15; // 默认值为 15
+                let COO_Apprentice, CMO_Apprentice;
+
+                try {
+                    const stored = localStorage.getItem(`SimcompaniesRetailCalculation_${auth.realmId}`);
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        if (parsed && typeof parsed.academyActive === "number") {
+                            academyActive = parsed.academyActive;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("⚠️ 无法解析 SimcompaniesRetailCalculation 数据，使用默认值 15:", e);
+                }
+
                 // 整理职位 → 技能表
                 const skills = executives.reduce((acc, exec) => {
                     if (exec.currentWorkHistory) {
@@ -379,10 +220,30 @@
                 // 安全读取技能值，没值就返回0
                 const safeSkill = (position, skillName) => skills[position]?.[skillName] || 0;
 
-                let saleBonus = Math.floor(safeSkill('m', 'cmo') +
-                    safeSkill('y', 'cmo') / 2 +
-                    (safeSkill('o', 'cmo') + safeSkill('f', 'cmo') + safeSkill('t', 'cmo')) / 4);
+                if (academyActive >= 15) {
+                    COO_Apprentice = safeSkill('v', 'coo') / 2
+                    CMO_Apprentice = safeSkill('y', 'cmo') / 2
+                } else if (academyActive >= 5) {
+                    COO_Apprentice = safeSkill('v', 'coo') / 2
+                    CMO_Apprentice = 0
+                } else {
+                    COO_Apprentice = 0
+                    CMO_Apprentice = 0
+                }
 
+                let adminBonus = Math.floor(safeSkill('o', 'coo') +
+                    COO_Apprentice +
+                    (safeSkill('f', 'coo') + safeSkill('m', 'coo') + safeSkill('t', 'coo')) / 4);
+                if (adminBonus > 80) {
+                    adminBonus = 80 + Math.floor((adminBonus - 80) / 2);
+                }
+                if (adminBonus > 60) {
+                    adminBonus = 60 + Math.floor((adminBonus - 60) / 2);
+                }
+
+                let saleBonus = Math.floor(safeSkill('m', 'cmo') +
+                    CMO_Apprentice +
+                    (safeSkill('o', 'cmo') + safeSkill('f', 'cmo') + safeSkill('t', 'cmo')) / 4);
                 if (saleBonus > 80) {
                     saleBonus = 80 + Math.floor((saleBonus - 80) / 2);
                 }
@@ -390,18 +251,6 @@
                     saleBonus = 60 + Math.floor((saleBonus - 60) / 2);
                 }
                 saleBonus = Math.floor(saleBonus / 3)
-
-
-                let adminBonus = Math.floor(safeSkill('o', 'coo') +
-                    safeSkill('v', 'coo') / 2 +
-                    (safeSkill('f', 'coo') + safeSkill('m', 'coo') + safeSkill('t', 'coo')) / 4);
-
-                if (adminBonus > 80) {
-                    adminBonus = 80 + Math.floor((adminBonus - 80) / 2);
-                }
-                if (adminBonus > 60) {
-                    adminBonus = 60 + Math.floor((adminBonus - 60) / 2);
-                }
 
                 return {
                     saleBonus,
@@ -411,9 +260,8 @@
 
             return {
                 ...auth,
-                recreationBonus: recreation,
+                ...companies_by_company,
                 ...calculateExecutiveBonus(executives),
-                administration,
                 ResourcesRetailInfo: resourcesRetailInfo,
                 sellingSpeedMultiplier,
                 weatherUntil,
@@ -425,6 +273,108 @@
             fetchFullRegionData,
             getCurrentRealmId: async () => (await getAuthInfo()).realmId
         };
+    })();
+
+    // ======================
+    // 模块2-1：领域数据模块的补充，处理学院升级中学徒无效的情况
+    // ======================
+    (function () {
+        const buildings_URL = "/api/v2/companies/me/buildings/"; // 截取的接口
+        const uc = "l"; // 前缀
+
+        function saveMergedLocalStorage(key, newData) {
+            try {
+                const existing = JSON.parse(localStorage.getItem(key) || "{}");
+                const merged = { ...existing, ...newData };
+                localStorage.setItem(key, JSON.stringify(merged));
+            } catch (e) {
+                console.warn("⚠️ localStorage 合并写入失败，直接使用新数据", e);
+                localStorage.setItem(key, JSON.stringify(newData));
+            }
+        }
+
+        // 处理函数
+        function processBuildings(buildings) {
+            return buildings
+                .filter(t => t.kind === "y" && !t.purchasedRecently)
+                .reduce((acc, r) => {
+                    const busy = r.busy;
+                    acc.active += (!busy && !(r.position?.startsWith(uc)) ? r.size : 0);
+                    acc.slots += (busy?.expanding ? r.size - 1 : r.size);
+                    return acc;
+                }, { active: 0, slots: 0 });
+        }
+
+        // 捕获并处理数据
+        function handleData(data) {
+            if (!Array.isArray(data) || data.length === 0) return;
+            // console.log("📦 捕获到建筑数据:", data);
+            const result = processBuildings(data);
+            // console.log("⚡ active & slots 计算结果:", result);
+
+            const realmId = getRealmIdFromLink();
+            if (realmId === 0 || realmId === 1) {
+                const key = `SimcompaniesRetailCalculation_${realmId}`;
+                let stored = {};
+                try {
+                    const raw = localStorage.getItem(key);
+                    if (raw) stored = JSON.parse(raw);
+                } catch (e) {
+                    console.warn("⚠️ 读取 localStorage 时解析失败，初始化为空对象", e);
+                }
+            
+                const oldAcademyActive = stored.academyActive ?? 0; // 使用 nullish 合并更安全
+                const newAcademyActive = result.active;             // 新计算值
+            
+                // 更新 localStorage 中的 academyActive
+                stored.academyActive = newAcademyActive;
+                localStorage.setItem(key, JSON.stringify(stored));
+            
+                // 仅当值发生变化时才触发全流程计算
+                if (oldAcademyActive !== newAcademyActive) {
+                    // console.log("🔔 academyActive 变化，触发高管加成重新计算");
+                    if (typeof RegionData !== "undefined" && RegionData.fetchFullRegionData) {
+                        RegionData.fetchFullRegionData()
+                            .then(newData => {
+                                // 合并回 localStorage
+                                const merged = { ...stored, ...newData };
+                                localStorage.setItem(key, JSON.stringify(merged));
+                                // console.log("✅ 高管加成已刷新:", key);
+                            })
+                            .catch(err => console.error("❌ 高管加成重新计算失败:", err));
+                    }
+                } else {
+                    // console.log("⚡ academyActive 未变化，不触发高管加成计算");
+                }
+            }
+
+        }
+
+        // Hook fetch
+        const originalFetch = window.fetch;
+        window.fetch = async (...args) => {
+            const response = await originalFetch(...args);
+            try {
+                if (typeof args[0] === "string" && args[0].includes(buildings_URL)) {
+                    response.clone().json().then(handleData).catch(err => console.error("❌ JSON 解析失败:", err));
+                }
+            } catch (e) { console.error(e); }
+            return response;
+        };
+
+        // Hook XHR（备用）
+        const originalXHR = window.XMLHttpRequest.prototype.open;
+        window.XMLHttpRequest.prototype.open = function (method, url, async) {
+            this.addEventListener("load", function () {
+                if (url && url.includes(buildings_URL) && this.responseText) {
+                    try { handleData(JSON.parse(this.responseText)); }
+                    catch (e) { console.error("❌ XHR JSON 解析失败:", e); }
+                }
+            });
+            return originalXHR.apply(this, arguments);
+        };
+
+        // console.log("✅ 建筑数据捕获 & active/slots 计算 + localStorage 保存 hook 已启动");
     })();
 
     // ======================
@@ -659,7 +609,25 @@
         return {
             save: (type, data) => {
                 const key = type === 'region' ? KEYS.region(data.realmId) : KEYS.constants;
-                localStorage.setItem(key, JSON.stringify(data));
+                try {
+                    if (type === 'region') {
+                        // 读取现有数据并做合并，优先保留 newData 的字段，但如果 existing 有 academyLevels 且 newData 未提供，则保留 existing 的 academyLevels
+                        const existingRaw = localStorage.getItem(key) || "{}";
+                        const existing = JSON.parse(existingRaw);
+                        const merged = { ...existing, ...data };
+                        if (existing.academyLevels && !data.academyLevels) {
+                            merged.academyLevels = existing.academyLevels;
+                        }
+                        // 若你还有其它需要强制保留的字段，可在此类似添加： merged.someField = existing.someField || data.someField;
+                        localStorage.setItem(key, JSON.stringify(merged));
+                    } else {
+                        // constants 仍然覆盖保存
+                        localStorage.setItem(key, JSON.stringify(data));
+                    }
+                } catch (e) {
+                    console.warn("⚠️ Storage.save 合并写入失败，回退为直接写入：", e);
+                    localStorage.setItem(key, JSON.stringify(data));
+                }
             },
 
             getFormattedStatus: (type) => {
@@ -1076,7 +1044,7 @@
                 for (const row of results) {
                     html += '<tr>' +
                         `<td style="max-width:120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    <a href="https://www.simcompanies.com/zh-cn/messages/${encodeURIComponent(row.seller)}" target="_blank" 
+                    <a href="https://www.simcompanies.com/zh-cn/messages/${encodeURIComponent(row.seller)}" target="_blank"
                        style="color: inherit; text-decoration: none; display: inline-block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                        ${row.seller}
                     </a>
@@ -1973,7 +1941,7 @@
 
                         if (container && !container.querySelector('[data-custom-notice]')) {
                             const infoText = document.createElement('div');
-                            infoText.textContent = '高管、周期变动，会影响计算，记得更新，所有展示内容均为1级建筑。';
+                            infoText.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。所有展示内容均为1级建筑。如果您的屏幕过小会导致交易所展示内容不全，请注意！';
                             infoText.dataset.customNotice = 'true'; // 避免重复添加
                             container.appendChild(infoText); // 插入在 form 所在 div 的后面
 
@@ -2357,7 +2325,7 @@
                 if (!insertTarget || insertTarget === parent) return;
 
                 const tip = document.createElement('div');
-                tip.textContent = '高管若变动，时利润会有误差，点左下更新。';
+                tip.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。';
                 tip.dataset.warningText = 'true';
 
                 insertTarget.appendChild(tip);
@@ -2596,14 +2564,14 @@
                 const workerCode = `
                 self.onmessage = function(e) {
                   const { data, now, companyId } = e.data;
-          
+
                   function fo(entry, t) {
                     const n = Date.parse(entry.datetime);
                     const a = Math.abs(t - n);
                     const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
                     return Math.floor(entry.amount * Math.pow(1 - 0.05, o));
                   }
-          
+
                   function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
                     const originalDate = new Date(originalTimeStr);
                     const nowDate = new Date(nowTimestamp);
@@ -2616,12 +2584,12 @@
                     }
                     return alignedDate.getTime();
                   }
-          
+
                   function formatLocalDateSimple(date) {
                     const pad = (n) => String(n).padStart(2, '0');
                     return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
                   }
-          
+
                   function calculate(entry) {
                     const decayTime = Date.parse(entry.datetime);
                     const quantity = entry.amount;
@@ -2629,7 +2597,7 @@
                     let lastAmount = fo(entry, now);
                     const results = [];
                     let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
-          
+
                     for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
                       const diff = Math.abs(currentTime - decayTime);
                       const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
@@ -2646,14 +2614,14 @@
                         if (amount === 0) break;
                       }
                     }
-          
+
                     return {
                       kind: entry.kind,
                       quality: entry.quality,
                       result: results
                     };
                   }
-          
+
                   const output = {};
                   for (const entry of data) {
                     if ([153, 154].includes(entry.kind)) {
@@ -2663,7 +2631,7 @@
                       }
                     }
                   }
-          
+
                   self.postMessage({ companyId, output });
                 };
               `;
@@ -2704,14 +2672,14 @@
                 const workerCode = `
                 self.onmessage = function(e) {
                   const { data, now, companyId } = e.data;
-          
+
                   function fo(entry, t) {
                     const n = Date.parse(entry.datetime);
                     const a = Math.abs(t - n);
                     const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
                     return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
                   }
-          
+
                   function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
                     const originalDate = new Date(originalTimeStr);
                     const nowDate = new Date(nowTimestamp);
@@ -2724,19 +2692,19 @@
                     }
                     return alignedDate.getTime();
                   }
-          
+
                   function formatLocalDateSimple(date) {
                     const pad = (n) => String(n).padStart(2, '0');
                     return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
                   }
-          
+
                   function calculate(entry) {
                     const decayTime = Date.parse(entry.datetime);
                     const quantity = entry.quantity;
                     let lastAmount = fo(entry, now);
                     const results = [];
                     let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
-          
+
                     for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
                       const diff = Math.abs(currentTime - decayTime);
                       const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
@@ -2751,7 +2719,7 @@
                         if (amount === 0) break;
                       }
                     }
-          
+
                     return {
                       kind: entry.kind,
                       buyer: entry.buyer.company,
@@ -2763,16 +2731,16 @@
                       result: results
                     };
                   }
-          
+
                   const output = {};
                   for (const entry of data) {
                     if ([153, 154].includes(entry.kind) && entry.datetime) {
                         if (!output[entry.kind]) output[entry.kind] = {};
-                        if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];                        
+                        if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];
                         output[entry.kind][entry.buyer.company].push(calculate(entry));
                     }
                   }
-          
+
                   self.postMessage({ companyId, output });
                 };
               `;
@@ -2814,14 +2782,14 @@
                 const workerCode = `
                 self.onmessage = function(e) {
                   const { data, now, companyId } = e.data;
-          
+
                   function fo(entry, t) {
                     const n = Date.parse(entry.datetime);
                     const a = Math.abs(t - n);
                     const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
                     return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
                   }
-          
+
                   function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
                     const originalDate = new Date(originalTimeStr);
                     const nowDate = new Date(nowTimestamp);
@@ -2834,19 +2802,19 @@
                     }
                     return alignedDate.getTime();
                   }
-          
+
                   function formatLocalDateSimple(date) {
                     const pad = (n) => String(n).padStart(2, '0');
                     return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
                   }
-          
+
                   function calculate(entry) {
                     const decayTime = Date.parse(entry.datetime);
                     const quantity = entry.quantity;
                     let lastAmount = fo(entry, now);
                     const results = [];
                     let currentTime = alignTimeToOriginalSeconds(entry.datetime, now);
-          
+
                     for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
                       const diff = Math.abs(currentTime - decayTime);
                       const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
@@ -2861,7 +2829,7 @@
                         if (amount === 0) break;
                       }
                     }
-          
+
                     return {
                         kind: entry.kind,
                         seller: entry.seller.company,
@@ -2873,16 +2841,16 @@
                         result: results
                       };
                   }
-          
+
                   const output = {};
                   for (const entry of data) {
                     if ([153, 154].includes(entry.kind) && entry.datetime) {
                         if (!output[entry.kind]) output[entry.kind] = {};
-                        if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];                        
+                        if (!output[entry.kind][entry.buyer.company]) output[entry.kind][entry.buyer.company] = [];
                         output[entry.kind][entry.buyer.company].push(calculate(entry));
                     }
                   }
-          
+
                   self.postMessage({ companyId, output });
                 };
               `;
@@ -2922,14 +2890,14 @@
                 const workerCode = `
                 self.onmessage = function(e) {
                   const { data, now, companyId } = e.data;
-          
+
                   function fo(entry, t) {
                     const n = Date.parse(entry.datetimeDecayUpdated);
                     const a = Math.abs(t - n);
                     const o = Math.round(a / (1e3 * 60) / 4) * 4 / 60;
                     return Math.floor(entry.quantity * Math.pow(1 - 0.05, o));
                   }
-          
+
                   function alignTimeToOriginalSeconds(originalTimeStr, nowTimestamp) {
                     const originalDate = new Date(originalTimeStr);
                     const nowDate = new Date(nowTimestamp);
@@ -2942,19 +2910,19 @@
                     }
                     return alignedDate.getTime();
                   }
-          
+
                   function formatLocalDateSimple(date) {
                     const pad = (n) => String(n).padStart(2, '0');
                     return \`\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(Math.floor(date.getSeconds()))}\`;
                   }
-          
+
                   function calculate(entry) {
                     const decayTime = Date.parse(entry.datetimeDecayUpdated);
                     const quantity = entry.quantity;
                     let lastAmount = fo(entry, now);
                     const results = [];
                     let currentTime = alignTimeToOriginalSeconds(entry.datetimeDecayUpdated, now);
-          
+
                     for (; currentTime < decayTime + 8760 * 60 * 60 * 1000; currentTime += 1000) {
                       const diff = Math.abs(currentTime - decayTime);
                       const cycleCount = Math.round(diff / (1000 * 60) / 4) * 4 / 60;
@@ -2969,7 +2937,7 @@
                         if (amount === 0) break;
                       }
                     }
-          
+
                     return {
                       kind: entry.kind,
                       quality: entry.quality,
@@ -2977,7 +2945,7 @@
                       result: results
                     };
                   }
-          
+
                   const output = {};
                   for (const entry of data) {
                     if ([153, 154].includes(entry.kind) && entry.datetimeDecayUpdated) {
@@ -2988,7 +2956,7 @@
                       }
                     }
                   }
-          
+
                   self.postMessage({ companyId, output });
                 };
               `;
@@ -3786,7 +3754,7 @@
                 // bring constants into worker scope
                 const lwe = SCD.retailInfo;
                 const zn = SCD.data;
-        
+
                 // Utility functions defined inside to use local lwe and zn
                 const Ul = (overhead, skillCOO) => {
                     const r = overhead || 1;
@@ -3823,7 +3791,7 @@
                     let p = d - d * salesModifier / 100;
                     return weather && (p /= weather.sellingSpeedMultiplier), p
                 };
-        
+
                 // Initial debug log
                 const results = data.map(order => {
                     // profit calculation loop
@@ -3837,7 +3805,7 @@
                         salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
                         skillCMO = SRC.saleBonus,
                         skillCOO = SRC.adminBonus;
-        
+
                     if(order.kind === 153 || order.kind === 154){
                         quantity = Math.floor(order.quantity * Math.pow(1 - 0.05, (Math.round((Math.abs(Date.now() - Date.parse(order.datetimeDecayUpdated))) / (1000 * 60) / 4) * 4 / 60)))
                     }
@@ -3851,7 +3819,7 @@
                         );
                         return m?.saturation;
                     })();
-        
+
                     const administrationOverhead = SRC.administration;
                     const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
                         ids.includes(parseInt(order.kind))
@@ -3861,11 +3829,11 @@
                     const wages = averageSalary * salaryModifier;
                     const forceQuality = (parseInt(order.kind) === 150) ? order.quality : undefined;
                     const resourceDetail = SCD.constantsResources[parseInt(order.kind)]
-        
+
                     const v = salesModifierWithRecreationBonus + skillCMO;
                     const b = Ul(administrationOverhead, skillCOO);
                     let selltime;
-        
+
                     while (currentPrice > 0) {
                         const modeledData = wv(economyState, order.kind, forceQuality ?? null);
                         const w = zL(
@@ -3886,7 +3854,7 @@
                         const profit = (!secondsToFinish || secondsToFinish <= 0)
                             ? NaN
                             : (revenue - cost * quantity - wagesTotal) / secondsToFinish;
-        
+
                         if (!secondsToFinish || secondsToFinish <= 0) break;
                         if (profit > maxProfit) {
                             maxProfit = profit;
@@ -3909,7 +3877,7 @@
                         seller: order.seller?.company || "",
                         marketPrice: order.price,
                         quality: order.quality,
-                        saleAmout: quantity,            
+                        saleAmout: quantity,
                         contractPrice: cost,
                         contractMaxProfit: (maxProfit * 3600).toFixed(2)
                     };
@@ -3939,7 +3907,7 @@
             }
         };
 
-        // 3. processMarketData 
+        // 3. processMarketData
         function processMarketData(json, realm, id) {
             if (!Array.isArray(json)) return;
             localStorage.setItem(`market_${realm}_${id}`, JSON.stringify(json));
@@ -4017,7 +3985,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    修改合同页面的dbLetter获取，去除了多余的hash字段
+        // @changelog    增加对升级中等情况的学院判断，改用fetch请求以适配苹果系统
 
         fetch(scriptUrl)
             .then(res => {
