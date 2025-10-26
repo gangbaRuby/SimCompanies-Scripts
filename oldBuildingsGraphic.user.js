@@ -13,7 +13,7 @@
 
 (function () {
     'use strict';
-    let latestVersion;
+    let hasNewVersion,latestVersion;
     let localVersion = GM_info.script.version;
 
     // ======= 配置说明 =======
