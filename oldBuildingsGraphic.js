@@ -13,6 +13,8 @@
 
 (function () {
     'use strict';
+    let hasNewVersion, latestVersion;
+    let localVersion = GM_info.script.version;
 
     // ======= 配置说明 =======
     // 左边为新图案，右边为旧图案。可通过注释实现单独控制某建筑使用新图案。
