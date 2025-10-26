@@ -7,8 +7,8 @@
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @updateURL    https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.js
-// @downloadURL  https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.js
+// @updateURL    https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js
+// @downloadURL  https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js
 // ==/UserScript==
 
 (function () {
@@ -491,8 +491,8 @@
     }
 
     function checkUpdate() {
-        const scriptUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.js?t=' + Date.now();
-        const downloadUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.js';
+        const scriptUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js?t=' + Date.now();
+        const downloadUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js';
         // @changelog    SC背景图案替换+换回旧建筑图案
 
         fetch(scriptUrl)
