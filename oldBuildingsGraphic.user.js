@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      1.0.0
+// @version      1.1.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -13,7 +13,7 @@
 
 (function () {
     'use strict';
-    let hasNewVersion,latestVersion;
+    let hasNewVersion, latestVersion;
     let localVersion = GM_info.script.version;
 
     // ======= 配置说明 =======
@@ -344,31 +344,33 @@
         if (!img.src) return;
         if (img.dataset.scReplaced) return; // 已替换
 
-        for (const baseName in IMG_MAP) {
-            // 匹配 baseName + 可选 _tierN + .任意哈希.png
-            const regex = new RegExp(`${baseName.replace('.png', '')}(\\.[a-f0-9]+)?\\.png$`);
-            if (img.src.match(regex)) {
-                const newName = IMG_MAP[baseName];
+        const fileName = img.src.split('/').pop();
 
-                if (newName === '') {  // 空字符串表示不显示
+        for (const baseName in IMG_MAP) {
+            const baseNoExt = baseName.replace('.png', '');
+            if (
+                fileName === baseName ||                 // 完全匹配
+                fileName.startsWith(baseNoExt + '.')     // 支持 factory_tier01.xxx.png
+            ) {
+                const newName = IMG_MAP[baseName];
+                if (newName === '') {
                     img.src = '';
                     img.dataset.scReplaced = '1';
-                    // console.log(`[图片替换] ${baseName} 已替换为空`);
                 } else {
                     const base64 = await ImageManager.getImage(newName);
                     if (base64) {
                         img.src = base64;
                         img.dataset.scReplaced = '1';
-                        // console.log(`[图片替换] 已成功将 ${baseName} 替换为 Base64`);
                     } else {
                         console.warn(`[图片替换] 获取 ${newName} 的 Base64 失败`);
                     }
                 }
-
                 break;
             }
         }
+
     }
+
 
 
     async function replaceAllImgs(root = document) {
@@ -493,7 +495,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js';
-        // @changelog    SC背景图案替换+换回旧建筑图案
+        // @changelog    修改匹配
 
         fetch(scriptUrl)
             .then(res => {
