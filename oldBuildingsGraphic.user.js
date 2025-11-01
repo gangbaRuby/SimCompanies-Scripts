@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      1.2.0
+// @version      1.2.1
 // @license      AGPL-3.0
-// @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
+// @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
