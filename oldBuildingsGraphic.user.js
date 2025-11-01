@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      1.1.0
+// @version      1.2.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -25,11 +25,13 @@
         "farm_tier02.png": "plantation-lvl2.png",
         "farm_tier03.png": "plantation-lvl2.png",
         "farm_tier04.png": "plantation-lvl3.png",
-        // 水库（01对应1级，02对应2级，03对应3级，04对应6级）
+        // 水库（01对应1级，02对应2级，03对应3级，04对应6级,05对应10级，06对应15级）
         "water_reservoir_tier01.png": "reservoir-lvl1.png",
         "water_reservoir_tier02.png": "reservoir-lvl1.png",
         "water_reservoir_tier03.png": "reservoir-lvl1.png",
         "water_reservoir_tier04.png": "reservoir-lvl2.png",
+        "water_reservoir_tier05.png": "reservoir-lvl2.png",
+        "water_reservoir_tier06.png": "reservoir-lvl2.png",
         // 电厂（01对应1级，02对应2级，03对应3级，04对应6级,05对应10级，06对应15级）
         "power_plant_tier01.png": "powerplant-lvl1.png",
         "power_plant_tier02.png": "powerplant-lvl1.png",
@@ -52,11 +54,13 @@
         "shipping_depot_tier02.png": "shipping-lvl1.png",
         "shipping_depot_tier03.png": "shipping-lvl1.png",
         "shipping_depot_tier04.png": "shipping-lvl2.png",
-        // 生鲜商店（01对应1级，02对应2级，03对应3级，04对应6级）
+        // 生鲜商店（01对应1级，02对应2级，03对应3级，04对应6级,05对应10级，06对应15级）
         "grocery_store_idle_tier01": "grocery2-lvl1.png",
-        "grocery_store_idle_tier02": "grocery2-lvl2.png",
+        "grocery_store_idle_tier02": "grocery2-lvl1.png",
         "grocery_store_idle_tier03": "grocery2-lvl2.png",
-        "grocery_store_idle_tier04": "grocery2-lvl3.png",
+        "grocery_store_idle_tier04": "grocery2-lvl2.png",
+        "grocery_store_idle_tier05": "grocery2-lvl3.png",
+        "grocery_store_idle_tier06": "grocery2-lvl3.png",
         // 加油站（01对应1级，02对应2级，03对应3级，04对应6级）
         "gas_station_tier01.png": "gasstation-lvl1.png",
         "gas_station_tier02.png": "gasstation-lvl1.png",
@@ -96,6 +100,13 @@
         "beverage_factory_tier02.png": "beverage-factory-lvl1.png",
         "beverage_factory_tier03.png": "beverage-factory-lvl2.png",
         "beverage_factory_tier04.png": "beverage-factory-lvl3.png",
+        // 机库（01对应1级，02对应2级，03对应3级，04对应6级,05对应10级，06对应15级）
+        "hangar_tier01.png": "horizontal-integration-lvl1.png",
+        "hangar_tier02.png": "horizontal-integration-lvl1.png",
+        "hangar_tier03.png": "horizontal-integration-lvl2.png",
+        "hangar_tier04.png": "horizontal-integration-lvl2.png",
+        "hangar_tier05.png": "horizontal-integration-lvl3.png",
+        "hangar_tier06.png": "horizontal-integration-lvl3.png",
         // 万圣节主题
         "concrete-halloween-0000.png": "concrete-0000.png",
         "concrete-halloween-0001.png": "concrete-0001.png",
@@ -220,43 +231,68 @@
         async init() {
             if (this.index) return;
 
-            // 1️⃣ 先加载索引
-            const cachedIndex = await this.getFromDB('SC_IMG_INDEX');
-            if (cachedIndex) {
-                this.index = JSON.parse(cachedIndex);
-                // console.log('[图片管理] 从 IndexedDB 加载索引', this.index);
-            } else {
-                // console.log('[图片管理] 正在获取 img_index.json...');
-                try {
-                    const res = await fetch(BASE_URL + 'img_index.json');
-                    this.index = await res.json();
-                    await this.setToDB('SC_IMG_INDEX', JSON.stringify(this.index));
-                    // console.log('[图片管理] 获取到索引', this.index);
-                } catch (e) {
-                    console.error('[图片管理] 获取索引失败', e);
-                    this.index = { map: {} };
-                }
+            // 1️⃣ 获取远程 img_index.json
+            let remoteIndex = null;
+            try {
+                const res = await fetch(BASE_URL + 'img_index.json');
+                remoteIndex = await res.json();
+            } catch (e) {
+                console.error('[图片管理] 获取远程索引失败', e);
+                remoteIndex = { version: 0, map: {} };
             }
 
-            // 2️⃣ 加载所有分块
-            for (const partKey of PART_KEYS) {
+            // 2️⃣ 获取本地索引
+            let localIndex = null;
+            try {
+                const cached = await this.getFromDB('SC_IMG_INDEX');
+                localIndex = cached ? JSON.parse(cached) : null;
+            } catch { localIndex = null; }
+
+            // 3️⃣ 判断是否需要更新
+            const needUpdate = !localIndex || localIndex.version !== remoteIndex.version;
+
+            if (needUpdate) {
+                console.log('[图片管理] 索引版本不同或首次初始化，开始刷新所有分块');
+
+                // 清空 IndexedDB
+                try {
+                    const db = await this.openDB();
+                    const tx = db.transaction('images', 'readwrite');
+                    tx.objectStore('images').clear();
+                    await new Promise(res => tx.oncomplete = res);
+                } catch (e) { console.warn('[图片管理] 清空 IndexedDB 失败', e); }
+
+                // 保存最新索引
+                await this.setToDB('SC_IMG_INDEX', JSON.stringify(remoteIndex));
+            }
+
+            this.index = remoteIndex;
+
+            // 4️⃣ 加载所有分块
+            const parts = Object.values(remoteIndex.map);
+            const maxPart = Math.max(...parts.map(k => parseInt(k.match(/\d+$/)[0])));
+
+            for (let i = 1; i <= maxPart; i++) {
+                const partKey = `SC_IMG_PART_${i}`;
                 let json = null;
-                const cachedPart = await this.getFromDB(partKey);
-                if (cachedPart) {
+
+                if (!needUpdate) {
+                    // 尝试从 IndexedDB 读取
                     try {
-                        json = JSON.parse(cachedPart);
-                        // console.log(`[图片管理] 分块 ${partKey} 从 IndexedDB 加载`);
-                    } catch { }
+                        const cachedPart = await this.getFromDB(partKey);
+                        if (cachedPart) json = JSON.parse(cachedPart);
+                    } catch { json = null; }
                 }
 
+                // 缓存不存在或需要更新 → 从远程拉取
                 if (!json) {
                     try {
-                        const fileName = partKey.replace(/^SC_/, '').toLowerCase() + '.json';
-                        // console.log(`[图片管理] 正在获取分块 ${partKey}...`);
+                        const fileName = `img_part_${i}.json`;
                         const res = await fetch(BASE_URL + fileName);
                         json = await res.json();
-                        try { await this.setToDB(partKey, JSON.stringify(json)); } catch (e) { console.warn(`[图片管理] IndexedDB 保存 ${partKey} 失败`, e); }
-                        // console.log(`[图片管理] 获取分块 ${partKey} 成功`);
+                        try { await this.setToDB(partKey, JSON.stringify(json)); } catch (e) {
+                            console.warn(`[图片管理] 保存分块 ${partKey} 失败`, e);
+                        }
                     } catch (e) {
                         console.error(`[图片管理] 获取分块 ${partKey} 失败`, e);
                         json = {};
@@ -265,6 +301,8 @@
 
                 this.loadedParts.set(partKey, json);
             }
+
+            // console.log('[图片管理] 分块加载完成');
         },
 
         async getImage(name) {
@@ -495,7 +533,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js';
-        // @changelog    修改匹配
+        // @changelog    追加机库，生鲜，水库的替换。修改indexDB更新机制。
 
         fetch(scriptUrl)
             .then(res => {
