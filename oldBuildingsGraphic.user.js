@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      1.2.1
+// @version      1.3.0
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -107,6 +107,13 @@
         "hangar_tier04.png": "horizontal-integration-lvl2.png",
         "hangar_tier05.png": "horizontal-integration-lvl3.png",
         "hangar_tier06.png": "horizontal-integration-lvl3.png",
+        // 推进器工厂（01对应1级，02对应2级，03对应3级，04对应6级,05对应10级，06对应15级）
+        "propulsion_factory_tier01.png": "propulsion-2-lvl1.png",
+        "propulsion_factory_tier02.png": "propulsion-2-lvl1.png",
+        "propulsion_factory_tier03.png": "propulsion-2-lvl2.png",
+        "propulsion_factory_tier04.png": "propulsion-2-lvl2.png",
+        "propulsion_factory_tier05.png": "propulsion-2-lvl3.png",
+        "propulsion_factory_tier06.png": "propulsion-2-lvl3.png",
         // 万圣节主题
         "concrete-halloween-0000.png": "concrete-0000.png",
         "concrete-halloween-0001.png": "concrete-0001.png",
@@ -533,7 +540,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js';
-        // @changelog    追加机库，生鲜，水库的替换。修改indexDB更新机制。
+        // @changelog    追加推进器工厂
 
         fetch(scriptUrl)
             .then(res => {
