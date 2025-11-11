@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      1.3.1
+// @version      1.4.0
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
