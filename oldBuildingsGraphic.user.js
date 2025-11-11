@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      1.3.0
+// @version      1.3.1
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -114,6 +114,20 @@
         "propulsion_factory_tier04.png": "propulsion-2-lvl2.png",
         "propulsion_factory_tier05.png": "propulsion-2-lvl3.png",
         "propulsion_factory_tier06.png": "propulsion-2-lvl3.png",
+        // 航空航天厂（01对应1级，02对应2级，03对应3级，04对应6级,05对应10级，06对应15级）
+        "aerospace_factory_tier01.png": "aerospace-2-lvl1.png",
+        "aerospace_factory_tier02.png": "aerospace-2-lvl1.png",
+        "aerospace_factory_tier03.png": "aerospace-2-lvl2.png",
+        "aerospace_factory_tier04.png": "aerospace-2-lvl2.png",
+        "aerospace_factory_tier05.png": "aerospace-2-lvl3.png",
+        "aerospace_factory_tier06.png": "aerospace-2-lvl3.png",
+        // 航空电子器件厂（01对应1级，02对应2级，03对应3级，04对应6级,05对应10级，06对应15级）
+        "aerospace_electronics_tier01.png": "aero-electronics-2-lvl1.png",
+        "aerospace_electronics_tier02.png": "aero-electronics-2-lvl1.png",
+        "aerospace_electronics_tier03.png": "aero-electronics-2-lvl2.png",
+        "aerospace_electronics_tier04.png": "aero-electronics-2-lvl2.png",
+        "aerospace_electronics_tier05.png": "aero-electronics-2-lvl3.png",
+        "aerospace_electronics_tier06.png": "aero-electronics-2-lvl3.png",
         // 万圣节主题
         "concrete-halloween-0000.png": "concrete-0000.png",
         "concrete-halloween-0001.png": "concrete-0001.png",
@@ -156,27 +170,7 @@
         "exchange_tier18.png": "exchange.png",
         // 默认总部(目前有问题)
         // "hq_tier01.png": "hq-lvl1.png",
-        // "hq_tier02.png": "hq-lvl2.png",
-        // "hq_tier03.png": "hq-lvl3.png",
-        // "hq_tier04.png": "hq-lvl4.png",
-        // "hq_tier05.png": "hq-lvl5.png",
-        // "hq_tier06.png": "hq-lvl6.png",
-        // "hq_tier07.png": "hq-lvl7.png",
-        // "hq_tier08.png": "hq-lvl8.png",
-        // "hq_tier09.png": "hq-lvl9.png",
-        // "hq_tier10.png": "hq-lvl10.png",
-        // "hq_tier11.png": "hq-lvl10.png",
-        // "hq_tier12.png": "hq-lvl11.png",
-        // "hq_tier13.png": "hq-lvl12.png",
-        // "hq_tier14.png": "hq-lvl14.png",
-        // "hq_tier15.png": "hq-lvl15.png",
-        // "hq_tier16.png": "hq-lvl-high.png",
-        // "hq_tier17.png": "hq-lvl-high.png",
-        // "hq_tier18.png": "hq-lvl-high.png",
-        // "hq_tier19.png": "hq-lvl-high.png",
-        // "hq_tier20.png": "hq-lvl-high.png",
-        // "hq_tier21.png": "hq-lvl-high.png",
-        // "hq_tier22.png": "hq-lvl-high.png",
+        // ... (省略其他总部配置)
         // "hq_contract_lorry_blue_white.png": "truck2.png", // 货车大小存在问题
         // 待解锁地块
         "residential_02.png": "residential21.png",
@@ -384,6 +378,45 @@
         }
     })();
 
+    // ===== [新] 替换特定 DIV =====
+    function replaceSpecificDiv(root) {
+        // 确保 root 是一个可以查询的元素
+        if (!root || typeof root.querySelectorAll !== 'function' || root.nodeType !== 1) {
+            return;
+        }
+
+        // 1. 检查 root 本身是否是目标
+        if (root.matches && root.matches('div.css-6z3gy3')) {
+            const replacementDiv = document.createElement('div');
+            replacementDiv.className = 'css-c237m7';
+            replacementDiv.innerHTML = `
+                <img src="/static/images/buildings/tiles/concrete-1001.94c0858708dd.png" class="css-1ubszy6" alt="">
+                <img src="/static/images/buildings/sales/exchange_tier01.png" class="css-1oqnfnw" alt="生鲜商店">
+            `;
+            if (root.parentNode) {
+                root.parentNode.replaceChild(replacementDiv, root);
+                // 替换后，root 节点已脱离 DOM，不需要再检查其子节点
+                return; // 退出
+            }
+        }
+
+        // 2. 检查 root 的子节点
+        const targets = root.querySelectorAll('div.css-6z3gy3');
+        targets.forEach(targetDiv => {
+            const replacementDiv = document.createElement('div');
+            replacementDiv.className = 'css-c237m7';
+            replacementDiv.innerHTML = `
+                <img src="/static/images/buildings/tiles/concrete-1001.94c0858708dd.png" class="css-1ubszy6" alt="">
+                <img src="/static/images/buildings/sales/exchange_tier01.png" class="css-1oqnfnw" alt="生鲜商店">
+            `;
+            if (targetDiv.parentNode) {
+                targetDiv.parentNode.replaceChild(replacementDiv, targetDiv);
+            }
+        });
+    }
+    // ============================
+
+
     // ===== <img> 替换 =====
     async function replaceImgElement(img) {
         if (!img.src) return;
@@ -394,8 +427,8 @@
         for (const baseName in IMG_MAP) {
             const baseNoExt = baseName.replace('.png', '');
             if (
-                fileName === baseName ||                 // 完全匹配
-                fileName.startsWith(baseNoExt + '.')     // 支持 factory_tier01.xxx.png
+                fileName === baseName ||                // 完全匹配
+                fileName.startsWith(baseNoExt + '.')    // 支持 factory_tier01.xxx.png
             ) {
                 const newName = IMG_MAP[baseName];
                 if (newName === '') {
@@ -423,8 +456,6 @@
         for (const img of imgs) replaceImgElement(img);
     }
 
-    replaceAllImgs();
-
     // ===== 扫描 <div> 并隐藏指定背景 =====
     function replaceDivBackground(div) {
         const style = div.style;
@@ -443,11 +474,19 @@
         for (const div of divs) replaceDivBackground(div);
     }
 
+    // ===== 初始执行 =====
+    replaceSpecificDiv(document); // [新] 优先替换特定 DIV
+    replaceAllImgs();
+    replaceAllDivs();
+
+
     // ===== MutationObserver：监听新增节点和属性变化 =====
     const observer = new MutationObserver(mutations => {
         for (const m of mutations) {
             for (const node of m.addedNodes) {
                 if (node.nodeType !== 1) continue;
+
+                replaceSpecificDiv(node); // [新] 优先替换特定 DIV
 
                 if (node.tagName === 'IMG') replaceImgElement(node);
                 else replaceAllImgs(node);
@@ -472,6 +511,7 @@
 
     // 定时扫描，确保动画节点和延迟加载元素也被捕获
     setInterval(() => {
+        replaceSpecificDiv(document); // [新] 定时扫描也应包含特定DIV
         replaceAllImgs();
         replaceAllDivs();
     }, 1500);
@@ -540,7 +580,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js';
-        // @changelog    追加推进器工厂
+        // @changelog  追加交易所，航空航天厂，航空电子器件厂的替换
 
         fetch(scriptUrl)
             .then(res => {
