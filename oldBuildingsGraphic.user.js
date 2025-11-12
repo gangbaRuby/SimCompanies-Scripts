@@ -128,6 +128,14 @@
         "aerospace_electronics_tier04.png": "aero-electronics-2-lvl2.png",
         "aerospace_electronics_tier05.png": "aero-electronics-2-lvl3.png",
         "aerospace_electronics_tier06.png": "aero-electronics-2-lvl3.png",
+        // 森林苗圃（01对应1级，02对应2级，03对应3级，04对应6级）
+        "forrest_nursery_tier01_back.png": "shed-lvl1.png",
+        "forrest_nursery_tier02_back.png": "shed-lvl1.png",
+        "forrest_nursery_tier03_back.png": "shed-lvl2.png",
+        "forrest_nursery_tier04_back.png": "shed-lvl3.png",
+        // 时装研究中心（01对应1级，03对应3级)
+        "fashion-research-lvl1.png": "fashion-research-lvl1.png",
+        "fashion-research-lvl3.png": "fashion-research-lvl1.png",
         // 万圣节主题
         "concrete-halloween-0000.png": "concrete-0000.png",
         "concrete-halloween-0001.png": "concrete-0001.png",
@@ -459,6 +467,11 @@
 
     const OVERLAY_KEYWORDS = [
         //'construction_overlay', // 去掉注释可以关闭起重机显示，保留是因为新UI无法直接看出是否为建造或升级中 
+        // 森林苗圃前景
+        'forrest_nursery_tier01_front',
+        'forrest_nursery_tier02_front',
+        'forrest_nursery_tier03_front',
+        'forrest_nursery_tier04_front',
         // ... 确保这里包含了所有要移除的关键词 ...
     ];
 
