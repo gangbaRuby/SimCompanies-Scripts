@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      1.4.0
+// @version      1.5.0
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -135,7 +135,7 @@
         "forrest_nursery_tier04_back.png": "shed-lvl3.png",
         // 时装研究中心（01对应1级，03对应3级)
         "fashion-research-lvl1.png": "fashion-research-lvl1.png",
-        "fashion-research-lvl3.png": "fashion-research-lvl1.png",
+        "fashion-research-lvl3.png": "fashion-research-lvl3.png",
         // 万圣节主题
         "concrete-halloween-0000.png": "concrete-0000.png",
         "concrete-halloween-0001.png": "concrete-0001.png",
@@ -814,7 +814,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js';
-        // @changelog  追加交易所，航空航天厂，航空电子器件厂的替换
+        // @changelog  更改为根据css替换图片，追加森林苗圃前后景替换，尚未更新树木替换，保留起重机以判断建筑状态
 
         fetch(scriptUrl)
             .then(res => {
