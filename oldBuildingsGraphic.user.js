@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      1.5.0
+// @version      1.5.1
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -499,13 +499,23 @@
 
 
     /**
-     * [修正 V4] CSS 规则扫描、Base64 替换与动画移除
-     */
+         * [修正 V4] CSS 规则扫描、Base64 替换与动画移除
+         */
     function replaceCssBackgrounds() {
         const hasReplacementImgs = newImgCache.size > 0;
 
         for (const sheet of document.styleSheets) {
             try {
+                // ============== 关键修正：跳过跨域样式表 ==============
+                // 如果 sheet.href 存在（即外部样式表），且不包含当前页面的源（location.origin），则认为是跨域。
+                // 这样可以避免在 WebKit (Safari/iOS) 中读取 .cssRules 时触发 SecurityError。
+                if (sheet.href) {
+                    if (sheet.href.startsWith('http') && !sheet.href.includes(location.origin)) {
+                        continue; // 跳过跨域样式表
+                    }
+                }
+                // ====================================================
+
                 const rules = sheet.cssRules || sheet.rules;
                 if (!rules) continue;
 
@@ -517,17 +527,16 @@
                         if (originalBgImage.includes('data:image')) continue;
 
                         let newBgImage = originalBgImage;
-                        const indicesToRemove = new Set(); // 存储要移除的背景图索引
+                        const indicesToRemove = new Set();
                         let hasReplacedBase64 = false;
                         let hasChanged = false;
 
                         // 1. 解析原始 background-image 列表
-                        // 使用正则匹配所有 url(...)，并保留完整的 URL 字符串用于索引
                         const urlMatches = [...originalBgImage.matchAll(/url\([\"']?([^)]+)[\"']?\)/g)];
 
                         // --- A. 动画/覆盖层移除逻辑 (找到需要移除的索引) ---
                         urlMatches.forEach((match, index) => {
-                            const urlContent = match[1]; // 完整的 URL 路径
+                            const urlContent = match[1];
                             for (const keyword of OVERLAY_KEYWORDS) {
                                 if (urlContent.includes(keyword)) {
                                     indicesToRemove.add(index);
@@ -542,8 +551,6 @@
                             for (const [baseName, base64] of newImgCache.entries()) {
                                 const baseNameNoExt = baseName.replace('.png', '');
 
-                                // 查找并替换 URL (这里只需要替换 newBgImage 字符串，不需要索引)
-                                // 修正后的正则：确保只匹配 BaseName 且不包含已移除的关键词（可选但安全）
                                 if (newBgImage.includes(baseNameNoExt)) {
                                     const urlPattern = new RegExp(`url\\([\"']?[^)]*${baseNameNoExt}[^)]*[\"']?\\)`, 'g');
                                     const replacementUrl = `url("${base64}")`;
@@ -563,10 +570,10 @@
 
                             // 移除动画对应的条目
                             if (indicesArray.length > 0) {
-                                // 移除 background-image 的条目 (通过 BaseName 移除比通过索引更安全)
+                                // 移除 background-image 的条目
                                 for (const index of indicesArray) {
                                     const urlMatch = urlMatches[index][0]; // 完整的 url(...) 字符串
-                                    // 模式：匹配 URL 及其后面跟着的逗号和空格 (如果是中间或开头的条目)
+                                    // 模式：匹配 URL 及其后面跟着的逗号和空格
                                     const patternAfter = new RegExp(urlMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*,?\\s*', 'g');
                                     newBgImage = newBgImage.replace(patternAfter, '');
                                 }
@@ -591,6 +598,7 @@
                     }
                 }
             } catch (e) {
+                // ** 保留：在 SecurityError 时继续，只警告非 SecurityError 的错误 **
                 if (e.name !== 'SecurityError') {
                     console.warn('[图片替换] 扫描CSS时出错:', sheet.href, e.message);
                 }
