@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.21.0
+// @version      1.22.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -70,9 +70,9 @@
                     method: 'GET',
                     headers: { 'Content-Type': 'application/json' }
                 });
-    
+
                 if (!res.ok) throw new Error(`HTTP错误 ${res.status}`);
-    
+
                 if (responseType === 'json') {
                     return await res.json();
                 } else {
@@ -87,11 +87,11 @@
                 }
             }
         };
-    
+
         return {
             // 获取JSON数据
             requestJson: (url, retryCount = 3) => makeRequest(url, 'json', retryCount),
-    
+
             // 获取原始文本
             requestRaw: (url, retryCount = 3) => makeRequest(url, 'text', retryCount)
         };
@@ -322,14 +322,14 @@
                 } catch (e) {
                     console.warn("⚠️ 读取 localStorage 时解析失败，初始化为空对象", e);
                 }
-            
+
                 const oldAcademyActive = stored.academyActive ?? 0; // 使用 nullish 合并更安全
                 const newAcademyActive = result.active;             // 新计算值
-            
+
                 // 更新 localStorage 中的 academyActive
                 stored.academyActive = newAcademyActive;
                 localStorage.setItem(key, JSON.stringify(stored));
-            
+
                 // 仅当值发生变化时才触发全流程计算
                 if (oldAcademyActive !== newAcademyActive) {
                     // console.log("🔔 academyActive 变化，触发高管加成重新计算");
@@ -1405,6 +1405,260 @@
 
     // 初始化界面
     PanelUI.init();
+
+    // ======================
+    // 模块5-1：自定义运行时长
+    // ======================
+    (function () {
+        // --- 配置项 ---
+        const CUSTOM_AMOUNTS_STORAGE_KEY = 'SC_AutoAmount_CustomAmounts';
+        const DEFAULT_AMOUNTS_STRING = '10pm'; 
+        const DEFAULT_BUTTON_CLASS = 'btn btn-secondary'; 
+    
+        // --- 目标元素选择器 ---
+        const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center'; //前者生产，后者零售
+        const PROCESSED_DATA_ATTRIBUTE = 'data-custom-amount-added'; 
+    
+        function loadCustomAmounts() {
+            const stored = localStorage.getItem(CUSTOM_AMOUNTS_STORAGE_KEY);
+            if (stored !== null) {
+                const normalizedStored = stored.replace(/，/g, ',');
+                return normalizedStored.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            }
+            return DEFAULT_AMOUNTS_STRING.split(',').map(s => s.trim());
+        }
+    
+        function saveCustomAmounts(amounts) {
+            const validAmounts = amounts.map(s => String(s).trim()).filter(s => s.length > 0);
+            const saveString = validAmounts.join(','); 
+            localStorage.setItem(CUSTOM_AMOUNTS_STORAGE_KEY, saveString);
+            
+            initAutoAmountButtons(true);
+        }
+    
+        function setInput(inputNode, value, count = 3) {
+            let lastValue = inputNode.value;
+            inputNode.value = value;
+            
+            let event = new Event("input", { bubbles: true });
+            event.simulated = true;
+            
+            if (inputNode._valueTracker) {
+                inputNode._valueTracker.setValue(lastValue);
+            }
+            
+            inputNode.dispatchEvent(event);
+            
+            if (count > 0) {
+                 return setInput(inputNode, value, --count);
+            }
+        }
+    
+        function showConfigModal() {
+            const currentAmounts = loadCustomAmounts();
+            const amountsString = currentAmounts.join(', ');
+            const modalId = 'autoamount-config-modal';
+            
+            document.getElementById(modalId)?.remove();
+    
+            const modalHtml = `
+                <div id="${modalId}" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;justify-content:center;align-items:flex-start;padding-top:5vh;box-sizing:border-box;">
+                    <div style="background:#333;color:#EEE;padding:0;border-radius:6px;box-shadow:0 5px 15px rgba(0,0,0,0.5);width:90%;max-width:450px;border:1px solid #555;">
+                        <div style="padding:15px;border-bottom:1px solid #555;">
+                            <h4 style="margin:0;font-size:18px;font-weight:600;">设置自动填入数量/时长</h4>
+                        </div>
+                        <div style="padding:15px;">
+                            <p style="margin-top:0;margin-bottom:15px;font-size:14px;">
+                                请输入自定义数量或运行时长，使用<strong style="color:#FF8888;">逗号（, 或 ，）</strong>分隔，可留空以禁用此功能。你可以通过输入“am”，“pm”，“hr”和“m”来快捷决定生产数量。例如: 10pm, 2hr, 30m
+                            </p>
+                            <textarea id="autoamount-config-input" 
+                                style="width:100%;height:80px;margin-bottom:20px;padding:8px;border:1px solid #666;border-radius:4px;box-sizing:border-box;font-size:14px;color:#EEE;background:#2C2C2C;resize:vertical;">
+                            </textarea>
+                            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                                <button id="autoamount-config-cancel" style="background-color:#555;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;font-size:14px;transition:background-color 0.2s;">取消</button>
+                                <button id="autoamount-config-save" style="background-color:#5cb85c;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;font-size:14px;transition:background-color 0.2s;">保存</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = document.getElementById(modalId);
+            const inputElement = document.getElementById('autoamount-config-input');
+            const saveButton = document.getElementById('autoamount-config-save');
+            const cancelButton = document.getElementById('autoamount-config-cancel');
+    
+            inputElement.value = amountsString;
+    
+            cancelButton.addEventListener('click', () => modal.remove());
+            saveButton.addEventListener('click', () => {
+                const newString = inputElement.value;
+                const normalizedString = newString.replace(/，/g, ','); 
+                const newAmounts = normalizedString.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                
+                saveCustomAmounts(newAmounts);
+                modal.remove();
+            });
+            
+            const applyHoverStyle = (element, normalColor, hoverColor) => {
+                element.addEventListener('mouseenter', () => element.style.backgroundColor = hoverColor);
+                element.addEventListener('mouseleave', () => element.style.backgroundColor = normalColor);
+            };
+            applyHoverStyle(cancelButton, '#555555', '#444444');
+            applyHoverStyle(saveButton, '#5cb85c', '#4cae4c');
+        }
+    
+        function initAutoAmountButtons(forceReload = false) {
+            if (forceReload) {
+                document.querySelectorAll(`.autoamount-custom-btn`).forEach(btn => btn.remove());
+                document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach(card => {
+                    card.removeAttribute(PROCESSED_DATA_ATTRIBUTE);
+                });
+            }
+        
+            const customAmounts = loadCustomAmounts();
+            // 使用 requestAnimationFrame 延迟，确保 DOM 稳定后再查找元素
+            // 这可以帮助在 SPA 场景中捕获元素。
+            requestAnimationFrame(() => {
+                const targetDivs = document.querySelectorAll(CARD_SELECTOR);
+        
+                targetDivs.forEach((card, index) => { // 添加 index 用于日志定位
+                    try { // <<<<<<<<<<<<<<< TRY 开始 >>>>>>>>>>>>>>>
+                        if (card.hasAttribute(PROCESSED_DATA_ATTRIBUTE)) {
+                            return;
+                        }
+        
+                        const input = card.querySelector('input[name="amount"], input[name="quantity"]');
+                        let buttonContainer = null;
+                        // 查找包含 "text-center" 类名的 div
+                        buttonContainer = card.querySelector('div.text-center');
+        
+                        if (!buttonContainer) {
+                            // 如果没找到，尝试查找卡片内的最后一个带有按钮的 div
+                            const candidateDivs = card.querySelectorAll('div');
+                            if (candidateDivs.length > 0) {
+                                const lastDiv = candidateDivs[candidateDivs.length - 1];
+                                if (lastDiv.querySelector('button')) {
+                                    buttonContainer = lastDiv;
+                                }
+                            }
+                        }
+        
+                        if (input && buttonContainer) {
+        
+                            const existingButton = buttonContainer.querySelector('button');
+                            // 确保 existingButton 存在，否则使用默认类
+                            let buttonClass = existingButton ? existingButton.className : DEFAULT_BUTTON_CLASS;
+        
+                            // A. 注入配置 (+) 按钮
+                            const configButton = document.createElement('button');
+                            configButton.className = `${buttonClass} autoamount-custom-btn`; 
+                            configButton.type = 'button';
+                            configButton.role = 'button';
+                            configButton.textContent = '+';
+                            
+                            configButton.style.fontWeight = 'bold';
+                            configButton.style.color = 'white';
+                            configButton.style.backgroundColor = '#4CAF50'; 
+                            configButton.style.textTransform = 'none';
+        
+                            configButton.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                showConfigModal();
+                            });
+                            
+                            buttonContainer.prepend(configButton);
+        
+                            // B. 注入自定义数量/时长按钮
+                            customAmounts.slice().reverse().forEach(amount => {
+                                const newButton = document.createElement('button');
+                                newButton.className = `${buttonClass} autoamount-custom-btn`; 
+                                newButton.type = 'button';
+                                newButton.role = 'button';
+                                newButton.textContent = amount;
+                                newButton.style.textTransform = 'none';
+        
+                                newButton.addEventListener('click', (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setInput(input, amount);
+                                });
+                                
+                                buttonContainer.prepend(newButton);
+                            });
+        
+                            // 标记已添加
+                            card.setAttribute(PROCESSED_DATA_ATTRIBUTE, 'true');
+                        }
+                    } catch (error) { // <<<<<<<<<<<<<<< CATCH 结束 >>>>>>>>>>>>>>>
+                        // 打印详细错误信息，这样即使有错误，模块 6 也能继续运行
+                        console.error(`[模块5-1 错误] 处理第 ${index + 1} 张卡片时发生未捕获错误:`, error);
+                        console.error("导致错误的卡片元素:", card);
+                        // 注意：这里没有设置 attribute，下次 SPA 变化还会尝试处理
+                    }
+                });
+            });
+        }
+
+        function observeCardsForAutoAmount() {
+            let debounceTimer;
+            const targetNode = document.body;
+    
+            const CHECK_SELECTORS = [
+                 'div[style="overflow: visible;"]',
+                 CARD_SELECTOR.split(',').map(s => s.trim()).join(',')
+            ];
+    
+            const observer = new MutationObserver((mutationsList) => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    
+                    const hasRelevantChanges = mutationsList.some(mutation => {
+                        return mutation.type === 'childList' &&
+                            mutation.addedNodes.length > 0 &&
+                            Array.from(mutation.addedNodes).some(node => {
+                                return node.nodeType === 1 &&
+                                    CHECK_SELECTORS.some(selector => 
+                                        node.matches(selector) || node.querySelector(selector)
+                                    );
+                            });
+                    });
+    
+                    if (hasRelevantChanges) {
+                        initAutoAmountButtons(false); 
+                    }
+                }, 100); 
+            });
+    
+            observer.observe(targetNode, {
+                childList: true,
+                subtree: true,
+            });
+            
+            function ensureInputsLoaded() {
+                let tries = 0;
+                const maxTries = 50; 
+                const timer = setInterval(() => {
+                    const inputs = document.querySelectorAll('input[name="amount"], input[name="quantity"]');
+                    
+                    if (inputs.length > 0 || tries >= maxTries) {
+                        clearInterval(timer);
+                        if (inputs.length > 0) {
+                            initAutoAmountButtons();
+                        }
+                    }
+                    tries++;
+                }, 100);
+            }
+    
+            requestAnimationFrame(ensureInputsLoaded);
+        }
+    
+        observeCardsForAutoAmount();
+    
+    })();
 
     // ======================
     // 模块6：商店内的最大时利润 本模块只使用了SimcompaniesConstantsData
@@ -3985,7 +4239,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    增加对升级中等情况的学院判断，改用fetch请求以适配苹果系统
+        // @changelog    增加自定义运行时长
 
         fetch(scriptUrl)
             .then(res => {
