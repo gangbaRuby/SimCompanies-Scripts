@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.22.1
+// @version      1.22.2
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -875,6 +875,44 @@
 
         };
 
+        // 自定义运行时长开关按钮的初始化逻辑
+        const initAutoAmountToggle = () => {
+            const btn = document.getElementById('auto-amount-toggle-btn');
+            if (!btn) return;
+
+            // 确保函数已挂载到 window，否则不执行
+            if (typeof window.isAutoAmountEnabled !== 'function') {
+                btn.textContent = '自定义运行时长: (加载中...)';
+                btn.style.backgroundColor = '#607D8B';
+                return;
+            }
+
+            const updateToggleBtn = () => {
+                const isEnabled = window.isAutoAmountEnabled();
+                btn.textContent = isEnabled ? '自定义运行时长: 🟢 已启用' : '自定义运行时长: 🔴 已禁用';
+                btn.style.backgroundColor = isEnabled ? '#4CAF50' : '#f44336';
+            };
+
+            updateToggleBtn();
+
+            // 重新绑定事件，确保使用 window 上的函数
+            btn.onclick = () => {
+                if (typeof window.isAutoAmountEnabled === 'function' &&
+                    typeof window.saveAutoAmountEnabled === 'function' &&
+                    typeof window.initAutoAmountButtons === 'function') {
+
+                    const isCurrentlyEnabled = window.isAutoAmountEnabled();
+                    const newEnabledState = !isCurrentlyEnabled;
+
+                    window.saveAutoAmountEnabled(newEnabledState);
+                    window.initAutoAmountButtons(true);
+                    updateToggleBtn();
+                } else {
+                    alert('错误：自定义运行时长控制函数未找到！');
+                }
+            };
+        };
+
         // 创建界面元素
         const createPanel = () => {
             const panel = document.createElement('div');
@@ -937,6 +975,16 @@
                     return btn;
                 })(),
                 (() => {
+                    // ⬇️ 占位按钮：初始文本为加载中 ⬇️
+                    const btn = document.createElement('button');
+                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
+                    btn.id = 'auto-amount-toggle-btn';
+                    btn.textContent = '自定义运行时长: (等待加载)';
+                    btn.style.backgroundColor = '#607D8B'; // 灰色
+                    // 初始不绑定实际逻辑，逻辑在 initAutoAmountToggle 中绑定
+                    return btn;
+                })(),
+                (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
                     btn.textContent = 'MP-?%';
@@ -985,8 +1033,17 @@
         const togglePanel = (e) => {
             e.stopPropagation();
             const content = panelElement.querySelector('.SimcompaniesRetailCalculation-panel-content');
-            content.style.display = content.style.display === 'block' ? 'none' : 'block';
-            refreshStatus();
+            const isCurrentlyVisible = content.style.display === 'block';
+
+            content.style.display = isCurrentlyVisible ? 'none' : 'block';
+
+            if (!isCurrentlyVisible) {
+                // 如果面板是打开的，刷新状态
+                refreshStatus();
+                // ⬇️ 修正：调用 initAutoAmountToggle 来刷新按钮状态 ⬇️
+                // initAutoAmountToggle 函数现在负责检查函数是否可用并更新按钮文本
+                initAutoAmountToggle();
+            }
         };
 
         // 刷新状态显示
@@ -1399,7 +1456,8 @@
 
                 // 初始状态刷新
                 refreshStatus();
-            }
+            },
+            initAutoAmountToggle: initAutoAmountToggle
         };
     })();
 
@@ -1412,12 +1470,27 @@
     (function () {
         // --- 配置项 ---
         const CUSTOM_AMOUNTS_STORAGE_KEY = 'SC_AutoAmount_CustomAmounts';
+        const ENABLED_STORAGE_KEY = 'SC_AutoAmount_Enabled'; // 新增：功能开关的存储键
         const DEFAULT_AMOUNTS_STRING = '10pm';
         const DEFAULT_BUTTON_CLASS = 'btn btn-secondary';
 
         // --- 目标元素选择器 ---
         const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center'; //前者生产，后者零售
         const PROCESSED_DATA_ATTRIBUTE = 'data-custom-amount-added';
+
+        function isAutoAmountEnabled() {
+            // 默认启用。如果存储键不存在，返回 true。
+            // 如果存储为 'false'，则返回 false。
+            const stored = localStorage.getItem(ENABLED_STORAGE_KEY);
+            if (stored === null) {
+                return true; // 默认启用
+            }
+            return stored === 'true';
+        }
+
+        function saveAutoAmountEnabled(isEnabled) {
+            localStorage.setItem(ENABLED_STORAGE_KEY, isEnabled ? 'true' : 'false');
+        }
 
         function loadCustomAmounts() {
             const stored = localStorage.getItem(CUSTOM_AMOUNTS_STORAGE_KEY);
@@ -1465,11 +1538,11 @@
                 <div id="${modalId}" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;justify-content:center;align-items:flex-start;padding-top:5vh;box-sizing:border-box;">
                     <div style="background:#333;color:#EEE;padding:0;border-radius:6px;box-shadow:0 5px 15px rgba(0,0,0,0.5);width:90%;max-width:450px;border:1px solid #555;">
                         <div style="padding:15px;border-bottom:1px solid #555;">
-                            <h4 style="margin:0;font-size:18px;font-weight:600;">设置自动填入数量/时长</h4>
+                            <h4 style="margin:0;font-size:18px;font-weight:600;">设置自定义数量/时长</h4>
                         </div>
                         <div style="padding:15px;">
                             <p style="margin-top:0;margin-bottom:15px;font-size:14px;">
-                                请输入自定义数量或运行时长，使用<strong style="color:#FF8888;">逗号（, 或 ，）</strong>分隔，可留空以禁用此功能。你可以通过输入“am”，“pm”，“hr”和“m”来快捷决定生产数量。例如: 10pm, 2hr, 30m，11:4am,5:14,字母不区分大小写，半角全角均可
+                                请输入自定义数量或运行时长，使用<strong style="color:#FF8888;">逗号（, 或 ，）</strong>分隔，你可以在插件菜单中禁用此功能。你可以通过输入“am”，“pm”，“hr”和“m”来快捷决定生产数量。例如: 10pm, 2hr, 30m，11:4am,5:14,字母不区分大小写，半角全角均可。
                             </p>
                             <textarea id="autoamount-config-input" 
                                 style="width:100%;height:80px;margin-bottom:20px;padding:8px;border:1px solid #666;border-radius:4px;box-sizing:border-box;font-size:14px;color:#EEE;background:#2C2C2C;resize:vertical;">
@@ -1510,6 +1583,16 @@
         }
 
         function initAutoAmountButtons(forceReload = false) {
+            if (!isAutoAmountEnabled()) {
+                // 如果功能被禁用，确保所有已添加的按钮被移除
+                document.querySelectorAll(`.autoamount-custom-btn`).forEach(btn => btn.remove());
+                document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach(card => {
+                    card.removeAttribute(PROCESSED_DATA_ATTRIBUTE);
+                });
+                // 退出，不添加新按钮
+                return;
+            }
+
             if (forceReload) {
                 document.querySelectorAll(`.autoamount-custom-btn`).forEach(btn => btn.remove());
                 document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach(card => {
@@ -1603,6 +1686,10 @@
                 });
             });
         }
+
+        window.isAutoAmountEnabled = isAutoAmountEnabled;
+        window.saveAutoAmountEnabled = saveAutoAmountEnabled;
+        window.initAutoAmountButtons = initAutoAmountButtons;
 
         // --- 新增时间计算函数 ---
         function getCalculatedAmount(amountString) {
@@ -4299,7 +4386,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    自定义运行时长增加指定'HH:MMam/pm' 或 'HH:MM'
+        // @changelog    在插件菜单中增加自定义运行时长开关
 
         fetch(scriptUrl)
             .then(res => {
