@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.22.2
+// @version      1.22.3
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1842,6 +1842,171 @@
             return null;
         }
 
+        const workerCode = `
+        self.onmessage = function(e) {
+        const { lwe, zn, size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
+            skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather, 
+            v, b, 
+            cogs, quality, quantity, cardIndex} = e.data;
+
+
+        // Utility functions defined inside to use local lwe and zn
+        const wv = (e, t, r) => {
+            return r === null ? lwe[e][t] : lwe[e][t].quality[r];
+        };
+        const Upt = (e, t, r, n) => t + (e + n) / r;
+        const Hpt = (e, t, r, n, a) => {
+            const o = (n + e) / ((t - a) * (t - a));
+            return e - (r - t) * (r - t) * o;
+        };
+        const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
+        const Bpt = (e, t, r, n, a, o) => {
+            const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+            const s = Math.min(Math.max(2 - n, 0), 2),
+                  l = Math.max(0.9, s / 2 + 0.5),
+                  c = r / 12;
+            const d = zn.PROFIT_PER_BUILDING_LEVEL *
+                (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
+                g *
+                (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
+                (t.modeledStoreWages ?? 0);
+            const h = t.modeledUnitsSoldAnHour * l;
+            const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
+            const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
+            return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
+        };
+        const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
+            const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
+            if (u <= 0) return NaN;
+            const d = u / acc / size;
+            let p = d - d * salesModifier / 100;
+            return weather && (p /= weather.sellingSpeedMultiplier), p
+        };
+
+        // Initial debug log
+
+        // profit calculation loop
+        let currentPrice = Math.floor(cogs / quantity) || 1;
+        let bestPrice = currentPrice;
+        let maxProfit = -Infinity;
+        let _, w, revenue, wagesTotal, secondsToFinish = 0
+
+
+        while (currentPrice > 0) {
+
+            w = zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? weather : void 0);
+
+            revenue = currentPrice * quantity;
+            wagesTotal = Math.ceil(w * wages * acceleration * b / 60 / 60);
+            secondsToFinish = w;
+
+            if (!secondsToFinish || secondsToFinish <= 0) break;
+
+            let profit = (revenue - cogs - wagesTotal) / secondsToFinish;
+            if (profit > maxProfit) {
+                maxProfit = profit;
+                bestPrice = currentPrice;
+            } else if (maxProfit > 0 && profit < 0) { //有正利润后出现负利润提前终端循环
+                break;
+            }
+
+            if (currentPrice < 8) {
+                currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+            } else if (currentPrice < 2001) {
+                currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+            } else {
+                currentPrice = Math.round(currentPrice + 1);
+            }
+        }
+
+        const finalW = zL(
+            buildingKind, 
+            wv(economyState, resource.dbLetter, forceQuality ?? null), 
+            parseFloat(quantity), 
+            v, 
+            bestPrice, // 使用找到的最佳价格
+            forceQuality === undefined ? quality : 0, 
+            saturation, 
+            acceleration, 
+            size, 
+            resource.retailSeason === "Summer" ? weather : undefined
+        );
+        
+        // 计算对应的工资总额
+        const calculatedWages = Math.ceil(finalW * wages * acceleration * b / 3600);
+        
+        // 发送结果，带上 calculatedWages
+        self.postMessage({ 
+            bestPrice: bestPrice, 
+            maxProfit: maxProfit, 
+            calculatedWages: calculatedWages, // <--- 新增这个
+            cardIndex: cardIndex 
+        });
+
+        self.postMessage({ 
+            bestPrice: bestPrice, 
+            maxProfit: maxProfit, 
+            cardIndex: cardIndex // 返回 ID 以供主线程识别
+        });
+    };
+    `;
+
+        const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+
+        // 注册 Worker 异步回调 (处理结果和校验)
+        profitWorker.onmessage = (event) => {
+            // 1. 接收 Worker 返回的数据 (包括计算出的预计工资 calculatedWages)
+            const { bestPrice, maxProfit, calculatedWages, cardIndex } = event.data;
+
+            // 使用 index 查找对应的卡片
+            const card = document.querySelectorAll('div[style="overflow: visible;"]')[cardIndex];
+            if (!card) return;
+
+            const priceInput = card.querySelector('input[name="price"]');
+            const btn = card.querySelector(`button[data-index="${cardIndex}"]`);
+            const profitDisplay = card.querySelector('.auto-profit-display');
+
+            if (!priceInput || !btn || !profitDisplay) return;
+
+            // 2. 重新获取 comp 实例，准备获取 size 和 wagesTotal
+            const comp = findReactComponent(priceInput);
+            if (!comp) return;
+            const size = comp.props.size || 1; // 修正：在回调中获取 size
+
+            // 3. 设置价格 (触发 React State 异步更新)
+            setInput(priceInput, bestPrice.toFixed(2));
+
+            // 4. 更新显示 UI
+            const hourlyProfit = (maxProfit / size) * 3600;
+
+            // 更好的显示方式，包含预计工资作为校验参考
+            profitDisplay.innerHTML = `
+                每级时利润: ${hourlyProfit.toFixed(2)}
+            `;
+            profitDisplay.style.background = '#4CAF50'; // 绿色表示成功
+
+            btn.textContent = '最大时利润';
+            btn.disabled = false;
+
+            // 5. 异步校验 (等待 React State 更新)
+            setTimeout(() => {
+                // 在延迟后重新获取最新的 comp 实例 (理论上 comp 实例不变，但能确保访问最新 state)
+                const updatedComp = findReactComponent(priceInput);
+                if (!updatedComp) return;
+
+                const actualWages = updatedComp.state.wagesTotal;
+
+                // 校验：如果计算出的工资与游戏显示的工资差值大于 1 (容忍微小误差)
+                if (Math.abs(calculatedWages - actualWages) > 1) {
+                    alert("计算利润与显示利润不相符，请输入具体数量或尝试更新基本数据（左下角按钮）,多次提醒且价格未发生改变请更新脚本或联系作者");
+
+                    // 改变显示颜色，给出视觉警告
+                    profitDisplay.style.background = 'red'; 
+                }
+            }, 100); // 延迟 300 毫秒，通常足以等待 React 完成一次 State 更新。
+
+        };
+
         // 主功能
         function initAutoPricing() {
             // console.log("initAutoPricing 被执行", document.querySelectorAll('input[name="price"]').length);
@@ -1860,7 +2025,7 @@
                 }
                 const cards = document.querySelectorAll('div[style="overflow: visible;"]');
 
-                cards.forEach(card => {
+                cards.forEach((card, index) => {
                     if (card.dataset.autoPricingAdded) return;
 
                     const priceInput = card.querySelector('input[name="price"]');
@@ -1872,16 +2037,30 @@
                     const btn = document.createElement('button');
                     btn.textContent = '最大时利润';
                     btn.type = 'button';
+                    btn.setAttribute('data-index', index); // 修正：添加索引以供 onmessage 查找
                     btn.style = `
-                        margin-top: 5px;
-                        background: #2196F3;
-                        color: white;
-                        border: none;
-                        padding: 5px 10px;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        width: 100%;
-                     `;
+                    margin-top: 5px;
+                    background: #2196F3;
+                    color: white;
+                    border: none;
+                    padding: 5px 10px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    width: 100%;
+                    `;
+
+                    // 新增：准备 maxProfit 显示元素
+                    const profitDisplay = document.createElement('div');
+                    profitDisplay.className = 'auto-profit-display';
+                    profitDisplay.textContent = `等待计算...`;
+                    profitDisplay.style = `
+                    margin-top: 5px;
+                    font-size: 14px;
+                    color: white;
+                    background: gray;
+                    padding: 4px 8px;
+                    text-align: center;
+                    `;
 
                     btn.onclick = (e) => {
                         e.preventDefault();
@@ -1891,110 +2070,50 @@
                             alert("请尝试更新基本数据（左下角按钮）");
                             return;
                         }
-                        lwe = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).retailInfo;
-                        zn = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
+                        // 禁用按钮并显示计算中
+                        btn.textContent = '最大时利润 (计算中...)';
+                        btn.disabled = true;
+                        profitDisplay.textContent = `计算中...`;
+                        profitDisplay.style.background = 'gray';
+
+                        const lwe = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).retailInfo;
+                        const zn = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
 
                         // 直接从comp.props赋值
-                        size = comp.props.size;
-                        acceleration = comp.props.acceleration;
-                        economyState = comp.props.economyState;
-                        resource = comp.props.resource;
-                        salesModifierWithRecreationBonus = comp.props.salesModifierWithRecreationBonus;
-                        skillCMO = comp.props.skillCMO;
-                        skillCOO = comp.props.skillCOO;
-                        saturation = comp.props.saturation;
-                        administrationOverhead = comp.props.administrationOverhead;
-                        wages = comp.props.wages;
-                        buildingKind = comp.props.buildingKind;
-                        forceQuality = comp.props.forceQuality;
+                        const size = comp.props.size;
+                        const acceleration = comp.props.acceleration;
+                        const economyState = comp.props.economyState;
+                        const resource = comp.props.resource;
+                        const salesModifierWithRecreationBonus = comp.props.salesModifierWithRecreationBonus;
+                        const skillCMO = comp.props.skillCMO;
+                        const skillCOO = comp.props.skillCOO;
+                        const saturation = comp.props.saturation;
+                        const administrationOverhead = comp.props.administrationOverhead;
+                        const wages = comp.props.wages;
+                        const buildingKind = comp.props.buildingKind;
+                        const forceQuality = comp.props.forceQuality;
+                        const weather = comp.props.weather ?? null;
 
                         // 直接从comp.state赋值
-                        cogs = comp.state.cogs;
-                        quality = comp.state.quality;
-                        quantity = comp.state.quantity;
-
-                        // console.log(`size:${size}, acceleration:${acceleration}, economyState：${economyState},
-                        // resource：${resource},salesModifierWithRecreationBonus:${salesModifierWithRecreationBonus},
-                        // skillCMO：${skillCMO}, skillCOO:${skillCOO},
-                        // saturation:${saturation}, administrationOverhead:${administrationOverhead}, wages:${wages},
-                        // buildingKind:${buildingKind}, forceQuality:${forceQuality}，cogs:${cogs}, quality:${quality}, quantity:${quantity}`)
-                        // console.log(`zn.PROFIT_PER_BUILDING_LEVEL: ${zn.PROFIT_PER_BUILDING_LEVEL}`)
-
-                        let currentPrice = Math.floor(cogs / quantity) || 1;
-                        let bestPrice = currentPrice;
-                        let maxProfit = -Infinity;
-                        let _, v, b, w, revenue, wagesTotal, secondsToFinish, currentWagesTotal = 0;
-                        // console.log(`currentPrice：${currentPrice}, bestPrice：${bestPrice}， maxProfit：${maxProfit}`)
-
-                        // setInput(input, currentPrice.toFixed(2));
+                        const cogs = comp.state.cogs;
+                        const quality = comp.state.quality;
+                        const quantity = comp.state.quantity;
 
                         // 以下两个不受currentPrice影响 可不参与循环
-                        v = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
-                        b = Ul(administrationOverhead, skillCOO);
+                        const v = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
+                        const b = Ul(administrationOverhead, skillCOO);
 
-                        while (currentPrice > 0) {
-
-
-                            w = zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? comp.props.weather : void 0);
-
-                            // console.log(`v:${v}, b:${b}, w:${w}`)
-
-                            revenue = currentPrice * quantity;
-                            wagesTotal = Math.ceil(w * wages * acceleration * b / 60 / 60);
-                            secondsToFinish = w;
-
-                            // console.log(`revenue:${revenue}, wagesTotal:${wagesTotal}, secondsToFinish:${secondsToFinish}`)
-                            if (!secondsToFinish || secondsToFinish <= 0) break;
-
-                            let profit = (revenue - cogs - wagesTotal) / secondsToFinish;
-                            if (profit > maxProfit) {
-                                maxProfit = profit;
-                                bestPrice = currentPrice;
-                            } else if (maxProfit > 0 && profit < 0) { //有正利润后出现负利润提前终端循环
-                                break;
-                            }
-                            // console.log(`当前定价：${bestPrice}, 当前最大秒利润：${maxProfit}`)
-                            if (currentPrice < 8) {
-                                currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-                            } else if (currentPrice < 2001) {
-                                currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
-                            } else {
-                                currentPrice = Math.round(currentPrice + 1);
-                            }
-                        }
-
-                        setInput(priceInput, bestPrice.toFixed(2));
-
-                        // 先移除旧的 maxProfit 显示（避免重复）
-                        const oldProfit = card.querySelector('.auto-profit-display');
-                        if (oldProfit) oldProfit.remove();
-
-                        // 创建新的 maxProfit 显示元素
-                        const profitDisplay = document.createElement('div');
-                        profitDisplay.className = 'auto-profit-display';
-                        profitDisplay.textContent = `每级时利润: ${((maxProfit / size) * 3600).toFixed(2)}`;
-                        profitDisplay.style = `
-                            margin-top: 5px;
-                            font-size: 14px;
-                            color: white;
-                            background: gray;
-                            padding: 4px 8px;
-                            text-align: center;
-                        `;
-
-                        // 插入按钮下方
-                        btn.parentNode.insertBefore(profitDisplay, btn.nextSibling);
-
-                        // 校验用 如果误差大则提示用户尝试更新数据
-                        currentWagesTotal = Math.ceil(zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, bestPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? comp.props.weather : void 0) * wages * acceleration * b / 60 / 60);
-                        // console.log(`currentWagesTotal:${currentWagesTotal}, comp.state.wagesTotal: ${comp.state.wagesTotal}`)
-                        if (currentWagesTotal !== comp.state.wagesTotal) {
-                            alert("计算利润与显示利润不相符，请输入具体数量或尝试更新基本数据（左下角按钮）,多次提醒且价格未发生改变请更新脚本或联系作者");
-                        }
+                        profitWorker.postMessage({
+                            lwe, zn, size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
+                            skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
+                            v, b,
+                            cogs, quality, quantity, cardIndex: index
+                        });
 
                     };
 
                     priceInput.parentNode.insertBefore(btn, priceInput.nextSibling);
+                    priceInput.parentNode.insertBefore(profitDisplay, btn.nextSibling); // 插入显示元素
                     card.dataset.autoPricingAdded = 'true';
                 });
             } catch (err) {
@@ -4386,7 +4505,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    在插件菜单中增加自定义运行时长开关
+        // @changelog    优化商店中树的计算，为计算错误增加颜色提醒
 
         fetch(scriptUrl)
             .then(res => {
