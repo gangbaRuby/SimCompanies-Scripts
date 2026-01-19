@@ -7,8 +7,8 @@
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @updateURL    https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js
-// @downloadURL  https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js
+// @updateURL    https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js
+// @downloadURL  https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js
 // ==/UserScript==
 
 (function () {
@@ -181,7 +181,7 @@
         "forrest_04.png": "trees.png",
         "town_square_01.png": "plaza.png",
     };
-    const BASE_URL = 'https://simcompanies-scripts.pages.dev/image_cache/';
+    const BASE_URL = 'https://sc.22-7.top/scripts/image_cache/';
     const AUTH_URL = '/api/v3/companies/auth-data/';
     const THEME_KEY = 'SC_USER_THEME';
     const CACHE_KEY_REPLACEMENT = 'SC_REPLACEMENT_CACHE'; // 新增的替换图片缓存 Key
@@ -820,8 +820,8 @@
     }
 
     function checkUpdate() {
-        const scriptUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js?t=' + Date.now();
-        const downloadUrl = 'https://simcompanies-scripts.pages.dev/oldBuildingsGraphic.user.js';
+        const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
+        const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
         // @changelog  更改为根据css替换图片，追加森林苗圃前后景替换，尚未更新树木替换，保留起重机以判断建筑状态
 
         fetch(scriptUrl)

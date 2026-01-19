@@ -6,8 +6,8 @@
 // @description  查看交易所此刻冰淇淋的融化情况
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
-// @updateURL    https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js
-// @downloadURL  https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js
+// @updateURL    https://sc.22-7.top/scripts/checkIceCreamMeltInMarket.user.js
+// @downloadURL  https://sc.22-7.top/scripts/checkIceCreamMeltInMarket.user.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
 // @grant        GM_info
 // ==/UserScript==
@@ -589,8 +589,8 @@
     createFloatingBox(true);
 
     const localVersion = GM_info.script.version;
-    const scriptUrl = 'https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js?t=' + Date.now();
-    const downloadUrl = 'https://simcompanies-scripts.pages.dev/checkIceCreamMeltInMarket.user.js';
+    const scriptUrl = 'https://sc.22-7.top/scripts/checkIceCreamMeltInMarket.user.js?t=' + Date.now();
+    const downloadUrl = 'https://sc.22-7.top/scripts/checkIceCreamMeltInMarket.user.js';
 
     function compareVersions(v1, v2) {
         const a = v1.split('.').map(Number);

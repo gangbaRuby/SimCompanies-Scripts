@@ -6,8 +6,8 @@
 // @description  在高管详情页和公司主页的高管详情页展示高管在所有公司的培训记录
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
-// @updateURL    https://simcompanies-scripts.pages.dev/showExecTrainingLogs.user.js
-// @downloadURL  https://simcompanies-scripts.pages.dev/showExecTrainingLogs.user.js
+// @updateURL    https://sc.22-7.top/scripts/showExecTrainingLogs.user.js
+// @downloadURL  https://sc.22-7.top/scripts/showExecTrainingLogs.user.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
 // @grant        GM_info
 // ==/UserScript==
@@ -222,8 +222,8 @@
 
   // 检测更新
   const localVersion = GM_info.script.version;
-  const scriptUrl = 'https://simcompanies-scripts.pages.dev/showExecTrainingLogs.user.js?t=' + Date.now();
-  const downloadUrl = 'https://simcompanies-scripts.pages.dev/showExecTrainingLogs.user.js';
+  const scriptUrl = 'https://sc.22-7.top/scripts/showExecTrainingLogs.user.js?t=' + Date.now();
+  const downloadUrl = 'https://sc.22-7.top/scripts/showExecTrainingLogs.user.js';
 
   function compareVersions(v1, v2) {
     const a = v1.split('.').map(Number);

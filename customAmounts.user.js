@@ -7,8 +7,8 @@
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @updateURL    https://simcompanies-scripts.pages.dev/customAmounts.user.js
-// @downloadURL  https://simcompanies-scripts.pages.dev/customAmounts.user.js
+// @updateURL    https://sc.22-7.top/scripts/customAmounts.user.js
+// @downloadURL  https://sc.22-7.top/scripts/customAmounts.user.js
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
@@ -346,8 +346,8 @@
     }
 
     function checkUpdate() {
-        const scriptUrl = 'https://simcompanies-scripts.pages.dev/customAmounts.user.js?t=' + Date.now();
-        const downloadUrl = 'https://simcompanies-scripts.pages.dev/customAmounts.user.js';
+        const scriptUrl = 'https://sc.22-7.top/scripts/customAmounts.user.js?t=' + Date.now();
+        const downloadUrl = 'https://sc.22-7.top/scripts/customAmounts.user.js';
         // @changelog    自定义运行时长增加指定'HH:MMam/pm' 或 'HH:MM'
 
         fetch(scriptUrl)

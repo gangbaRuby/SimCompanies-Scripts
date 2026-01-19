@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.23.0
+// @version      1.24.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
-// @updateURL    https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js
-// @downloadURL  https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js
+// @updateURL    https://sc.22-7.top/scripts/autoMaxPPHPL.user.js
+// @downloadURL  https://sc.22-7.top/scripts/autoMaxPPHPL.user.js
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
@@ -1014,7 +1014,7 @@
                     // 更新DOM
                     const verNode = document.getElementById("script-version");
                     if (verNode) {
-                        verNode.innerHTML = `${version} <a href="https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js" span style="color:#ff6;">（发现新版本：${latestVersion}）</span>`;
+                        verNode.innerHTML = `${version} <a href="https://sc.22-7.top/scripts/autoMaxPPHPL.user.js" span style="color:#ff6;">（发现新版本：${latestVersion}）</span>`;
                     }
                     clearInterval(checkTimer); // 停止轮询
                 } else if (hasNewVersion === false) {
@@ -1842,13 +1842,59 @@
             return null;
         }
 
+        function showToast(message, type = 'error') {
+            let toast = document.getElementById('auto-pricing-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'auto-pricing-toast';
+                toast.style = `
+                    position: fixed; 
+                    top: 20px; 
+                    left: 50%; 
+                    transform: translateX(-50%);
+                    background: rgba(0,0,0,0.9); 
+                    color: white; 
+                    padding: 12px 20px;
+                    border-radius: 8px; 
+                    z-index: 10000; 
+                    transition: all 0.3s ease;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
+                    font-size: 14px; 
+                    pointer-events: none;
+                    opacity: 0;
+                    /* 解决显示不全的核心配置 */
+                    max-width: 85vw;           /* 最大宽度为屏幕宽度的 85% */
+                    width: max-content;        /* 内容多宽就显示多宽 */
+                    min-width: 200px;          /* 设置一个最小宽度防止太窄 */
+                    word-wrap: break-word;     /* 允许长单词换行 */
+                    white-space: normal;       /* 允许文字自动换行 */
+                    text-align: center;
+                    box-sizing: border-box;
+                    line-height: 1.4;
+                `;
+                document.body.appendChild(toast);
+            }
+
+            // 设置边框颜色区分类型
+            toast.style.borderLeft = type === 'error' ? '5px solid #ff4444' : '5px solid #4CAF50';
+
+            toast.textContent = message;
+            toast.style.opacity = '1';
+            toast.style.top = '25px';
+
+            clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.top = '10px';
+            }, 3500); // 增加到 3.5 秒，方便阅读换行后的文字
+        }
+
         const workerCode = `
         self.onmessage = function(e) {
         const { lwe, zn, size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
             skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
             v, b,
-            cogs, quality, quantity, cardIndex} = e.data;
-
+            cogs, quality, quantity, cardIndex, retryCount} = e.data;
 
         // Utility functions defined inside to use local lwe and zn
         const wv = (e, t, r) => {
@@ -1940,23 +1986,54 @@
             bestPrice: bestPrice,
             maxProfit: maxProfit,
             calculatedWages: calculatedWages, // <--- 新增这个
-            cardIndex: cardIndex
+            cardIndex: cardIndex,
+            retryCount: retryCount
         });
 
-        self.postMessage({
-            bestPrice: bestPrice,
-            maxProfit: maxProfit,
-            cardIndex: cardIndex // 返回 ID 以供主线程识别
-        });
     };
     `;
 
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
 
+        function triggerCalculation(comp, index, retryCount = 0) {
+            if (localStorage.getItem('SimcompaniesConstantsData') == null) {
+                showToast("请先点击左下角更新基础数据", 'error');
+                return;
+            }
+
+            const lweData = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).retailInfo;
+            const znData = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
+
+            // 解构 Props
+            const {
+                size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
+                skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather
+            } = comp.props;
+
+            // 解构 State
+            const { cogs, quality, quantity } = comp.state;
+
+            // 在主线程预计算 Worker 无法访问的函数结果
+            // ⚠️ 这里直接使用了父作用域中的 Ul 函数
+            const vVal = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
+            const bVal = Ul(administrationOverhead, skillCOO);
+
+            profitWorker.postMessage({
+                lwe: lweData, zn: znData,
+                size, acceleration, economyState, resource,
+                wages, buildingKind, forceQuality, weather,
+                v: vVal, b: bVal, // 传入预计算结果
+                skillCMO, skillCOO, saturation, // 备用
+                cogs, quality, quantity,
+                cardIndex: index,
+                retryCount: retryCount
+            });
+        }
+
         // 注册 Worker 异步回调 (处理结果和校验)
         profitWorker.onmessage = (event) => {
             // 1. 接收 Worker 返回的数据 (包括计算出的预计工资 calculatedWages)
-            const { bestPrice, maxProfit, calculatedWages, cardIndex } = event.data;
+            const { bestPrice, maxProfit, calculatedWages, cardIndex, retryCount } = event.data;
 
             // 使用 index 查找对应的卡片
             const card = document.querySelectorAll('div[style="overflow: visible;"]')[cardIndex];
@@ -1990,39 +2067,45 @@
 
             // 5. 异步校验 (等待 React State 更新)
             setTimeout(() => {
-                // 在延迟后重新获取最新的 comp 实例 (理论上 comp 实例不变，但能确保访问最新 state)
                 const updatedComp = findReactComponent(priceInput);
                 if (!updatedComp) return;
 
                 const actualWages = updatedComp.state.wagesTotal;
 
-                // 校验：如果计算出的工资与游戏显示的工资差值大于 1 (容忍微小误差)
+                // 校验误差
                 if (Math.abs(calculatedWages - actualWages) > 1) {
-                    alert("计算利润与显示利润不相符，请输入具体数量或尝试更新基本数据（左下角按钮）,多次提醒且价格未发生改变请更新脚本或联系作者");
+                    if (retryCount < 5) {
+                        const newQty = updatedComp.state.quantity;
+                        // console.log(`[修正重试 ${retryCount + 1}/3] 数量已更新为: ${newQty}，重新发起计算...`);
 
-                    // 改变显示颜色，给出视觉警告
-                    profitDisplay.style.background = 'red';
+                        profitDisplay.style.background = '#2196F3'; // 蓝色提示正在修正
+                        profitDisplay.textContent = '修正数量中...';
+
+                        // ⚠️ 这里的 triggerCalculation 必须在 initAutoPricing 外层定义
+                        // 或者通过 card.doAutoCalc(updatedComp, retryCount + 1) 调用
+                        if (typeof triggerCalculation === "function") {
+                            triggerCalculation(updatedComp, cardIndex, retryCount + 1);
+                        } else {
+                            // console.error("triggerCalculation 函数未定义，请确保它在作用域内。");
+                        }
+                    } else {
+                        profitDisplay.style.background = '#f44336'; // 最终失败变红
+                        showToast("利润计算偏差：建议手动输入具体数量或更新基础数据,依然报错请联系Rabbit House", 'error');
+                    }
                 }
-            }, 100); // 延迟 300 毫秒，通常足以等待 React 完成一次 State 更新。
+            }, 100); // 100ms 等待 React 状态更新
 
         };
 
         // 主功能
         function initAutoPricing() {
-            // console.log("initAutoPricing 被执行", document.querySelectorAll('input[name="price"]').length);
-
             try {
                 const input = document.querySelector('input[name="price"]');
-                if (!input) {
-                    // console.warn("[AutoPricing] Price input not found!");
-                    return;
-                }
+                if (!input) return;
 
                 const reactInstance = findReactComponent(input);
-                if (!reactInstance) {
-                    console.warn("[AutoPricing] React component not found!", Object.keys(input));
-                    return;
-                }
+                if (!reactInstance) return;
+
                 const cards = document.querySelectorAll('div[style="overflow: visible;"]');
 
                 cards.forEach((card, index) => {
@@ -2037,88 +2120,62 @@
                     const btn = document.createElement('button');
                     btn.textContent = '最大时利润';
                     btn.type = 'button';
-                    btn.setAttribute('data-index', index); // 修正：添加索引以供 onmessage 查找
-                    btn.style = `
-                    margin-top: 5px;
-                    background: #2196F3;
-                    color: white;
-                    border: none;
-                    padding: 5px 10px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    width: 100%;
-                    `;
+                    btn.setAttribute('data-index', index);
+                    btn.style = `margin-top: 5px; background: #2196F3; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; width: 100%;`;
 
-                    // 新增：准备 maxProfit 显示元素
                     const profitDisplay = document.createElement('div');
                     profitDisplay.className = 'auto-profit-display';
                     profitDisplay.textContent = `等待计算...`;
-                    profitDisplay.style = `
-                    margin-top: 5px;
-                    font-size: 14px;
-                    color: white;
-                    background: gray;
-                    padding: 4px 8px;
-                    text-align: center;
-                    `;
+                    profitDisplay.style = `margin-top: 5px; font-size: 14px; color: white; background: gray; padding: 4px 8px; text-align: center; border-radius: 4px;`;
 
-                    btn.onclick = (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-
+                    // --- 提取核心发送逻辑 ---
+                    // 这样按钮点击能用，后续重试也能用
+                    const startCalc = (targetComp, retryIdx = 0) => {
                         if (localStorage.getItem('SimcompaniesConstantsData') == null) {
-                            alert("请尝试更新基本数据（左下角按钮）");
+                            showToast("请尝试更新基本数据（左下角按钮）"); // 替换了 alert
                             return;
                         }
-                        // 禁用按钮并显示计算中
-                        btn.textContent = '最大时利润 (计算中...)';
-                        btn.disabled = true;
-                        profitDisplay.textContent = `计算中...`;
-                        profitDisplay.style.background = 'gray';
+
+                        // UI反馈
+                        if (retryIdx === 0) {
+                            btn.textContent = '最大时利润 (计算中...)';
+                            btn.disabled = true;
+                        }
+                        profitDisplay.textContent = retryIdx > 0 ? `修正中(${retryIdx})...` : `计算中...`;
 
                         const lwe = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).retailInfo;
                         const zn = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
 
-                        // 直接从comp.props赋值
-                        const size = comp.props.size;
-                        const acceleration = comp.props.acceleration;
-                        const economyState = comp.props.economyState;
-                        const resource = comp.props.resource;
-                        const salesModifierWithRecreationBonus = comp.props.salesModifierWithRecreationBonus;
-                        const skillCMO = comp.props.skillCMO;
-                        const skillCOO = comp.props.skillCOO;
-                        const saturation = comp.props.saturation;
-                        const administrationOverhead = comp.props.administrationOverhead;
-                        const wages = comp.props.wages;
-                        const buildingKind = comp.props.buildingKind;
-                        const forceQuality = comp.props.forceQuality;
-                        const weather = comp.props.weather ?? null;
+                        // 重新获取最新的 state 和 props
+                        const { size, acceleration, economyState, resource, salesModifierWithRecreationBonus, skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather = null } = targetComp.props;
+                        const { cogs, quality, quantity } = targetComp.state;
 
-                        // 直接从comp.state赋值
-                        const cogs = comp.state.cogs;
-                        const quality = comp.state.quality;
-                        const quantity = comp.state.quantity;
-
-                        // 以下两个不受currentPrice影响 可不参与循环
                         const v = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
                         const b = Ul(administrationOverhead, skillCOO);
 
                         profitWorker.postMessage({
                             lwe, zn, size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
                             skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
-                            v, b,
-                            cogs, quality, quantity, cardIndex: index
+                            v, b, cogs, quality, quantity,
+                            cardIndex: index,
+                            retryCount: retryIdx // 发送当前是第几次尝试
                         });
-
                     };
 
+                    btn.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        startCalc(comp, 0); // 初始重试次数为 0
+                    };
+
+                    // 将函数引用挂载在 DOM 上，方便 onmessage 找到并调用重试
+                    card.doAutoCalc = startCalc;
+
                     priceInput.parentNode.insertBefore(btn, priceInput.nextSibling);
-                    priceInput.parentNode.insertBefore(profitDisplay, btn.nextSibling); // 插入显示元素
+                    priceInput.parentNode.insertBefore(profitDisplay, btn.nextSibling);
                     card.dataset.autoPricingAdded = 'true';
                 });
-            } catch (err) {
-                // console.error("[AutoPricing] Critical error:", err);
-            }
+            } catch (err) { }
         }
 
         // 启动观察器，只在商品卡片变化时运行自动定价逻辑
@@ -4757,13 +4814,12 @@
 
 
     // ======================
-    // 检测更新
+    // 检测更新模块
     // ======================
     function compareVersions(v1, v2) {
         const a = v1.split('.').map(Number);
         const b = v2.split('.').map(Number);
         const len = Math.max(a.length, b.length);
-
         for (let i = 0; i < len; i++) {
             const num1 = a[i] || 0;
             const num2 = b[i] || 0;
@@ -4773,39 +4829,170 @@
         return 0;
     }
 
+    function showUpdateToast(version, changelog, downloadUrl) {
+        // 1. 注入样式
+        const style = document.createElement('style');
+        style.textContent = `
+            .sc-update-toast {
+                position: fixed; top: -80px; left: 50%; transform: translateX(-50%);
+                z-index: 10001; background: #2196F3; color: white;
+                padding: 10px 20px; border-radius: 50px; cursor: pointer;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+                max-width: 90vw; width: max-content;
+                font-family: sans-serif; box-sizing: border-box;
+            }
+            .sc-update-toast.show { top: 20px; }
+            
+            /* 展开后的卡片样式 */
+            .sc-update-toast.expanded {
+                border-radius: 12px; padding: 20px; width: 400px;
+                background: #ffffff; color: #333; cursor: default;
+                border-top: 5px solid #2196F3;
+            }
+            
+            .sc-update-header {
+                margin: 0; font-size: 14px; font-weight: bold;
+                display: flex; align-items: center; justify-content: center; gap: 8px;
+            }
+            .sc-update-toast.expanded .sc-update-header {
+                color: #2196F3; font-size: 18px; justify-content: flex-start;
+            }
+
+            /* 右上角关闭按钮 */
+            .sc-update-close {
+                position: absolute; top: 10px; right: 12px;
+                display: none; cursor: pointer; font-size: 20px; color: #999;
+                line-height: 1; padding: 5px;
+            }
+            .sc-update-toast.expanded .sc-update-close { display: block; }
+            .sc-update-close:hover { color: #333; }
+
+            /* 内容区域 */
+            .sc-update-body {
+                max-height: 0; opacity: 0; transition: all 0.3s ease; overflow: hidden;
+            }
+            .sc-update-toast.expanded .sc-update-body {
+                max-height: 400px; opacity: 1; margin-top: 15px;
+            }
+
+            .sc-changelog-box {
+                background: #f5f7f9; padding: 12px; border-radius: 6px;
+                margin: 10px 0; color: #555; font-size: 13px;
+                border-left: 3px solid #ddd; max-height: 150px; overflow-y: auto;
+            }
+
+            /* 底部按钮区域 */
+            .sc-update-actions {
+                display: flex; justify-content: space-between; align-items: center; margin-top: 20px;
+            }
+            .sc-btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: bold; }
+            .sc-btn-primary { background: #2196F3; color: white; }
+            .sc-btn-link { background: transparent; color: #999; text-decoration: underline; padding: 8px 0; }
+            .sc-btn-link:hover { color: #666; }
+        `;
+        document.head.appendChild(style);
+
+        // 2. HTML 结构
+        const toast = document.createElement('div');
+        toast.className = 'sc-update-toast';
+        toast.innerHTML = `
+            <div class="sc-update-close" id="sc-close" title="暂时关闭">&times;</div>
+            <div class="sc-update-header" id="sc-title">📢 发现新版本 v${version} (点击查看)</div>
+            <div class="sc-update-body">
+                <p style="margin:0; font-weight:bold;">更新日志：</p>
+                <div class="sc-changelog-box">${changelog.replace(/\n/g, '<br>') || '修复已知问题，优化性能。'}</div>
+                <p style="font-size: 11px; color: #999; margin: 10px 0;">
+                    提示：忽略后将不再提示此版本。
+                </p>
+                <div class="sc-update-actions">
+                    <button class="sc-btn sc-btn-link" id="sc-ignore-forever">忽略此次更新</button>
+                    <button class="sc-btn sc-btn-primary" id="sc-confirm">前往更新</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(toast);
+
+        // 3. 入场
+        setTimeout(() => toast.classList.add('show'), 100);
+
+        // 4. 交互逻辑
+
+        // 点击展开
+        toast.onclick = (e) => {
+            if (!toast.classList.contains('expanded')) {
+                toast.classList.add('expanded');
+                document.getElementById('sc-title').innerHTML = `🚀 发现新版本 v${version}`;
+            }
+        };
+
+        // 右上角关闭：仅仅是本次消失
+        document.getElementById('sc-close').onclick = (e) => {
+            e.stopPropagation();
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        };
+
+        // 左下角：忽略此版本
+        document.getElementById('sc-ignore-forever').onclick = (e) => {
+            e.stopPropagation();
+            localStorage.setItem('sc_ignored_version', version);
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        };
+
+        // 右下角：去更新
+        document.getElementById('sc-confirm').onclick = (e) => {
+            e.stopPropagation();
+            window.open(downloadUrl, '_blank');
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        };
+    }
+
     function checkUpdate() {
-        const scriptUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js?t=' + Date.now();
-        const downloadUrl = 'https://simcompanies-scripts.pages.dev/autoMaxPPHPL.user.js';
-        // @changelog    增加交易所高亮当前最高时利润订单，100级建筑运行24H理论最优平均时利润，扫货模拟
+        const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
+        const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
+        // @changelog    更换插件地址，更好的未填入数量弹出提示，更好的更新提示
 
         fetch(scriptUrl)
-            .then(res => {
-                if (!res.ok) throw new Error('获取失败');
-                return res.text();
-            })
+            .then(res => res.text())
             .then(remoteText => {
                 const matchVersion = remoteText.match(/^\s*\/\/\s*@version\s+([0-9.]+)/m);
                 const matchChange = remoteText.match(/^\s*\/\/\s*@changelog\s+(.+)/m);
                 if (!matchVersion) return;
 
-                latestVersion = matchVersion[1];
+                latestVersion = matchVersion[1]; // 确保全局变量被更新
                 const changeLog = matchChange ? matchChange[1] : '';
 
-                if (compareVersions(latestVersion, localVersion) > 0) {
-                    console.log(`📢 检测到新版本 v${latestVersion}`);
-                    if (confirm(`自动计算最大时利润插件检测到新版本 v${latestVersion}，是否前往更新？\n\nv${latestVersion} ${changeLog}\n\n关于版本号说明 1.X.Y ，X为增添新功能或修复不可用，Y为细节修改不影响功能，如不需更新可将Y或其它位置修改为较大值。`)) {
-                        window.open(downloadUrl, '_blank');
+                // 1. 首先进行版本比较
+                const isNewer = compareVersions(latestVersion, localVersion) > 0;
+
+                // 2. 只有确实有新版本时，才将 hasNewVersion 设为 true
+                if (isNewer) {
+                    hasNewVersion = true; // 恢复你的原有逻辑
+                    console.log(`📢 发现新版本 v${latestVersion}`);
+
+                    // 3. 检查是否被用户手动忽略过
+                    const ignoredVersion = localStorage.getItem('sc_ignored_version');
+                    if (ignoredVersion && compareVersions(ignoredVersion, latestVersion) >= 0) {
+                        console.log(`[Update] 用户已忽略此版本，不弹出 UI 提示`);
+                        return;
                     }
-                    hasNewVersion = true;
+
+                    // 4. 如果没有被忽略，则弹出 UI 提示
+                    showUpdateToast(latestVersion, changeLog, downloadUrl);
                 } else {
-                    console.log("✅ 当前已是最新版本");
                     hasNewVersion = false;
+                    console.log("✅ 当前已是最新版本");
                 }
             })
             .catch(err => {
-                console.warn('检查更新失败：', err);
+                console.error('检查更新失败', err);
+                hasNewVersion = false; // 失败时默认为 false
             });
     }
 
+    // 延迟执行，避开页面初始加载高峰
     setTimeout(checkUpdate, 3000);
 })();
