@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.24.0
+// @version      1.24.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -10,6 +10,7 @@
 // @updateURL    https://sc.22-7.top/scripts/autoMaxPPHPL.user.js
 // @downloadURL  https://sc.22-7.top/scripts/autoMaxPPHPL.user.js
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
 // ==/UserScript==
 
 (function () {
@@ -987,6 +988,27 @@
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
+
+                    const isInstalled = typeof unsafeWindow.SCobg_TogglePanel === 'function';
+
+                    if (isInstalled) {
+                        btn.textContent = 'SC图片替换管理';
+                        btn.style.backgroundColor = '#9C27B0'; // 紫色，便于区分
+                        btn.onclick = () => unsafeWindow.SCobg_TogglePanel();
+                    } else {
+                        btn.textContent = 'SC图片替换管理 (未安装)';
+                        btn.style.backgroundColor = '#546E7A'; // 深灰色
+                        btn.onclick = () => {
+                            if (confirm('检测到未安装图片替换脚本，是否前往安装？')) {
+                                window.open('https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js', '_blank');
+                            }
+                        };
+                    }
+                    return btn;
+                })(),
+                (() => {
+                    const btn = document.createElement('button');
+                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
                     btn.textContent = 'MP-?%';
                     btn.dataset.actionType = 'mpShow';
                     return btn;
@@ -1848,18 +1870,18 @@
                 toast = document.createElement('div');
                 toast.id = 'auto-pricing-toast';
                 toast.style = `
-                    position: fixed; 
-                    top: 20px; 
-                    left: 50%; 
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
                     transform: translateX(-50%);
-                    background: rgba(0,0,0,0.9); 
-                    color: white; 
+                    background: rgba(0,0,0,0.9);
+                    color: white;
                     padding: 12px 20px;
-                    border-radius: 8px; 
-                    z-index: 10000; 
+                    border-radius: 8px;
+                    z-index: 10000;
                     transition: all 0.3s ease;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
-                    font-size: 14px; 
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                    font-size: 14px;
                     pointer-events: none;
                     opacity: 0;
                     /* 解决显示不全的核心配置 */
@@ -2703,18 +2725,12 @@
         }
 
         async function processNewRows(tbody) {
+            // 此时已确定 currentIsRetail 为 true，直接获取数据即可
             const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
             if (!SCD_raw) return;
             const SCD = JSON.parse(SCD_raw);
             const SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${currentRealmId}`));
             if (!SRC) return;
-
-            // 过滤非零售商品逻辑保持不变
-            const isRetail = Object.values(SCD.data.SALES).some(l => l.includes(parseInt(currentResourceId)));
-            if (!isRetail) {
-                if (summaryDisplay) summaryDisplay.style.display = "none";
-                return;
-            }
 
             // 扫描还未处理过的行
             const rows = Array.from(tbody.querySelectorAll('tr'))
@@ -2730,7 +2746,7 @@
                 profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC });
             });
 
-            // 关键：即使没有新行增加（仅仅是筛选隐藏了某些行），也要重算模拟结果
+            // 即使没有新行增加，也要重算模拟结果
             updateGlobalSimulation();
         }
 
@@ -2740,21 +2756,32 @@
                 currentRealmId = null;
                 let globalObserver = null;
                 let tableObserver = null;
+                
+                // --- 核心优化 1: 启动即判断零售属性 ---
+                let currentIsRetail = false;
+                const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
+                if (SCD_raw) {
+                    const SCD = JSON.parse(SCD_raw);
+                    currentIsRetail = Object.values(SCD.data.SALES).some(l => l.includes(parseInt(currentResourceId)));
+                }
+
+                // 如果不是零售商品，直接退出，不设置任何监听，不注入任何 UI
+                if (!currentIsRetail) {
+                    if (summaryDisplay) summaryDisplay.style.display = "none";
+                    return;
+                }
 
                 const tryInit = () => {
                     const tbody = findValidTbody();
                     const form = document.querySelector('form');
 
-                    // 1. 基础检查：没有表格或没有表单，说明页面还没加载好
+                    // 1. 基础检查
                     if (!tbody || !form) return;
 
-                    // 2. 防止重复注入：检查是否已经处理过
-                    // 使用一个唯一的 ID 标记 form，防止 tryInit 被多次触发时重复创建面板
-                    if (form.hasAttribute('data-market-calc-initialized')) {
-                        return;
-                    }
+                    // 2. 防止重复注入
+                    if (form.hasAttribute('data-market-calc-initialized')) return;
 
-                    // 3. 提取 Realm ID (读取存档需要)
+                    // 3. 提取 Realm ID
                     extractRealmIdOnce(tbody);
 
                     // 4. 插入 UI 元素
@@ -2791,9 +2818,7 @@
                             isShowingProfit = !isShowingProfit;
                             document.querySelectorAll('.auto-profit-info span').forEach(span => {
                                 const { p, t } = span.dataset;
-                                if (p && t) {
-                                    span.textContent = isShowingProfit ? p : t;
-                                }
+                                if (p && t) span.textContent = isShowingProfit ? p : t;
                             });
                             toggleButton.textContent = isShowingProfit ? '用时' : '时利润';
                         });
@@ -2802,39 +2827,27 @@
                         form.setAttribute('data-market-calc-initialized', 'true');
                     }
 
-                    // 5. 初始执行：处理当前已有的行
-                    const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
-                    if (SCD_raw) {
-                        const SCD = JSON.parse(SCD_raw);
-                        const isRetail = Object.values(SCD.data.SALES).some(list => list.includes(parseInt(currentResourceId)));
-                        if (isRetail) {
-                            processNewRows(tbody);
-                        } else if (summaryDisplay) {
-                            summaryDisplay.style.display = "none";
-                        }
-                    }
+                    // 5. 初始执行：此时确认为零售，直接处理
+                    processNewRows(tbody);
 
-                    // 6. 开启表格行监听 (仅监听子节点变化，避免监听属性导致的死循环)
+                    // 6. 开启表格行监听
                     if (tableObserver) tableObserver.disconnect();
                     tableObserver = new MutationObserver(() => {
-                        // 使用 requestAnimationFrame 确保在浏览器空闲帧执行，不卡主线程
                         requestAnimationFrame(() => processNewRows(tbody));
                     });
                     tableObserver.observe(tbody, { childList: true });
 
-                    // 7. 既然已经成功初始化，可以停止全局 document 监听了，节省性能
+                    // 7. 初始化成功，停止全局 document 监听
                     if (globalObserver) {
                         globalObserver.disconnect();
                         globalObserver = null;
                     }
                 };
 
-                // 启动逻辑：首先尝试初始化
+                // --- 核心优化 2: 仅在零售模式下启动监听 ---
                 tryInit();
 
-                // 如果页面还没加载完，启动全局监听
-                globalObserver = new MutationObserver((mutations, obs) => {
-                    // 只有当有新节点增加时才尝试，减少无谓触发
+                globalObserver = new MutationObserver((mutations) => {
                     for (const mutation of mutations) {
                         if (mutation.addedNodes.length) {
                             tryInit();
@@ -4843,14 +4856,14 @@
                 font-family: sans-serif; box-sizing: border-box;
             }
             .sc-update-toast.show { top: 20px; }
-            
+
             /* 展开后的卡片样式 */
             .sc-update-toast.expanded {
                 border-radius: 12px; padding: 20px; width: 400px;
                 background: #ffffff; color: #333; cursor: default;
                 border-top: 5px solid #2196F3;
             }
-            
+
             .sc-update-header {
                 margin: 0; font-size: 14px; font-weight: bold;
                 display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -4953,7 +4966,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    更换插件地址，更好的未填入数量弹出提示，更好的更新提示
+        // @changelog    增加SC图片替换管理按钮,修改非零售商品的提示。
 
         fetch(scriptUrl)
             .then(res => res.text())
