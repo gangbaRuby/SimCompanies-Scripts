@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      2.0.0
+// @version      2.1.0
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -958,80 +958,136 @@
         panel: null,
         
         init() {
-            // 1. 防止重复初始化
             if (document.getElementById('scobg-panel')) return;
-    
-            // 2. 初始化基础配置
             this.injectCSS();
             this.createPanel();
-            
-            // 3. 注册油猴菜单
             this.registerTampermonkeyMenu();
             
-            // 4. 暴露全局 API 供其他脚本调用
-            // 其他脚本只需执行：nsafeWindow.SCobg_TogglePanel()
-            unsafeWindow.SCobg_TogglePanel = () => this.togglePanel();
-            
-            console.log("[SC-Skin] UI Manager 已就绪");
+            const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            win.SCobg_TogglePanel = () => this.togglePanel();
         },
     
-        // 注册油猴菜单
         registerTampermonkeyMenu() {
             if (typeof GM_registerMenuCommand !== 'undefined') {
-                GM_registerMenuCommand("🎨 皮肤管理面板", () => {
-                    this.togglePanel();
-                });
+                GM_registerMenuCommand("🎨 皮肤管理面板", () => this.togglePanel());
             }
         },
     
-        // 切换面板显示状态
         togglePanel() {
             if (!this.panel) return;
-            const current = this.panel.style.display;
-            this.panel.style.display = (current === 'none' || current === '') ? 'flex' : 'none';
+            const isVisible = this.panel.style.display === 'flex';
+            this.panel.style.display = isVisible ? 'none' : 'flex';
+            // 锁定背景滚动
+            document.body.style.overflow = isVisible ? '' : 'hidden';
         },
     
         injectCSS() {
             const style = document.createElement('style');
             style.id = 'scobg-ui-style';
             style.textContent = `
-                #scobg-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 850px; height: 600px; background: #1a1e26; border: 1px solid #444; z-index: 100000; color: #fff; display: none; flex-direction: column; border-radius: 8px; font-family: 'Segoe UI', sans-serif; box-shadow: 0 20px 60px rgba(0,0,0,0.8); overflow: hidden; }
-                .scobg-header { padding: 12px 20px; border-bottom: 1px solid #2a2f3a; display: flex; justify-content: space-between; align-items: center; background: #21262e; font-weight: bold; }
+                /* 全局盒模型重置 */
+                #scobg-panel, #scobg-panel * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    
+                #scobg-panel { 
+                    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                    width: 95vw; max-width: 850px; height: 85vh; max-height: 650px;
+                    background: #1a1e26; border: 1px solid #444; z-index: 100000; 
+                    color: #fff; display: none; flex-direction: column; 
+                    border-radius: 12px; font-family: -apple-system, system-ui, sans-serif; 
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.8); overflow: hidden; 
+                }
+    
+                /* 头部样式 */
+                .scobg-header { 
+                    padding: 0 15px; height: 50px; flex-shrink: 0;
+                    border-bottom: 1px solid #2a2f3a; display: flex; 
+                    justify-content: space-between; align-items: center; 
+                    background: #21262e; 
+                }
+    
+                /* 主体响应式布局 */
                 .scobg-body { display: flex; flex: 1; overflow: hidden; }
-                .scobg-sidebar { width: 240px; background: #14171d; border-right: 1px solid #2a2f3a; overflow-y: auto; display: flex; flex-direction: column; padding-bottom: 20px; user-select: none; }
-                .scobg-tree-item { cursor: pointer; display: flex; align-items: center; transition: 0.1s; color: #aaa; position: relative; }
-                .scobg-tree-item:hover { color: #fff; background: rgba(255,255,255,0.02); }
-                .scobg-arrow { font-size: 10px; margin-right: 6px; transition: transform 0.2s; display: inline-block; width: 12px; text-align: center; }
-                .scobg-l1 { padding: 12px 15px; font-weight: bold; font-size: 14px; border-bottom: 1px solid #222; color: #ccc; }
-                .scobg-l1-container { display: none; background: #0f1216; }
-                .scobg-l1-container.show { display: block; }
-                .scobg-l2 { padding: 10px 15px 10px 25px; font-size: 13px; color: #888; }
-                .scobg-l2-container { display: none; }
-                .scobg-l2-container.show { display: block; }
-                .scobg-l3 { padding: 8px 15px 8px 45px; font-size: 12px; color: #666; border-left: 3px solid transparent; }
-                .scobg-l3:hover { color: #ccc; }
-                .scobg-l3.active { color: #fff; background: linear-gradient(90deg, rgba(33,150,243,0.15) 0%, transparent 100%); border-left-color: #2196f3; font-weight: bold; }
-                .scobg-content { flex: 1; padding: 0; overflow-y: auto; background: #1a1e26; }
-                .scobg-content-header { padding: 20px; background: #1a1e26; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 10; }
-                .scobg-breadcrumb { font-size: 12px; color: #666; margin-bottom: 5px; }
-                .scobg-main-title { font-size: 20px; color: #fff; font-weight: bold; display: flex; align-items: center; gap: 10px; }
-                .scobg-grid { padding: 20px; }
-                .scobg-row { background: #252a35; padding: 15px; margin-bottom: 15px; border-radius: 6px; border: 1px solid #333; display: flex; align-items: center; justify-content: space-between; }
-                .scobg-info { flex: 1; }
-                .scobg-name { font-size: 15px; font-weight: bold; margin-bottom: 6px; }
-                .scobg-check { font-size: 12px; color: #888; cursor: pointer; display: flex; align-items: center; gap: 5px; }
-                .scobg-imgs { display: flex; align-items: center; gap: 15px; }
-                .scobg-ui-img { width: 90px; height: 60px; object-fit: contain; background: #000; border: 1px solid #444; border-radius: 4px; }
-                .scobg-ui-img.click { cursor: pointer; }
-                .scobg-ui-img.click:hover { border-color: #2196f3; }
-                .scobg-menu { position: fixed; background: #2c323d; border: 1px solid #555; border-radius: 6px; z-index: 100001; padding: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); width: 300px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-                .scobg-menu-item { text-align: center; padding: 5px; cursor: pointer; border: 2px solid transparent; }
-                .scobg-menu-item:hover { background: #3e4451; border-radius: 4px; border-color: #2196f3; }
-                .scobg-menu-item img { width: 100%; height: 50px; object-fit: contain; background: #000; }
-                .scobg-menu-item span { font-size: 11px; color: #ccc; }
-                .scobg-menu-input { grid-column: span 2; display: flex; gap: 5px; padding-top: 8px; border-top: 1px solid #444; }
-                .scobg-inp { flex: 1; background: #1a1e26; border: 1px solid #555; color: #fff; padding: 5px; font-size: 12px; }
-                .scobg-btn { background: #2196f3; color: #fff; border:none; padding: 0 10px; cursor: pointer; }
+    
+                /* 侧边栏：PC宽，手机窄 */
+                .scobg-sidebar { 
+                    width: 240px; background: #14171d; border-right: 1px solid #2a2f3a; 
+                    overflow-y: auto; flex-shrink: 0;
+                }
+    
+                /* 内容区 */
+                .scobg-content { flex: 1; overflow-y: auto; background: #1a1e26; position: relative; }
+    
+                /* 手机端适配逻辑 (iPhone SE 核心修复) */
+                @media screen and (max-width: 768px) {
+                    #scobg-panel { width: 100vw; height: 100vh; max-height: 100vh; top: 0; left: 0; transform: none; border-radius: 0; }
+                    .scobg-body { flex-direction: column; }
+                    
+                    /* 手机端侧边栏占用上半部分，增加滚动流畅度 */
+                    .scobg-sidebar { 
+                        width: 100%; height: 40%; border-right: none; 
+                        border-bottom: 1px solid #2a2f3a; -webkit-overflow-scrolling: touch; 
+                    }
+                    .scobg-content { height: 60%; -webkit-overflow-scrolling: touch; }
+    
+                    /* 列表项改为垂直堆叠 */
+                    .scobg-row { 
+                        flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; 
+                        padding: 12px !important;
+                    }
+                    .scobg-imgs { width: 100%; justify-content: space-between; }
+                    .scobg-info { width: 100%; }
+                    
+                    /* 按钮在手机上更大更易点 */
+                    .scobg-btn-blue { padding: 8px 16px; font-size: 13px; }
+                }
+    
+                /* 树形菜单细节 */
+                .scobg-tree-item { 
+                    cursor: pointer; padding: 12px 15px; color: #aaa; 
+                    font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.02);
+                    display: flex; align-items: center;
+                }
+                .scobg-l1 { font-weight: bold; background: #1c2129; color: #eee; }
+                .scobg-l2 { padding-left: 25px; font-size: 13px; background: #11151a; }
+                .scobg-l3 { padding-left: 45px; font-size: 13px; }
+                .scobg-l3.active { color: #2196f3; background: rgba(33,150,243,0.1); border-left: 4px solid #2196f3; }
+                
+                .scobg-sub-container { display: none; }
+                .scobg-sub-container.show { display: block; }
+                .scobg-arrow { font-size: 10px; margin-right: 10px; transition: 0.2s; opacity: 0.5; }
+    
+                /* 皮肤项卡片 */
+                .scobg-grid { padding: 12px; }
+                .scobg-row { 
+                    background: #252a35; padding: 15px; margin-bottom: 12px; 
+                    border-radius: 8px; border: 1px solid #333; 
+                    display: flex; align-items: center; justify-content: space-between; 
+                }
+                .scobg-name { font-size: 15px; font-weight: bold; margin-bottom: 6px; color: #fff; }
+                .scobg-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888; cursor: pointer; }
+                .scobg-check input { width: 18px; height: 18px; cursor: pointer; }
+    
+                /* 图片预览区 */
+                .scobg-imgs { display: flex; align-items: center; gap: 12px; }
+                .scobg-ui-img { 
+                    width: 90px; height: 60px; object-fit: contain; 
+                    background: #000; border: 1px solid #444; border-radius: 6px; 
+                }
+                .scobg-ui-img.click { border-color: #555; cursor: pointer; }
+    
+                /* 响应式弹窗菜单 (iPhone SE 适配核心) */
+                .scobg-menu { 
+                    position: fixed; background: #2c323d; border: 1px solid #555; 
+                    border-radius: 12px; z-index: 100001; padding: 12px; 
+                    width: 90vw; max-width: 320px; box-sizing: border-box;
+                    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; 
+                    box-shadow: 0 15px 50px rgba(0,0,0,0.7);
+                }
+                .scobg-menu-item { text-align: center; cursor: pointer; }
+                .scobg-menu-item img { width: 100%; height: 50px; object-fit: contain; background: #000; border-radius: 4px; }
+                .scobg-menu-item span { font-size: 11px; color: #bbb; display: block; margin-top: 5px; }
+    
+                .scobg-btn-blue { background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
             `;
             document.head.appendChild(style);
         },
@@ -1039,133 +1095,140 @@
         createPanel() {
             this.panel = document.createElement('div');
             this.panel.id = 'scobg-panel';
-            this.panel.style.display = 'none';
             this.panel.innerHTML = `
                 <div class="scobg-header">
-                    <span>SCobg 皮肤管理</span>
+                    <span style="font-size:15px; font-weight:bold; letter-spacing:0.5px;">SCobg 皮肤管理</span>
                     <div style="display:flex; gap:10px; align-items:center;">
-                        <button id="scobg-save" style="background:#4CAF50; color:white; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold;">保存</button>
-                        <button id="scobg-apply" style="background:#2196f3; color:white; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold;">应用 (刷新)</button>
-                        <span id="scobg-close" style="cursor:pointer;opacity:0.6;font-size:18px;">✕</span>
+                        <button id="scobg-save" class="scobg-btn-blue" style="background:#2ecc71; padding:5px 12px;">保存</button>
+                        <button id="scobg-apply" class="scobg-btn-blue" style="padding:5px 12px;">刷新</button>
+                        <div id="scobg-close" style="padding:5px; cursor:pointer; font-size:22px; color:#777;">✕</div>
                     </div>
                 </div>
-                <div class="scobg-body"><div class="scobg-sidebar"></div><div class="scobg-content"></div></div>
+                <div class="scobg-body">
+                    <div class="scobg-sidebar"></div>
+                    <div class="scobg-content">
+                        <div style="height:100%; display:flex; align-items:center; justify-content:center; color:#555; flex-direction:column; gap:10px;">
+                            <span style="font-size:40px;">🎨</span>
+                            <span>请在${window.innerWidth < 768 ? '上方' : '左侧'}选择分类</span>
+                        </div>
+                    </div>
+                </div>
             `;
-    
-            // 绑定头部按钮事件
-            this.panel.querySelector('#scobg-close').onclick = () => this.togglePanel();
-            
-            const saveBtn = this.panel.querySelector('#scobg-save');
-            saveBtn.onclick = () => {
-                Settings.save(); // 假设你的全局 Settings 对象存在
-                saveBtn.textContent = '已保存!';
-                setTimeout(() => { saveBtn.textContent = '保存'; }, 1500);
-            };
-            
-            this.panel.querySelector('#scobg-apply').onclick = () => location.reload();
-    
             document.body.appendChild(this.panel);
+    
+            this.panel.querySelector('#scobg-close').onclick = () => this.togglePanel();
+            this.panel.querySelector('#scobg-apply').onclick = () => location.reload();
+            this.panel.querySelector('#scobg-save').onclick = (e) => {
+                if (typeof Settings !== 'undefined') {
+                    Settings.save();
+                    const btn = e.target;
+                    const oldText = btn.textContent;
+                    btn.textContent = '已存';
+                    setTimeout(() => btn.textContent = oldText, 1500);
+                }
+            };
+    
             this.renderSidebar();
-            
-            const contentArea = this.panel.querySelector('.scobg-content');
-            if (contentArea) {
-                contentArea.innerHTML = `<div style="padding:40px; text-align:center; color:#555;">← 请在左侧选择具体分类</div>`;
-            }
         },
     
         renderSidebar() {
             const sidebar = this.panel.querySelector('.scobg-sidebar');
-            if (!sidebar) return;
+            if (!sidebar || typeof UI_MANIFEST === 'undefined') return;
             sidebar.innerHTML = '';
     
             for (const [l1Name, l1Data] of Object.entries(UI_MANIFEST)) {
-                const l1Div = document.createElement('div');
-                l1Div.className = 'scobg-tree-item scobg-l1';
-                l1Div.innerHTML = `<span class="scobg-arrow">▶</span> ${l1Name}`;
+                const l1El = this.createTreeItem(l1Name, 'scobg-l1');
                 const l1Container = document.createElement('div');
-                l1Container.className = 'scobg-l1-container';
-                l1Div.onclick = () => {
-                    l1Container.classList.toggle('show');
-                    const arrow = l1Div.querySelector('.scobg-arrow');
-                    if (arrow) arrow.innerHTML = l1Container.classList.contains('show') ? '▼' : '▶';
-                };
+                l1Container.className = 'scobg-sub-container';
+    
+                l1El.onclick = () => this.toggleTree(l1El, l1Container);
     
                 for (const [l2Name, l2Data] of Object.entries(l1Data)) {
-                    const l2Div = document.createElement('div');
-                    l2Div.className = 'scobg-tree-item scobg-l2';
-                    l2Div.innerHTML = `<span class="scobg-arrow">▶</span> ${l2Name}`;
+                    const l2El = this.createTreeItem(l2Name, 'scobg-l2');
                     const l2Container = document.createElement('div');
-                    l2Container.className = 'scobg-l2-container';
-                    l2Div.onclick = (e) => {
+                    l2Container.className = 'scobg-sub-container';
+    
+                    l2El.onclick = (e) => {
                         e.stopPropagation();
-                        l2Container.classList.toggle('show');
-                        const arrow = l2Div.querySelector('.scobg-arrow');
-                        if (arrow) arrow.innerHTML = l2Container.classList.contains('show') ? '▼' : '▶';
+                        this.toggleTree(l2El, l2Container);
                     };
     
                     for (const [l3Name, l3Items] of Object.entries(l2Data)) {
-                        const l3Div = document.createElement('div');
-                        l3Div.className = 'scobg-tree-item scobg-l3';
-                        l3Div.innerText = l3Name;
-                        l3Div.onclick = (e) => {
+                        const l3El = document.createElement('div');
+                        l3El.className = 'scobg-tree-item scobg-l3';
+                        l3El.textContent = l3Name;
+                        l3El.onclick = (e) => {
                             e.stopPropagation();
                             sidebar.querySelectorAll('.scobg-l3').forEach(el => el.classList.remove('active'));
-                            l3Div.classList.add('active');
+                            l3El.classList.add('active');
                             this.renderContent(l1Name, l2Name, l3Name, l3Items);
+                            // 手机端点击后自动滚动到内容区
+                            if (window.innerWidth <= 768) {
+                                this.panel.querySelector('.scobg-content').scrollIntoView({ behavior: 'smooth' });
+                            }
                         };
-                        l2Container.appendChild(l3Div);
+                        l2Container.appendChild(l3El);
                     }
-                    l1Container.appendChild(l2Div);
+                    l1Container.appendChild(l2El);
                     l1Container.appendChild(l2Container);
                 }
-                sidebar.appendChild(l1Div);
+                sidebar.appendChild(l1El);
                 sidebar.appendChild(l1Container);
             }
         },
     
+        createTreeItem(text, className) {
+            const div = document.createElement('div');
+            div.className = `scobg-tree-item ${className}`;
+            div.innerHTML = `<span class="scobg-arrow">▶</span> ${text}`;
+            return div;
+        },
+    
+        toggleTree(el, container) {
+            const isShow = container.classList.toggle('show');
+            const arrow = el.querySelector('.scobg-arrow');
+            if (arrow) arrow.style.transform = isShow ? 'rotate(90deg)' : 'rotate(0deg)';
+        },
+    
         renderContent(l1, l2, l3, items) {
             const content = this.panel.querySelector('.scobg-content');
-            if (!content) return;
-    
             content.innerHTML = `
-                <div class="scobg-content-header">
-                    <div class="scobg-breadcrumb">${l1} > ${l2}</div>
-                    <div class="scobg-main-title">${l3}</div>
+                <div style="padding:15px; border-bottom:1px solid #333; position:sticky; top:0; background:rgba(26,30,38,0.95); z-index:10; backdrop-filter:blur(4px);">
+                    <div style="font-size:11px; color:#666; margin-bottom:2px;">${l1} > ${l2}</div>
+                    <div style="font-size:17px; font-weight:bold;">${l3}</div>
                 </div>
                 <div class="scobg-grid"></div>
             `;
             const grid = content.querySelector('.scobg-grid');
-            if (!grid) return;
-    
             for (const [key, meta] of Object.entries(items)) {
                 this.renderRow(grid, key, meta, () => this.renderContent(l1, l2, l3, items));
             }
         },
     
-        renderRow(container, key, meta, refreshCallback) {
-            const cfg = Settings.data[key] || { enabled: false, target: "" };
-            let relativePath = PATH_MAP[key] || `images/${key}`;
-            const originalUrl = `${CONSTANTS.STATIC_ROOT}${relativePath}`;
+        renderRow(container, key, meta, refresh) {
+            const cfg = (typeof Settings !== 'undefined' && Settings.data[key]) || { enabled: false, target: "" };
+            const relPath = (typeof PATH_MAP !== 'undefined' && PATH_MAP[key]) || `images/${key}`;
+            const originalUrl = `${(typeof CONSTANTS !== 'undefined' ? CONSTANTS.STATIC_ROOT : '')}${relPath}`;
     
             const row = document.createElement('div');
             row.className = 'scobg-row';
             row.innerHTML = `
                 <div class="scobg-info">
                     <div class="scobg-name">${meta.name}</div>
-                    <label class="scobg-check"><input type="checkbox" ${cfg.enabled ? 'checked' : ''}> 启用自定义皮肤</label>
+                    <label class="scobg-check">
+                        <input type="checkbox" ${cfg.enabled ? 'checked' : ''}>
+                        <span>使用自定义皮肤</span>
+                    </label>
                 </div>
                 <div class="scobg-imgs">
-                    <div style="text-align:center"><div style="font-size:10px;color:#666">原始</div><img src="${originalUrl}" class="scobg-ui-img" style="filter:grayscale(1);opacity:0.5"></div>
-                    <div style="color:#444">➔</div>
-                    <div style="text-align:center"><div style="font-size:10px;color:#666">当前</div><img src="${cfg.target || originalUrl}" class="scobg-ui-img click select-trigger"></div>
+                    <div style="text-align:center"><div style="font-size:9px;color:#555;margin-bottom:2px">原图</div><img src="${originalUrl}" class="scobg-ui-img" style="opacity:0.2;filter:grayscale(1)"></div>
+                    <div style="color:#333;font-size:12px">➔</div>
+                    <div style="text-align:center"><div style="font-size:9px;color:#2196f3;margin-bottom:2px">当前</div><img src="${cfg.target || originalUrl}" class="scobg-ui-img click select-trigger" style="border-color:${cfg.enabled?'#2196f3':'#444'}"></div>
                 </div>
             `;
     
-            row.querySelector('input').onchange = (e) => this.update(key, cfg.target, e.target.checked, refreshCallback);
-    
-            const trigger = row.querySelector('.select-trigger');
-            trigger.onclick = (e) => this.showMenu(e, meta, (url) => this.update(key, url, true, refreshCallback));
-    
+            row.querySelector('input').onchange = (e) => this.update(key, cfg.target, e.target.checked, refresh);
+            row.querySelector('.select-trigger').onclick = (e) => this.showMenu(e, meta, (url) => this.update(key, url, true, refresh));
             container.appendChild(row);
         },
     
@@ -1173,39 +1236,63 @@
             const old = document.querySelector('.scobg-menu'); if (old) old.remove();
             const menu = document.createElement('div');
             menu.className = 'scobg-menu';
-            const x = Math.min(e.clientX, window.innerWidth - 320);
-            const y = Math.min(e.clientY, window.innerHeight - 300);
-            menu.style.left = `${x}px`; menu.style.top = `${y}px`;
+            
+            // 手机端居中策略
+            if (window.innerWidth <= 768) {
+                menu.style.left = '50%';
+                menu.style.top = '50%';
+                menu.style.transform = 'translate(-50%, -50%)';
+            } else {
+                menu.style.left = `${Math.min(e.clientX, window.innerWidth - 330)}px`;
+                menu.style.top = `${Math.min(e.clientY, window.innerHeight - 350)}px`;
+            }
     
             if (meta.presets) {
                 meta.presets.forEach(p => {
-                    const i = document.createElement('div');
-                    i.className = 'scobg-menu-item';
-                    i.innerHTML = `<img src="${p.url}"><span>${p.name}</span>`;
-                    i.onclick = () => { onSelect(p.url); menu.remove(); };
-                    menu.appendChild(i);
+                    const item = document.createElement('div');
+                    item.className = 'scobg-menu-item';
+                    item.innerHTML = `<img src="${p.url}"><span>${p.name}</span>`;
+                    item.onclick = (ev) => { ev.stopPropagation(); onSelect(p.url); menu.remove(); };
+                    menu.appendChild(item);
                 });
             }
-            const inpDiv = document.createElement('div');
-            inpDiv.className = 'scobg-menu-input';
-            inpDiv.innerHTML = `<input type="text" class="scobg-inp" placeholder="图片URL"><button class="scobg-btn">确定</button>`;
-            inpDiv.onclick = (ev) => ev.stopPropagation();
-            inpDiv.querySelector('button').onclick = () => { 
-                const v = inpDiv.querySelector('input').value; 
-                if (v) { onSelect(v); menu.remove(); } 
-            };
-            menu.appendChild(inpDiv);
     
+            const foot = document.createElement('div');
+            foot.style.cssText = 'grid-column: span 2; display: flex; flex-direction: column; gap: 8px; margin-top: 5px; border-top: 1px solid #444; padding-top: 10px;';
+            foot.innerHTML = `
+                <div style="display:flex; gap:6px;">
+                    <input type="text" placeholder="输入链接..." style="flex:1; width:0; background:#111; border:1px solid #555; color:#fff; padding:10px; border-radius:6px; font-size:13px; outline:none;">
+                    <button class="scobg-btn-blue" style="padding:0 15px;">确定</button>
+                </div>
+            `;
+            
+            const input = foot.querySelector('input');
+            const btn = foot.querySelector('button');
+            const confirm = () => { if(input.value) { onSelect(input.value); menu.remove(); } };
+            
+            btn.onclick = (ev) => { ev.stopPropagation(); confirm(); };
+            input.onclick = (ev) => ev.stopPropagation();
+            input.onkeydown = (ev) => { if(ev.key === 'Enter') confirm(); };
+    
+            menu.appendChild(foot);
             document.body.appendChild(menu);
-            setTimeout(() => document.addEventListener('click', (ev) => { if (!menu.contains(ev.target)) menu.remove(); }, { once: true }), 10);
+    
+            setTimeout(() => {
+                const outClick = (ev) => {
+                    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', outClick); }
+                };
+                document.addEventListener('click', outClick);
+            }, 50);
         },
     
-        update(key, url, enabled, refreshCallback) {
-            Settings.data[key] = { target: url, enabled: enabled };
-            Settings.save();
-            if (refreshCallback) refreshCallback();
-            Scheduler.scanAll(); // 假设你的全局 Scheduler 对象存在
-            StyleManager.updateTheme(); // 假设你的全局 StyleManager 对象存在
+        update(key, url, enabled, refresh) {
+            if (typeof Settings !== 'undefined') {
+                Settings.data[key] = { target: url, enabled: enabled };
+                Settings.save();
+            }
+            if (refresh) refresh();
+            if (typeof Scheduler !== 'undefined') Scheduler.scanAll();
+            if (typeof StyleManager !== 'undefined') StyleManager.updateTheme();
         }
     };
 
@@ -1419,7 +1506,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    增加管理页面，可自定义替换，可通过油猴菜单或者通过自动计算最大时利润打开管理页面。
+            // @changelog    适配手机。
 
             fetch(scriptUrl)
                 .then(res => res.text())
