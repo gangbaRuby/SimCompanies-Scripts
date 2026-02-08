@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      2.1.0
+// @version      2.2.0
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -761,19 +761,22 @@
          * @param {string} originalUrl - 原始图片 URL
          * @returns {string|null} - 替换后的 URL 或 null
          */
-        getReplacementUrl(originalUrl) {
+         getReplacementUrl(originalUrl) {
+            if (!originalUrl) return null;
             const fullFileName = originalUrl.split('/').pop().split('?')[0].toLowerCase();
-
+        
             for (const key of this.allKeys) {
+                // 只有当 manifest 里的 key (如 construction_factory_tier06) 
+                // 确实出现在文件名中时才继续
                 const baseKey = key.replace('.png', '').toLowerCase();
+                
                 if (fullFileName.includes(baseKey)) {
                     const config = this.data[key];
-                    // 如果用户有设置，并且启用了，并且设置了目标 URL
                     if (config && config.enabled && config.target) {
+                        // 如果需要验证逻辑，可以在此处 append Token
                         return config.target;
                     }
-                    // 如果没有用户设置或未启用，则返回 null，不进行替换
-                    return null;
+                    // 注意：这里不要 return null，因为可能后续的 key 才是真正匹配的
                 }
             }
             return null;
@@ -882,51 +885,45 @@
         },
 
         processBgString(originalBgStr) {
-            if (!originalBgStr || originalBgStr === 'none' || originalBgStr.includes(CONSTANTS.CDN_BASE)) return null;
-
-            const parts = originalBgStr.split(/,(?=(?:(?:[^"']*["']){2})*[^"']*$)/).map(s => s.trim());
+            if (!originalBgStr || originalBgStr === 'none') return null;
+        
+            // 关键：剥离可能存在的 !important，否则 join 后会变成 url(...) !important, url(...)
+            const cleanBg = originalBgStr.replace(/\s*!important/g, '').trim();
+            const parts = cleanBg.split(/,(?=(?:(?:[^"']*["']){2})*[^"']*$)/).map(s => s.trim());
+            
             let hasChanged = false;
-            const newParts = [];
-
-            for (const part of parts) {
-                // const isOverlay = OVERLAY_KEYWORDS.some(keyword => part.includes(keyword));
-                // if (isOverlay) {
-                //     hasChanged = true;
-                //     continue;
-                // }
-
+            const newParts = parts.map(part => {
                 const urlMatch = part.match(/url\(['"]?([^'"]+)['"]?\)/);
                 if (urlMatch && urlMatch[1]) {
                     const oldUrl = urlMatch[1];
-
-                    // 存储原始 URL
-                    const imageName = oldUrl.split('/').pop().split('?')[0];
-                    if (!this.originalImageMap.has(imageName)) {
-                        this.originalImageMap.set(imageName, oldUrl);
-                    }
-
                     const newUrl = Settings.getReplacementUrl(oldUrl);
                     if (newUrl) {
-                        newParts.push(`url("${newUrl}")`);
                         hasChanged = true;
-                    } else {
-                        newParts.push(part);
+                        return `url("${newUrl}")`;
                     }
-                } else {
-                    newParts.push(part);
                 }
-            }
-
-            if (!hasChanged) return null;
-            return newParts.length > 0 ? newParts.join(', ') : 'none';
+                return part;
+            });
+        
+            return hasChanged ? newParts.join(', ') : null;
         },
-
+        
         processElementStyle(el) {
             const style = el.style;
             if (!style || !style.backgroundImage) return;
-            const newBg = this.processBgString(style.backgroundImage);
+        
+            // 使用 dataset 记录最初的状态
+            if (!el.dataset.scOriginalBg) {
+                el.dataset.scOriginalBg = style.backgroundImage;
+            }
+        
+            const newBg = this.processBgString(el.dataset.scOriginalBg);
             if (newBg) {
+                // 统一添加 !important 确保覆盖游戏原生样式
                 style.setProperty('background-image', newBg, 'important');
+            } else if (el.dataset.scOriginalBg) {
+                // 如果没有匹配到替换，且当前已经被改动过，则还原
+                style.setProperty('background-image', el.dataset.scOriginalBg);
             }
         },
 
@@ -1506,7 +1503,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    适配手机。
+            // @changelog    修改匹配逻辑，适配手机。
 
             fetch(scriptUrl)
                 .then(res => res.text())
