@@ -278,6 +278,7 @@
 
         "xmas-crackers.png": "images/resources/xmas-crackers.png",
         "xmas-ornament.png": "images/resources/xmas-ornament.png",
+        "easter-bunny.png": "images/resources/easter-bunny.png",
 
         "exchange_tier01.png": "images/buildings/other/exchange_tier01.png",
         "exchange_tier02.png": "images/buildings/other/exchange_tier02.png",
@@ -724,6 +725,9 @@
                 },
                 "圣诞装饰品": {
                     "xmas-ornament.png": { name: "圣诞装饰品", presets: [{ name: "旧圣诞装饰品", url: "https://scimg.22-7.top/images/resources/xmas-ornament_old01.png" }] },
+                },
+                "复活节兔兔": {
+                    "easter-bunny.png": { name: "圣诞装饰品", presets: [{ name: "旧圣诞装饰品", url: "https://scimg.22-7.top/images/resources/easter-bunny_old01.png" }] },
                 },
             }
         }
@@ -1517,7 +1521,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    追加磨坊，春季集市，春季地块
+            // @changelog    追加复活节兔兔
 
             fetch(scriptUrl)
                 .then(res => res.text())
