@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.24.1
+// @version      1.25.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -42,7 +42,7 @@
     const Bpt = (e, t, r, n, a, o) => {
         const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
         const s = Math.min(Math.max(2 - n, 0), 2), l = Math.max(0.9, s / 2 + 0.5), c = r / 12;
-        const d = zn.PROFIT_PER_BUILDING_LEVEL * (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) * g * (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) + (t.modeledStoreWages ?? 0);
+        const d = zn.PROFIT_PER_BUILDING_LEVEL * (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) * g * (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) + (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
         // console.log(`t.buildingLevelsNeededPerUnitPerHour:${t.buildingLevelsNeededPerUnitPerHour}, t.modeledUnitsSoldAnHour:${t.modeledUnitsSoldAnHour}, t.modeledStoreWages:${t.modeledStoreWages} , s:${s} , c:${c}, g:${g}`)
         const h = t.modeledUnitsSoldAnHour * l;
         const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
@@ -58,7 +58,7 @@
     };
 
     // 映射表
-    const resourceIdNameMap = { 1: "电力", 2: "水", 3: "苹果", 4: "橘子", 5: "葡萄", 6: "谷物", 7: "牛排", 8: "香肠", 9: "鸡蛋", 10: "原油", 11: "汽油", 12: "柴油", 13: "运输单位", 14: "矿物", 15: "铝土矿", 16: "硅材", 17: "化合物", 18: "铝材", 19: "塑料", 20: "处理器", 21: "电子元件", 22: "电池", 23: "显示屏", 24: "智能手机", 25: "平板电脑", 26: "笔记本电脑", 27: "显示器", 28: "电视机", 29: "作物研究", 30: "能源研究", 31: "采矿研究", 32: "电器研究", 33: "畜牧研究", 34: "化学研究", 35: "软件", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "棉花", 41: "棉布", 42: "铁矿石", 43: "钢材", 44: "沙子", 45: "玻璃", 46: "皮革", 47: "车载电脑", 48: "电动马达", 49: "豪华车内饰", 50: "基本内饰", 51: "车身", 52: "内燃机", 53: "经济电动车", 54: "豪华电动车", 55: "经济燃油车", 56: "豪华燃油车", 57: "卡车", 58: "汽车研究", 59: "时装研究", 60: "内衣", 61: "手套", 62: "裙子", 63: "高跟鞋", 64: "手袋", 65: "运动鞋", 66: "种子", 67: "圣诞爆竹", 68: "金矿石", 69: "金条", 70: "名牌手表", 71: "项链", 72: "甘蔗", 73: "乙醇", 74: "甲烷", 75: "碳纤维", 76: "碳纤复合材", 77: "机身", 78: "机翼", 79: "精密电子元件", 80: "飞行计算机", 81: "座舱", 82: "姿态控制器", 83: "火箭燃料", 84: "燃料储罐", 85: "固体燃料助推器", 86: "火箭发动机", 87: "隔热板", 88: "离子推进器", 89: "喷气发动机", 90: "亚轨道二级火箭", 91: "亚轨道火箭", 92: "轨道助推器", 93: "星际飞船", 94: "BFR", 95: "喷气客机", 96: "豪华飞机", 97: "单引擎飞机", 98: "无人机", 99: "人造卫星", 100: "航空航天研究", 101: "钢筋混凝土", 102: "砖块", 103: "水泥", 104: "黏土", 105: "石灰石", 106: "木材", 107: "钢筋", 108: "木板", 109: "窗户", 110: "工具", 111: "建筑预构件", 112: "推土机", 113: "材料研究", 114: "机器人", 115: "牛", 116: "猪", 117: "牛奶", 118: "咖啡豆", 119: "咖啡粉", 120: "蔬菜", 121: "面包", 122: "芝士", 123: "苹果派", 124: "橙汁", 125: "苹果汁", 126: "姜汁汽水", 127: "披萨", 128: "面条", 129: "汉堡包", 130: "千层面", 131: "肉丸", 132: "混合果汁", 133: "面粉", 134: "黄油", 135: "糖", 136: "可可", 137: "面团", 138: "酱汁", 139: "动物饲料", 140: "巧克力", 141: "植物油", 142: "沙拉", 143: "咖喱角", 144: "圣诞装饰品", 145: "食谱", 146: "南瓜", 147: "杰克灯笼", 148: "女巫服", 149: "南瓜汤", 150: "树", 151: "复活节兔兔", 152: "斋月糖果", 153: "巧克力冰淇淋", 154: "苹果冰淇淋" };
+    const resourceIdNameMap = { 1: "电力", 2: "水", 3: "苹果", 4: "橘子", 5: "葡萄", 6: "谷物", 7: "牛排", 8: "香肠", 9: "鸡蛋", 10: "原油", 11: "汽油", 12: "柴油", 13: "运输单位", 14: "矿物", 15: "铝土矿", 16: "硅材", 17: "化合物", 18: "铝材", 19: "塑料", 20: "处理器", 21: "电子元件", 22: "电池", 23: "显示屏", 24: "智能手机", 25: "平板电脑", 26: "笔记本电脑", 27: "显示器", 28: "电视机", 29: "作物研究", 30: "能源研究", 31: "采矿研究", 32: "电器研究", 33: "畜牧研究", 34: "化学研究", 35: "软件", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "棉花", 41: "棉布", 42: "铁矿石", 43: "钢材", 44: "沙子", 45: "玻璃", 46: "皮革", 47: "车载电脑", 48: "电动马达", 49: "豪华车内饰", 50: "基本内饰", 51: "车身", 52: "内燃机", 53: "经济电动车", 54: "豪华电动车", 55: "经济燃油车", 56: "豪华燃油车", 57: "卡车", 58: "汽车研究", 59: "时装研究", 60: "内衣", 61: "手套", 62: "裙子", 63: "高跟鞋", 64: "手袋", 65: "运动鞋", 66: "种子", 67: "圣诞爆竹", 68: "金矿石", 69: "金条", 70: "名牌手表", 71: "项链", 72: "甘蔗", 73: "乙醇", 74: "甲烷", 75: "碳纤维", 76: "碳纤复合材", 77: "机身", 78: "机翼", 79: "精密电子元件", 80: "飞行计算机", 81: "座舱", 82: "姿态控制器", 83: "火箭燃料", 84: "燃料储罐", 85: "固体燃料助推器", 86: "火箭发动机", 87: "隔热板", 88: "离子推进器", 89: "喷气发动机", 90: "亚轨道二级火箭", 91: "亚轨道火箭", 92: "轨道助推器", 93: "星际飞船", 94: "BFR", 95: "喷气客机", 96: "豪华飞机", 97: "单引擎飞机", 98: "无人机", 99: "人造卫星", 100: "航空航天研究", 101: "钢筋混凝土", 102: "砖块", 103: "水泥", 104: "黏土", 105: "石灰石", 106: "木材", 107: "钢筋", 108: "木板", 109: "窗户", 110: "工具", 111: "建筑预构件", 112: "推土机", 113: "材料研究", 114: "机器人", 115: "牛", 116: "猪", 117: "牛奶", 118: "咖啡豆", 119: "咖啡粉", 120: "蔬菜", 121: "面包", 122: "芝士", 123: "苹果派", 124: "橙汁", 125: "苹果汁", 126: "姜汁汽水", 127: "披萨", 128: "面条", 129: "汉堡包", 130: "千层面", 131: "肉丸", 132: "混合果汁", 133: "面粉", 134: "黄油", 135: "糖", 136: "可可", 137: "面团", 138: "酱汁", 139: "动物饲料", 140: "巧克力", 141: "植物油", 142: "沙拉", 143: "咖喱角", 144: "圣诞装饰品", 145: "食谱", 146: "南瓜", 147: "杰克灯笼", 148: "女巫服", 149: "南瓜汤", 150: "树", 151: "复活节兔兔", 152: "斋月糖果", 153: "巧克力冰淇淋", 154: "苹果冰淇淋", 155: "奶油鸡蛋" };
 
     // ======================
     // 模块1：网络请求模块
@@ -405,7 +405,8 @@
                     'SALES',
                     'PROFIT_PER_BUILDING_LEVEL',
                     'RETAIL_MODELING_QUALITY_WEIGHT',
-                    'RETAIL_ADJUSTMENT'
+                    'RETAIL_ADJUSTMENT',
+                    'STORE_OVERCOMPENSATION'
                 ];
 
                 // 提取变量值（支持数字 / 布尔 / 对象）
@@ -1937,7 +1938,7 @@
                 (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
                 g *
                 (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                (t.modeledStoreWages ?? 0);
+                (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
             const h = t.modeledUnitsSoldAnHour * l;
             const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
             const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
@@ -2302,7 +2303,7 @@
                 (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
                 g *
                 (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                (t.modeledStoreWages ?? 0);
+                (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
             const h = t.modeledUnitsSoldAnHour * l;
             const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
             const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
@@ -2802,26 +2803,26 @@
                         container.appendChild(infoText);
                         container.insertBefore(summaryDisplay, infoText);
 
-                        // 创建切换按钮
-                        const toggleButton = document.createElement('button');
-                        toggleButton.type = 'button';
-                        toggleButton.textContent = '切换至：用时';
-                        toggleButton.className = "btn btn-primary";
-                        toggleButton.style.marginLeft = "10px";
+                        // // 创建切换按钮
+                        // const toggleButton = document.createElement('button');
+                        // toggleButton.type = 'button';
+                        // toggleButton.textContent = '切换至：用时';
+                        // toggleButton.className = "btn btn-primary";
+                        // toggleButton.style.marginLeft = "10px";
 
-                        const lastDiv = form.querySelector('.css-zl1inp > div:last-child');
-                        if (lastDiv) {
-                            lastDiv.insertAdjacentElement('afterend', toggleButton);
-                        }
+                        // const lastDiv = form.querySelector('.css-1491xfy > div:last-child');
+                        // if (lastDiv) {
+                        //     lastDiv.insertAdjacentElement('afterend', toggleButton);
+                        // }
 
-                        toggleButton.addEventListener('click', () => {
-                            isShowingProfit = !isShowingProfit;
-                            document.querySelectorAll('.auto-profit-info span').forEach(span => {
-                                const { p, t } = span.dataset;
-                                if (p && t) span.textContent = isShowingProfit ? p : t;
-                            });
-                            toggleButton.textContent = isShowingProfit ? '用时' : '时利润';
-                        });
+                        // toggleButton.addEventListener('click', () => {
+                        //     isShowingProfit = !isShowingProfit;
+                        //     document.querySelectorAll('.auto-profit-info span').forEach(span => {
+                        //         const { p, t } = span.dataset;
+                        //         if (p && t) span.textContent = isShowingProfit ? p : t;
+                        //     });
+                        //     toggleButton.textContent = isShowingProfit ? '用时' : '时利润';
+                        // });
 
                         // 标记已完成注入
                         form.setAttribute('data-market-calc-initialized', 'true');
@@ -2891,7 +2892,7 @@
                     (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
                     g *
                     (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                    (t.modeledStoreWages ?? 0);
+                    (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
                 const h = t.modeledUnitsSoldAnHour * l;
                 const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
                 const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
@@ -4639,7 +4640,7 @@
                         (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
                         g *
                         (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                        (t.modeledStoreWages ?? 0);
+                        (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
                     const h = t.modeledUnitsSoldAnHour * l;
                     const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
                     const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
@@ -4966,7 +4967,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加SC图片替换管理按钮,修改非零售商品的提示。
+        // @changelog    同步最新计算公式
 
         fetch(scriptUrl)
             .then(res => res.text())
