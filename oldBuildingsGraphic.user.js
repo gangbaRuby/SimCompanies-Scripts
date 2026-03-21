@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      2.2.0
+// @version      2.2.1
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -214,9 +214,12 @@
         "slaughterhouse-lvl1.png": "images/landscape/slaughterhouse-lvl1.png",
         "slaughterhouse-lvl2.png": "images/landscape/slaughterhouse-lvl2.png",
         "slaughterhouse-lvl3.png": "images/landscape/slaughterhouse-lvl3.png",
-        "mill-lvl1.png": "images/landscape/mill-lvl1.png",
-        "mill-lvl2.png": "images/landscape/mill-lvl2.png",
-        "mill-lvl3.png": "images/landscape/mill-lvl3.png",
+        "mill_tier01.png": "images/buildings/production/mill_tier01.png",
+        "mill_tier02.png": "images/buildings/production/mill_tier02.png",
+        "mill_tier03.png": "images/buildings/production/mill_tier03.png",
+        "mill_tier04.png": "images/buildings/production/mill_tier04.png",
+        "mill_tier05.png": "images/buildings/production/mill_tier05.png",
+        "mill_tier06.png": "images/buildings/production/mill_tier06.png",
         "bakery-lvl1.png": "images/landscape/bakery-lvl1.png",
         "bakery-lvl2.png": "images/landscape/bakery-lvl2.png",
         "bakery-lvl3.png": "images/landscape/bakery-lvl3.png",
@@ -247,6 +250,9 @@
         "beach-market-lvl1.png": "images/landscape/beach-market-lvl1.png",
         "beach-market-lvl2.png": "images/landscape/beach-market-lvl2.png",
         "beach-market-lvl3.png": "images/landscape/beach-market-lvl3.png",
+        "spring_market_tier01.png": "images/buildings/seasonal/spring_market_tier01.png",
+        "spring_market_tier02.png": "images/buildings/seasonal/spring_market_tier02.png",
+        "spring_market_tier03.png": "images/buildings/seasonal/spring_market_tier03.png",
 
         "sc_background_main_dark_2k_v2.png": "images/sc_background_main_dark_2k_v2.png",
         "sc_background_main_light_2k_v2.png": "images/sc_background_main_light_2k_v2.png",
@@ -475,9 +481,12 @@
                     "slaughterhouse-lvl3.png": { name: "3级屠宰场", presets: [{ name: "旧1级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl1.png" }, { name: "旧2级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl2.png" }, { name: "旧3级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl3.png" }] }
                 },
                 "磨坊": {
-                    "mill-lvl1.png": { name: "1级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
-                    "mill-lvl2.png": { name: "2级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
-                    "mill-lvl3.png": { name: "3级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] }
+                    "mill_tier01.png": { name: "新1级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
+                    "mill_tier02.png": { name: "新2级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
+                    "mill_tier03.png": { name: "新3级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
+                    "mill_tier04.png": { name: "新6级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
+                    "mill_tier05.png": { name: "新10级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
+                    "mill_tier06.png": { name: "新15级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
                 },
                 "烘焙厂": {
                     "bakery-lvl1.png": { name: "1级烘焙厂", presets: [{ name: "旧1级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl1.png" }, { name: "旧2级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl2.png" }, { name: "旧3级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl3.png" }] },
@@ -635,6 +644,11 @@
                     "beach-market-lvl1.png": { name: "1级沙滩集市", presets: [{ name: "旧1级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl1.png" }, { name: "旧2级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl2.png" }, { name: "旧3级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl3.png" }] },
                     "beach-market-lvl2.png": { name: "2级沙滩集市", presets: [{ name: "旧1级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl1.png" }, { name: "旧2级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl2.png" }, { name: "旧3级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl3.png" }] },
                     "beach-market-lvl3.png": { name: "3级沙滩集市", presets: [{ name: "旧1级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl1.png" }, { name: "旧2级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl2.png" }, { name: "旧3级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl3.png" }] }
+                },
+                "春季集市": {
+                    "spring_market_tier01.png": { name: "1级春季集市", presets: [{ name: "旧1级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier01.png" }, { name: "旧2级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier02.png" }, { name: "旧3级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier03.png" }] },
+                    "spring_market_tier02.png": { name: "2级春季集市", presets: [{ name: "旧1级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier01.png" }, { name: "旧2级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier02.png" }, { name: "旧3级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier03.png" }] },
+                    "spring_market_tier03.png": { name: "3级春季集市", presets: [{ name: "旧1级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier01.png" }, { name: "旧2级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier02.png" }, { name: "旧3级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier03.png" }] }
                 }
             }
         },
@@ -681,16 +695,16 @@
             },
             "季节性": {
                 "地块": {
-                    "concrete-0000.png": { name: "concrete-0000", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0000.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0000.png" }] },
-                    "concrete-0001.png": { name: "concrete-0001", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0001.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0001.png" }] },
-                    "concrete-0010.png": { name: "concrete-0010", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0010.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0010.png" }] },
-                    "concrete-0011.png": { name: "concrete-0011", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0011.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0011.png" }] },
-                    "concrete-0100.png": { name: "concrete-0100", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0100.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0100.png" }] },
-                    "concrete-0110.png": { name: "concrete-0110", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0110.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0110.png" }] },
-                    "concrete-1000.png": { name: "concrete-1000", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1000.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1000.png" }] },
-                    "concrete-1001.png": { name: "concrete-1001", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1001.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1001.png" }] },
-                    "concrete-1100.png": { name: "concrete-1100", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1100.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1100.png" }] },
-                    "concrete-1111.png": { name: "concrete-1111", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1111.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1111.png" }] }
+                    "concrete-0000.png": { name: "concrete-0000", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0000.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0000.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0000.png" }] },
+                    "concrete-0001.png": { name: "concrete-0001", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0001.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0001.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0001.png" }] },
+                    "concrete-0010.png": { name: "concrete-0010", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0010.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0010.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0010.png" }] },
+                    "concrete-0011.png": { name: "concrete-0011", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0011.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0011.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0011.png" }] },
+                    "concrete-0100.png": { name: "concrete-0100", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0100.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0100.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0100.png" }] },
+                    "concrete-0110.png": { name: "concrete-0110", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0110.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0110.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0110.png" }] },
+                    "concrete-1000.png": { name: "concrete-1000", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1000.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1000.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1000.png" }] },
+                    "concrete-1001.png": { name: "concrete-1001", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1001.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1001.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1001.png" }] },
+                    "concrete-1100.png": { name: "concrete-1100", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1100.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1100.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1100.png" }] },
+                    "concrete-1111.png": { name: "concrete-1111", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1111.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1111.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1111.png" }] }
                 },
                 "道路": {
                     "intersection.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/intersection-xmas.png" }] },
@@ -1094,7 +1108,7 @@
             this.panel.id = 'scobg-panel';
             this.panel.innerHTML = `
                 <div class="scobg-header">
-                    <span style="font-size:15px; font-weight:bold; letter-spacing:0.5px;">SCobg 皮肤管理</span>
+                    <span style="font-size:15px; font-weight:bold; letter-spacing:0.5px;">SC皮肤管理 <a href="https://showscimg.22-7.top/images" target="_blank" style="margin-left:8px; font-size:13px; color:#3498db; text-decoration:underline;">SC图片一览</a></span>
                     <div style="display:flex; gap:10px; align-items:center;">
                         <button id="scobg-save" class="scobg-btn-blue" style="background:#2ecc71; padding:5px 12px;">保存</button>
                         <button id="scobg-apply" class="scobg-btn-blue" style="padding:5px 12px;">刷新</button>
@@ -1503,7 +1517,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    修改匹配逻辑，适配手机。
+            // @changelog    追加磨坊，春季集市，春季地块
 
             fetch(scriptUrl)
                 .then(res => res.text())
