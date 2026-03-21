@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.25.0
+// @version      1.25.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -819,6 +819,14 @@
                 color:#f1c40f;
                 text-align:left;
             `;
+            const saturationRow = document.createElement("div");
+            saturationRow.innerHTML = `查询历史饱和度: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">点击查看</a>`;
+            saturationRow.style.cssText = `
+                margin-bottom:6px;
+                font-size:13px;
+                color:#ddd;
+                text-align:left;
+            `;
 
             // 容器
             saturationTableElement = document.createElement("div");
@@ -867,6 +875,7 @@
 
             // 插入 multiplier 行
             saturationTableElement.appendChild(multiplierRow);
+            saturationTableElement.appendChild(saturationRow);
 
             // 表格
             table.style.background = "#333";
@@ -2757,7 +2766,7 @@
                 currentRealmId = null;
                 let globalObserver = null;
                 let tableObserver = null;
-                
+
                 // --- 核心优化 1: 启动即判断零售属性 ---
                 let currentIsRetail = false;
                 const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
@@ -4912,7 +4921,7 @@
         toast.className = 'sc-update-toast';
         toast.innerHTML = `
             <div class="sc-update-close" id="sc-close" title="暂时关闭">&times;</div>
-            <div class="sc-update-header" id="sc-title">📢 发现新版本 v${version} (点击查看)</div>
+            <div class="sc-update-header" id="sc-title">📢 自动计算最大时利润插件发现新版本 v${version} (点击查看)</div>
             <div class="sc-update-body">
                 <p style="margin:0; font-weight:bold;">更新日志：</p>
                 <div class="sc-changelog-box">${changelog.replace(/\n/g, '<br>') || '修复已知问题，优化性能。'}</div>
@@ -4936,7 +4945,7 @@
         toast.onclick = (e) => {
             if (!toast.classList.contains('expanded')) {
                 toast.classList.add('expanded');
-                document.getElementById('sc-title').innerHTML = `🚀 发现新版本 v${version}`;
+                document.getElementById('sc-title').innerHTML = `自动计算最大时利润插件 新版本：v${version}`;
             }
         };
 
@@ -4967,7 +4976,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    同步最新计算公式
+        // @changelog    增加查询历史饱和度链接
 
         fetch(scriptUrl)
             .then(res => res.text())
