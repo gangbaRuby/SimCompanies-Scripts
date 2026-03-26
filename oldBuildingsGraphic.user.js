@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      2.2.1
+// @version      2.2.2
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -276,9 +276,161 @@
         "road-01.png": "images/buildings/roads/road-01.png",
         "road-10.png": "images/buildings/roads/road-10.png",
 
+        "BFR.png": "images/resources/BFR.png",
+        "aero-research.png": "images/resources/aero-research.png",
+        "aluminium.png": "images/resources/aluminium.png",
+        "apple-cider.png": "images/resources/apple-cider.png",
+        "apple-pie.png": "images/resources/apple-pie.png",
+        "apples.png": "images/resources/apples.png",
+        "attitude-control.png": "images/resources/attitude-control.png",
+        "automotive-research.png": "images/resources/automotive-research.png",
+        "batteries.png": "images/resources/batteries.png",
+        "bauxite.png": "images/resources/bauxite.png",
+        "bread.png": "images/resources/bread.png",
+        "breeding-research.png": "images/resources/breeding-research.png",
+        "bricks.png": "images/resources/bricks.png",
+        "bulldozer.png": "images/resources/bulldozer.png",
+        "butter.png": "images/resources/butter.png",
+        "car-body.png": "images/resources/car-body.png",
+        "car-interior.png": "images/resources/car-interior.png",
+        "carbon-composite.png": "images/resources/carbon-composite.png",
+        "carbon-fiber.png": "images/resources/carbon-fiber.png",
+        "cement.png": "images/resources/cement.png",
+        "cheese.png": "images/resources/cheese.png",
+        "chemicals.png": "images/resources/chemicals.png",
+        "chemistry-research.png": "images/resources/chemistry-research.png",
+        "chocolate.png": "images/resources/chocolate.png",
+        "clay.png": "images/resources/clay.png",
+        "cockpit.png": "images/resources/cockpit.png",
+        "cocktails.png": "images/resources/cocktails.png",
+        "cocoa-beans.png": "images/resources/cocoa-beans.png",
+        "coffee-beans.png": "images/resources/coffee-beans.png",
+        "coffee-ground.png": "images/resources/coffee-ground.png",
+        "combustion-engine.png": "images/resources/combustion-engine.png",
+        "construction-units.png": "images/resources/construction-units.png",
+        "cotton.png": "images/resources/cotton.png",
+        "cow.png": "images/resources/cow.png",
+        "cream-egg.png": "images/resources/cream-egg.png",
+        "crude-oil.png": "images/resources/crude-oil.png",
+        "diesel.png": "images/resources/diesel.png",
+        "displays.png": "images/resources/displays.png",
+        "dough.png": "images/resources/dough.png",
+        "dress.png": "images/resources/dress.png",
+        "easter-bunny.png": "images/resources/easter-bunny.png",
+        "economy-car.png": "images/resources/economy-car.png",
+        "economy-e-car.png": "images/resources/economy-e-car.png",
+        "eggs.png": "images/resources/eggs.png",
+        "electric-motor.png": "images/resources/electric-motor.png",
+        "electronic-components.png": "images/resources/electronic-components.png",
+        "electronics-research.png": "images/resources/electronics-research.png",
+        "energy-research.png": "images/resources/energy-research.png",
+        "ethanol.png": "images/resources/ethanol.png",
+        "fabric.png": "images/resources/fabric.png",
+        "fashion-research.png": "images/resources/fashion-research.png",
+        "flight-computer.png": "images/resources/flight-computer.png",
+        "flour.png": "images/resources/flour.png",
+        "fodder.png": "images/resources/fodder.png",
+        "fuel-tank.png": "images/resources/fuel-tank.png",
+        "fuselage.png": "images/resources/fuselage.png",
+        "ginger-beer.png": "images/resources/ginger-beer.png",
+        "glass.png": "images/resources/glass.png",
+        "gloves.png": "images/resources/gloves.png",
+        "gold-ore.png": "images/resources/gold-ore.png",
+        "gold-watch.png": "images/resources/gold-watch.png",
+        "golden-bars.png": "images/resources/golden-bars.png",
+        "grain.png": "images/resources/grain.png",
+        "grapes.png": "images/resources/grapes.png",
+        "gravy-boat.png": "images/resources/gravy-boat.png",
+        "hamburger.png": "images/resources/hamburger.png",
+        "handbags.png": "images/resources/handbags.png",
+        "heat-shield.png": "images/resources/heat-shield.png",
+        "high-grade-e-components.png": "images/resources/high-grade-e-components.png",
+        "icecream-apple.png": "images/resources/icecream-apple.png",
+        "icecream-chocolate.png": "images/resources/icecream-chocolate.png",
+        "ion-drive.png": "images/resources/ion-drive.png",
+        "iron-ore.png": "images/resources/iron-ore.png",
+        "jack-o-lantern.png": "images/resources/jack-o-lantern.png",
+        "jet-engine.png": "images/resources/jet-engine.png",
+        "jumbojet.png": "images/resources/jumbojet.png",
+        "jumbojet2.png": "images/resources/jumbojet2.png",
+        "laptops.png": "images/resources/laptops.png",
+        "lasagna.png": "images/resources/lasagna.png",
+        "leather.png": "images/resources/leather.png",
+        "limestone.png": "images/resources/limestone.png",
+        "luxury-car-interior.png": "images/resources/luxury-car-interior.png",
+        "luxury-car.png": "images/resources/luxury-car.png",
+        "luxury-e-car.png": "images/resources/luxury-e-car.png",
+        "materials-research.png": "images/resources/materials-research.png",
+        "meatballs.png": "images/resources/meatballs.png",
+        "methane.png": "images/resources/methane.png",
+        "milk.png": "images/resources/milk.png",
+        "minerals.png": "images/resources/minerals.png",
+        "mining-research.png": "images/resources/mining-research.png",
+        "monitors.png": "images/resources/monitors.png",
+        "necklace.png": "images/resources/necklace.png",
+        "oil.png": "images/resources/oil.png",
+        "on-board-computer.png": "images/resources/on-board-computer.png",
+        "orange-juice.png": "images/resources/orange-juice.png",
+        "oranges.png": "images/resources/oranges.png",
+        "orbital-booster.png": "images/resources/orbital-booster.png",
+        "pasta.png": "images/resources/pasta.png",
+        "petrol.png": "images/resources/petrol.png",
+        "pig.png": "images/resources/pig.png",
+        "pizza.png": "images/resources/pizza.png",
+        "planks.png": "images/resources/planks.png",
+        "plant-research.png": "images/resources/plant-research.png",
+        "plastic.png": "images/resources/plastic.png",
+        "power.png": "images/resources/power.png",
+        "private-jet.png": "images/resources/private-jet.png",
+        "processors.png": "images/resources/processors.png",
+        "pumpkin-soup.png": "images/resources/pumpkin-soup.png",
+        "pumpkin.png": "images/resources/pumpkin.png",
+        "quadcopter.png": "images/resources/quadcopter.png",
+        "ramadan-sweets.png": "images/resources/ramadan-sweets.png",
+        "recipes.png": "images/resources/recipes.png",
+        "reinforced-concrete.png": "images/resources/reinforced-concrete.png",
+        "robots.png": "images/resources/robots.png",
+        "rocket-engine.png": "images/resources/rocket-engine.png",
+        "rocket-fuel.png": "images/resources/rocket-fuel.png",
+        "salad.png": "images/resources/salad.png",
+        "samosas.png": "images/resources/samosas.png",
+        "sand.png": "images/resources/sand.png",
+        "satellite.png": "images/resources/satellite.png",
+        "sausages.png": "images/resources/sausages.png",
+        "seeds.png": "images/resources/seeds.png",
+        "silicon.png": "images/resources/silicon.png",
+        "simmi-shoes.png": "images/resources/simmi-shoes.png",
+        "single-engine.png": "images/resources/single-engine.png",
+        "smart-phones.png": "images/resources/smart-phones.png",
+        "sneakers.png": "images/resources/sneakers.png",
+        "software.png": "images/resources/software.png",
+        "solid-rocket.png": "images/resources/solid-rocket.png",
+        "starship.png": "images/resources/starship.png",
+        "steak.png": "images/resources/steak.png",
+        "steel-beams.png": "images/resources/steel-beams.png",
+        "steel.png": "images/resources/steel.png",
+        "sub-orbital-rocket.png": "images/resources/sub-orbital-rocket.png",
+        "sub-orbital-rocket2.png": "images/resources/sub-orbital-rocket2.png",
+        "sub-orbital-second-stage.png": "images/resources/sub-orbital-second-stage.png",
+        "sugar.png": "images/resources/sugar.png",
+        "sugarcane.png": "images/resources/sugarcane.png",
+        "super-heavy-booster.png": "images/resources/super-heavy-booster.png",
+        "tablets.png": "images/resources/tablets.png",
+        "televisions.png": "images/resources/televisions.png",
+        "tools.png": "images/resources/tools.png",
+        "transport.png": "images/resources/transport.png",
+        "tree.png": "images/resources/tree.png",
+        "truck.png": "images/resources/truck.png",
+        "underwear.png": "images/resources/underwear.png",
+        "vegetable-oil.png": "images/resources/vegetable-oil.png",
+        "vegetables.png": "images/resources/vegetables.png",
+        "water.png": "images/resources/water.png",
+        "windows.png": "images/resources/windows.png",
+        "wing.png": "images/resources/wing.png",
+        "witch-costume.png": "images/resources/witch-costume.png",
+        "wood.png": "images/resources/wood.png",
         "xmas-crackers.png": "images/resources/xmas-crackers.png",
         "xmas-ornament.png": "images/resources/xmas-ornament.png",
-        "easter-bunny.png": "images/resources/easter-bunny.png",
 
         "exchange_tier01.png": "images/buildings/other/exchange_tier01.png",
         "exchange_tier02.png": "images/buildings/other/exchange_tier02.png",
@@ -719,16 +871,175 @@
             }
         },
         "资源": {
+            "农业": {
+                "种子": { "seeds.png": { name: "种子", presets: [{ name: "种子", url: "https://scimg.22-7.top/images/resources/seeds.png" }] } },
+                "苹果": { "apples.png": { name: "苹果", presets: [{ name: "苹果", url: "https://scimg.22-7.top/images/resources/apples.png" }] } },
+                "橘子": { "oranges.png": { name: "橘子", presets: [{ name: "橘子", url: "https://scimg.22-7.top/images/resources/oranges.png" }] } },
+                "葡萄": { "grapes.png": { name: "葡萄", presets: [{ name: "葡萄", url: "https://scimg.22-7.top/images/resources/grapes.png" }] } },
+                "谷物": { "grain.png": { name: "谷物", presets: [{ name: "谷物", url: "https://scimg.22-7.top/images/resources/grain.png" }] } },
+                "甘蔗": { "sugarcane.png": { name: "甘蔗", presets: [{ name: "甘蔗", url: "https://scimg.22-7.top/images/resources/sugarcane.png" }] } },
+                "棉花": { "cotton.png": { name: "棉花", presets: [{ name: "棉花", url: "https://scimg.22-7.top/images/resources/cotton.png" }] } },
+                "牛": { "cow.png": { name: "牛", presets: [{ name: "牛", url: "https://scimg.22-7.top/images/resources/cow.png" }] } },
+                "猪": { "pig.png": { name: "猪", presets: [{ name: "猪", url: "https://scimg.22-7.top/images/resources/pig.png" }] } },
+                "咖啡豆": { "coffee-beans.png": { name: "咖啡豆", presets: [{ name: "咖啡豆", url: "https://scimg.22-7.top/images/resources/coffee-beans.png" }] } },
+                "可可": { "cocoa-beans.png": { name: "可可", presets: [{ name: "可可", url: "https://scimg.22-7.top/images/resources/cocoa-beans.png" }] } },
+                "蔬菜": { "vegetables.png": { name: "蔬菜", presets: [{ name: "蔬菜", url: "https://scimg.22-7.top/images/resources/vegetables.png" }] } },
+                "动物饲料": { "fodder.png": { name: "动物饲料", presets: [{ name: "动物饲料", url: "https://scimg.22-7.top/images/resources/fodder.png" }] } }
+            },
+            "食品加工业": {
+                "面团": { "dough.png": { name: "面团", presets: [{ name: "面团", url: "https://scimg.22-7.top/images/resources/dough.png" }] } },
+                "酱汁": { "gravy-boat.png": { name: "酱汁", presets: [{ name: "酱汁", url: "https://scimg.22-7.top/images/resources/gravy-boat.png" }] } },
+                "牛排": { "steak.png": { name: "牛排", presets: [{ name: "牛排", url: "https://scimg.22-7.top/images/resources/steak.png" }] } },
+                "香肠": { "sausages.png": { name: "香肠", presets: [{ name: "香肠", url: "https://scimg.22-7.top/images/resources/sausages.png" }] } },
+                "鸡蛋": { "eggs.png": { name: "鸡蛋", presets: [{ name: "鸡蛋", url: "https://scimg.22-7.top/images/resources/eggs.png" }] } },
+                "牛奶": { "milk.png": { name: "牛奶", presets: [{ name: "牛奶", url: "https://scimg.22-7.top/images/resources/milk.png" }] } },
+                "咖啡粉": { "coffee-ground.png": { name: "咖啡粉", presets: [{ name: "咖啡粉", url: "https://scimg.22-7.top/images/resources/coffee-ground.png" }] } },
+                "面粉": { "flour.png": { name: "面粉", presets: [{ name: "面粉", url: "https://scimg.22-7.top/images/resources/flour.png" }] } },
+                "面包": { "bread.png": { name: "面包", presets: [{ name: "面包", url: "https://scimg.22-7.top/images/resources/bread.png" }] } },
+                "苹果派": { "apple-pie.png": { name: "苹果派", presets: [{ name: "苹果派", url: "https://scimg.22-7.top/images/resources/apple-pie.png" }] } },
+                "橙汁": { "orange-juice.png": { name: "橙汁", presets: [{ name: "橙汁", url: "https://scimg.22-7.top/images/resources/orange-juice.png" }] } },
+                "苹果汁": { "apple-cider.png": { name: "苹果汁", presets: [{ name: "苹果汁", url: "https://scimg.22-7.top/images/resources/apple-cider.png" }] } },
+                "姜汁啤酒": { "ginger-beer.png": { name: "姜汁啤酒", presets: [{ name: "姜汁啤酒", url: "https://scimg.22-7.top/images/resources/ginger-beer.png" }] } },
+                "披萨": { "pizza.png": { name: "披萨", presets: [{ name: "披萨", url: "https://scimg.22-7.top/images/resources/pizza.png" }] } },
+                "面条": { "pasta.png": { name: "面条", presets: [{ name: "面条", url: "https://scimg.22-7.top/images/resources/pasta.png" }] } },
+                "黄油": { "butter.png": { name: "黄油", presets: [{ name: "黄油", url: "https://scimg.22-7.top/images/resources/butter.png" }] } },
+                "芝士": { "cheese.png": { name: "芝士", presets: [{ name: "芝士", url: "https://scimg.22-7.top/images/resources/cheese.png" }] } },
+                "巧克力": { "chocolate.png": { name: "巧克力", presets: [{ name: "巧克力", url: "https://scimg.22-7.top/images/resources/chocolate.png" }] } },
+                "糖": { "sugar.png": { name: "糖", presets: [{ name: "糖", url: "https://scimg.22-7.top/images/resources/sugar.png" }] } },
+                "汉堡包": { "hamburger.png": { name: "汉堡包", presets: [{ name: "汉堡包", url: "https://scimg.22-7.top/images/resources/hamburger.png" }] } },
+                "千层面": { "lasagna.png": { name: "千层面", presets: [{ name: "千层面", url: "https://scimg.22-7.top/images/resources/lasagna.png" }] } },
+                "肉丸": { "meatballs.png": { name: "肉丸", presets: [{ name: "肉丸", url: "https://scimg.22-7.top/images/resources/meatballs.png" }] } },
+                "鸡尾酒": { "cocktails.png": { name: "鸡尾酒", presets: [{ name: "鸡尾酒", url: "https://scimg.22-7.top/images/resources/cocktails.png" }] } },
+                "植物油": { "vegetable-oil.png": { name: "植物油", presets: [{ name: "植物油", url: "https://scimg.22-7.top/images/resources/vegetable-oil.png" }] } },
+                "沙拉": { "salad.png": { name: "沙拉", presets: [{ name: "沙拉", url: "https://scimg.22-7.top/images/resources/salad.png" }] } },
+                "咖喱角": { "samosas.png": { name: "咖喱角", presets: [{ name: "咖喱角", url: "https://scimg.22-7.top/images/resources/samosas.png" }] } },
+                "南瓜汤": { "pumpkin-soup.png": { name: "南瓜汤", presets: [{ name: "南瓜汤", url: "https://scimg.22-7.top/images/resources/pumpkin-soup.png" }] } }
+            },
+            "建设": {
+                "木材": { "wood.png": { name: "木材", presets: [{ name: "木材", url: "https://scimg.22-7.top/images/resources/wood.png" }] } },
+                "钢筋混凝土": { "reinforced-concrete.png": { name: "钢筋混凝土", presets: [{ name: "钢筋混凝土", url: "https://scimg.22-7.top/images/resources/reinforced-concrete.png" }] } },
+                "砖块": { "bricks.png": { name: "砖块", presets: [{ name: "砖块", url: "https://scimg.22-7.top/images/resources/bricks.png" }] } },
+                "水泥": { "cement.png": { name: "水泥", presets: [{ name: "水泥", url: "https://scimg.22-7.top/images/resources/cement.png" }] } },
+                "黏土": { "clay.png": { name: "黏土", presets: [{ name: "黏土", url: "https://scimg.22-7.top/images/resources/clay.png" }] } },
+                "石灰石": { "limestone.png": { name: "石灰石", presets: [{ name: "石灰石", url: "https://scimg.22-7.top/images/resources/limestone.png" }] } },
+                "钢筋": { "steel-beams.png": { name: "钢筋", presets: [{ name: "钢筋", url: "https://scimg.22-7.top/images/resources/steel-beams.png" }] } },
+                "木板": { "planks.png": { name: "木板", presets: [{ name: "木板", url: "https://scimg.22-7.top/images/resources/planks.png" }] } },
+                "窗户": { "windows.png": { name: "窗户", presets: [{ name: "窗户", url: "https://scimg.22-7.top/images/resources/windows.png" }] } },
+                "工具": { "tools.png": { name: "工具", presets: [{ name: "工具", url: "https://scimg.22-7.top/images/resources/tools.png" }] } },
+                "建筑预构件": { "construction-units.png": { name: "建筑预构件", presets: [{ name: "建筑预构件", url: "https://scimg.22-7.top/images/resources/construction-units.png" }] } }
+            },
+            "时装业": {
+                "棉布": { "fabric.png": { name: "棉布", presets: [{ name: "棉布", url: "https://scimg.22-7.top/images/resources/fabric.png" }] } },
+                "皮革": { "leather.png": { name: "皮革", presets: [{ name: "皮革", url: "https://scimg.22-7.top/images/resources/leather.png" }] } },
+                "内衣": { "underwear.png": { name: "内衣", presets: [{ name: "内衣", url: "https://scimg.22-7.top/images/resources/underwear.png" }] } },
+                "手套": { "gloves.png": { name: "手套", presets: [{ name: "手套", url: "https://scimg.22-7.top/images/resources/gloves.png" }] } },
+                "裙子": { "dress.png": { name: "裙子", presets: [{ name: "裙子", url: "https://scimg.22-7.top/images/resources/dress.png" }] } },
+                "高跟鞋": { "simmi-shoes.png": { name: "高跟鞋", presets: [{ name: "高跟鞋", url: "https://scimg.22-7.top/images/resources/simmi-shoes.png" }] } },
+                "手袋": { "handbags.png": { name: "手袋", presets: [{ name: "手袋", url: "https://scimg.22-7.top/images/resources/handbags.png" }] } },
+                "运动鞋": { "sneakers.png": { name: "运动鞋", presets: [{ name: "运动鞋", url: "https://scimg.22-7.top/images/resources/sneakers.png" }] } },
+                "名牌手表": { "gold-watch.png": { name: "名牌手表", presets: [{ name: "名牌手表", url: "https://scimg.22-7.top/images/resources/gold-watch.png" }] } },
+                "项链": { "necklace.png": { name: "项链", presets: [{ name: "项链", url: "https://scimg.22-7.top/images/resources/necklace.png" }] } }
+            },
+            "能源行业": {
+                "原油": { "crude-oil.png": { name: "原油", presets: [{ name: "原油", url: "https://scimg.22-7.top/images/resources/crude-oil.png" }] } },
+                "汽油": { "petrol.png": { name: "汽油", presets: [{ name: "汽油", url: "https://scimg.22-7.top/images/resources/petrol.png" }] } },
+                "柴油": { "diesel.png": { name: "柴油", presets: [{ name: "柴油", url: "https://scimg.22-7.top/images/resources/diesel.png" }] } },
+                "电力": { "power.png": { name: "电力", presets: [{ name: "电力", url: "https://scimg.22-7.top/images/resources/power.png" }] } },
+                "乙醇": { "ethanol.png": { name: "乙醇", presets: [{ name: "乙醇", url: "https://scimg.22-7.top/images/resources/ethanol.png" }] } },
+                "甲烷": { "methane.png": { name: "甲烷", presets: [{ name: "甲烷", url: "https://scimg.22-7.top/images/resources/methane.png" }] } },
+                "火箭燃料": { "rocket-fuel.png": { name: "火箭燃料", presets: [{ name: "火箭燃料", url: "https://scimg.22-7.top/images/resources/rocket-fuel.png" }] } }
+            },
+            "电子产品制造业": {
+                "处理器": { "processors.png": { name: "处理器", presets: [{ name: "处理器", url: "https://scimg.22-7.top/images/resources/processors.png" }] } },
+                "电子元件": { "electronic-components.png": { name: "电子元件", presets: [{ name: "电子元件", url: "https://scimg.22-7.top/images/resources/electronic-components.png" }] } },
+                "电池": { "batteries.png": { name: "电池", presets: [{ name: "电池", url: "https://scimg.22-7.top/images/resources/batteries.png" }] } },
+                "显示屏": { "displays.png": { name: "显示屏", presets: [{ name: "显示屏", url: "https://scimg.22-7.top/images/resources/displays.png" }] } },
+                "智能手机": { "smart-phones.png": { name: "智能手机", presets: [{ name: "智能手机", url: "https://scimg.22-7.top/images/resources/smart-phones.png" }] } },
+                "平板电脑": { "tablets.png": { name: "平板电脑", presets: [{ name: "平板电脑", url: "https://scimg.22-7.top/images/resources/tablets.png" }] } },
+                "笔记本电脑": { "laptops.png": { name: "笔记本电脑", presets: [{ name: "笔记本电脑", url: "https://scimg.22-7.top/images/resources/laptops.png" }] } },
+                "显示器": { "monitors.png": { name: "显示器", presets: [{ name: "显示器", url: "https://scimg.22-7.top/images/resources/monitors.png" }] } },
+                "电视机": { "televisions.png": { name: "电视机", presets: [{ name: "电视机", url: "https://scimg.22-7.top/images/resources/televisions.png" }] } },
+                "精密电子元件": { "high-grade-e-components.png": { name: "精密电子元件", presets: [{ name: "精密电子元件", url: "https://scimg.22-7.top/images/resources/high-grade-e-components.png" }] } },
+                "无人机": { "quadcopter.png": { name: "无人机", presets: [{ name: "无人机", url: "https://scimg.22-7.top/images/resources/quadcopter.png" }] } },
+                "机器人": { "robots.png": { name: "机器人", presets: [{ name: "机器人", url: "https://scimg.22-7.top/images/resources/robots.png" }] } }
+            },
+            "汽车制造业": {
+                "车载电脑": { "on-board-computer.png": { name: "车载电脑", presets: [{ name: "车载电脑", url: "https://scimg.22-7.top/images/resources/on-board-computer.png" }] } },
+                "电动马达": { "electric-motor.png": { name: "电动马达", presets: [{ name: "电动马达", url: "https://scimg.22-7.top/images/resources/electric-motor.png" }] } },
+                "豪华车内饰": { "luxury-car-interior.png": { name: "豪华车内饰", presets: [{ name: "豪华车内饰", url: "https://scimg.22-7.top/images/resources/luxury-car-interior.png" }] } },
+                "基本内饰": { "car-interior.png": { name: "基本内饰", presets: [{ name: "基本内饰", url: "https://scimg.22-7.top/images/resources/car-interior.png" }] } },
+                "车身": { "car-body.png": { name: "车身", presets: [{ name: "车身", url: "https://scimg.22-7.top/images/resources/car-body.png" }] } },
+                "内燃机": { "combustion-engine.png": { name: "内燃机", presets: [{ name: "内燃机", url: "https://scimg.22-7.top/images/resources/combustion-engine.png" }] } },
+                "经济电动车": { "economy-e-car.png": { name: "经济电动车", presets: [{ name: "经济电动车", url: "https://scimg.22-7.top/images/resources/economy-e-car.png" }] } },
+                "豪华电动车": { "luxury-e-car.png": { name: "豪华电动车", presets: [{ name: "豪华电动车", url: "https://scimg.22-7.top/images/resources/luxury-e-car.png" }] } },
+                "经济燃油车": { "economy-car.png": { name: "经济燃油车", presets: [{ name: "经济燃油车", url: "https://scimg.22-7.top/images/resources/economy-car.png" }] } },
+                "豪华燃油车": { "luxury-car.png": { name: "豪华燃油车", presets: [{ name: "豪华燃油车", url: "https://scimg.22-7.top/images/resources/luxury-car.png" }] } },
+                "卡车": { "truck.png": { name: "卡车", presets: [{ name: "卡车", url: "https://scimg.22-7.top/images/resources/truck.png" }] } },
+                "推土机": { "bulldozer.png": { name: "推土机", presets: [{ name: "推土机", url: "https://scimg.22-7.top/images/resources/bulldozer.png" }] } }
+            },
+            "航空航天制造业": {
+                "机身": { "fuselage.png": { name: "机身", presets: [{ name: "机身", url: "https://scimg.22-7.top/images/resources/fuselage.png" }] } },
+                "机翼": { "wing.png": { name: "机翼", presets: [{ name: "机翼", url: "https://scimg.22-7.top/images/resources/wing.png" }] } },
+                "飞行计算机": { "flight-computer.png": { name: "飞行计算机", presets: [{ name: "飞行计算机", url: "https://scimg.22-7.top/images/resources/flight-computer.png" }] } },
+                "座舱": { "cockpit.png": { name: "座舱", presets: [{ name: "座舱", url: "https://scimg.22-7.top/images/resources/cockpit.png" }] } },
+                "姿态控制器": { "attitude-control.png": { name: "姿态控制器", presets: [{ name: "姿态控制器", url: "https://scimg.22-7.top/images/resources/attitude-control.png" }] } },
+                "燃料储罐": { "fuel-tank.png": { name: "燃料储罐", presets: [{ name: "燃料储罐", url: "https://scimg.22-7.top/images/resources/fuel-tank.png" }] } },
+                "固体燃料助推器": { "solid-rocket.png": { name: "固体燃料助推器", presets: [{ name: "固体燃料助推器", url: "https://scimg.22-7.top/images/resources/solid-rocket.png" }] } },
+                "火箭发动机": { "rocket-engine.png": { name: "火箭发动机", presets: [{ name: "火箭发动机", url: "https://scimg.22-7.top/images/resources/rocket-engine.png" }] } },
+                "隔热板": { "heat-shield.png": { name: "隔热板", presets: [{ name: "隔热板", url: "https://scimg.22-7.top/images/resources/heat-shield.png" }] } },
+                "离子推进器": { "ion-drive.png": { name: "离子推进器", presets: [{ name: "离子推进器", url: "https://scimg.22-7.top/images/resources/ion-drive.png" }] } },
+                "喷气发动机": { "jet-engine.png": { name: "喷气发动机", presets: [{ name: "喷气发动机", url: "https://scimg.22-7.top/images/resources/jet-engine.png" }] } },
+                "亚轨道火箭": { "sub-orbital-rocket2.png": { name: "亚轨道火箭", presets: [{ name: "亚轨道火箭", url: "https://scimg.22-7.top/images/resources/sub-orbital-rocket2.png" }] } },
+                "BFR": { "BFR.png": { name: "BFR", presets: [{ name: "BFR", url: "https://scimg.22-7.top/images/resources/BFR.png" }] } },
+                "喷气客机": { "jumbojet2.png": { name: "喷气客机", presets: [{ name: "喷气客机", url: "https://scimg.22-7.top/images/resources/jumbojet2.png" }] } },
+                "豪华飞机": { "private-jet.png": { name: "豪华飞机", presets: [{ name: "豪华飞机", url: "https://scimg.22-7.top/images/resources/private-jet.png" }] } },
+                "单引擎飞机": { "single-engine.png": { name: "单引擎飞机", presets: [{ name: "单引擎飞机", url: "https://scimg.22-7.top/images/resources/single-engine.png" }] } },
+                "人造卫星": { "satellite.png": { name: "人造卫星", presets: [{ name: "人造卫星", url: "https://scimg.22-7.top/images/resources/satellite.png" }] } }, 
+            },
+            "原材料加工业": {
+                "水": { "water.png": { name: "水", presets: [{ name: "水", url: "https://scimg.22-7.top/images/resources/water.png" }] } },
+                "运输单位": { "transport.png": { name: "运输单位", presets: [{ name: "运输单位", url: "https://scimg.22-7.top/images/resources/transport.png" }] } },
+                "矿物": { "minerals.png": { name: "矿物", presets: [{ name: "矿物", url: "https://scimg.22-7.top/images/resources/minerals.png" }] } },
+                "铝土矿": { "bauxite.png": { name: "铝土矿", presets: [{ name: "铝土矿", url: "https://scimg.22-7.top/images/resources/bauxite.png" }] } },
+                "硅材": { "silicon.png": { name: "硅材", presets: [{ name: "硅材", url: "https://scimg.22-7.top/images/resources/silicon.png" }] } },
+                "化合物": { "chemicals.png": { name: "化合物", presets: [{ name: "化合物", url: "https://scimg.22-7.top/images/resources/chemicals.png" }] } },
+                "铝材": { "aluminium.png": { name: "铝材", presets: [{ name: "铝材", url: "https://scimg.22-7.top/images/resources/aluminium.png" }] } },
+                "塑料": { "plastic.png": { name: "塑料", presets: [{ name: "塑料", url: "https://scimg.22-7.top/images/resources/plastic.png" }] } },
+                "铁矿石": { "iron-ore.png": { name: "铁矿石", presets: [{ name: "铁矿石", url: "https://scimg.22-7.top/images/resources/iron-ore.png" }] } },
+                "钢材": { "steel.png": { name: "钢材", presets: [{ name: "钢材", url: "https://scimg.22-7.top/images/resources/steel.png" }] } },
+                "沙子": { "sand.png": { name: "沙子", presets: [{ name: "沙子", url: "https://scimg.22-7.top/images/resources/sand.png" }] } },
+                "玻璃": { "glass.png": { name: "玻璃", presets: [{ name: "玻璃", url: "https://scimg.22-7.top/images/resources/glass.png" }] } },
+                "金矿石": { "gold-ore.png": { name: "金矿石", presets: [{ name: "金矿石", url: "https://scimg.22-7.top/images/resources/gold-ore.png" }] } },
+                "金条": { "golden-bars.png": { name: "金条", presets: [{ name: "金条", url: "https://scimg.22-7.top/images/resources/golden-bars.png" }] } },
+                "碳纤维": { "carbon-fiber.png": { name: "碳纤维", presets: [{ name: "碳纤维", url: "https://scimg.22-7.top/images/resources/carbon-fiber.png" }] } },
+                "碳纤复合材": { "carbon-composite.png": { name: "碳纤复合材", presets: [{ name: "碳纤复合材", url: "https://scimg.22-7.top/images/resources/carbon-composite.png" }] } }
+            },
+            "科研行业": {
+                "作物研究": { "plant-research.png": { name: "作物研究", presets: [{ name: "作物研究", url: "https://scimg.22-7.top/images/resources/plant-research.png" }] } },
+                "能源研究": { "energy-research.png": { name: "能源研究", presets: [{ name: "能源研究", url: "https://scimg.22-7.top/images/resources/energy-research.png" }] } },
+                "采矿研究": { "mining-research.png": { name: "采矿研究", presets: [{ name: "采矿研究", url: "https://scimg.22-7.top/images/resources/mining-research.png" }] } },
+                "电器研究": { "electronics-research.png": { name: "电器研究", presets: [{ name: "电器研究", url: "https://scimg.22-7.top/images/resources/electronics-research.png" }] } },
+                "畜牧研究": { "breeding-research.png": { name: "畜牧研究", presets: [{ name: "畜牧研究", url: "https://scimg.22-7.top/images/resources/breeding-research.png" }] } },
+                "化学研究": { "chemistry-research.png": { name: "化学研究", presets: [{ name: "化学研究", url: "https://scimg.22-7.top/images/resources/chemistry-research.png" }] } },
+                "软件": { "software.png": { name: "软件", presets: [{ name: "软件", url: "https://scimg.22-7.top/images/resources/software.png" }] } },
+                "汽车研究": { "automotive-research.png": { name: "汽车研究", presets: [{ name: "汽车研究", url: "https://scimg.22-7.top/images/resources/automotive-research.png" }] } },
+                "时装研究": { "fashion-research.png": { name: "时装研究", presets: [{ name: "时装研究", url: "https://scimg.22-7.top/images/resources/fashion-research.png" }] } },
+                "航空航天研究": { "aero-research.png": { name: "航空航天研究", presets: [{ name: "航空航天研究", url: "https://scimg.22-7.top/images/resources/aero-research.png" }] } },
+                "材料研究": { "materials-research.png": { name: "材料研究", presets: [{ name: "材料研究", url: "https://scimg.22-7.top/images/resources/materials-research.png" }] } },
+                "食谱": { "recipes.png": { name: "食谱", presets: [{ name: "食谱", url: "https://scimg.22-7.top/images/resources/recipes.png" }] } }
+            },
             "季节性": {
-                "圣诞爆竹": {
-                    "xmas-crackers.png": { name: "圣诞爆竹", presets: [{ name: "旧圣诞爆竹", url: "https://scimg.22-7.top/images/resources/xmas-crackers_old01.png" }] },
-                },
-                "圣诞装饰品": {
-                    "xmas-ornament.png": { name: "圣诞装饰品", presets: [{ name: "旧圣诞装饰品", url: "https://scimg.22-7.top/images/resources/xmas-ornament_old01.png" }] },
-                },
-                "复活节兔兔": {
-                    "easter-bunny.png": { name: "圣诞装饰品", presets: [{ name: "旧圣诞装饰品", url: "https://scimg.22-7.top/images/resources/easter-bunny_old01.png" }] },
-                },
+                "南瓜": { "pumpkin.png": { name: "南瓜", presets: [{ name: "南瓜", url: "https://scimg.22-7.top/images/resources/pumpkin.png" }] } },
+                "复活节兔兔": { "easter-bunny.png": { name: "复活节兔兔", presets: [{ name: "旧复活节兔兔", url: "https://scimg.22-7.top/images/resources/easter-bunny_old01.png" }] } },
+                "奶油鸡蛋": { "cream-egg.png": { name: "奶油鸡蛋", presets: [{ name: "Cream egg", url: "https://scimg.22-7.top/images/resources/cream-egg.png" }] } },
+                "圣诞爆竹": { "xmas-crackers.png": { name: "圣诞爆竹", presets: [{ name: "旧圣诞爆竹", url: "https://scimg.22-7.top/images/resources/xmas-crackers_old01.png" }] } },
+                "圣诞装饰品": { "xmas-ornament.png": { name: "圣诞装饰品", presets: [{ name: "旧圣诞装饰品", url: "https://scimg.22-7.top/images/resources/xmas-ornament_old01.png" }] } },
+                "杰克灯笼": { "jack-o-lantern.png": { name: "杰克灯笼", presets: [{ name: "杰克灯笼", url: "https://scimg.22-7.top/images/resources/jack-o-lantern.png" }] } },
+                "女巫服": { "witch-costume.png": { name: "女巫服", presets: [{ name: "女巫服", url: "https://scimg.22-7.top/images/resources/witch-costume.png" }] } },
+                "树": { "tree.png": { name: "树", presets: [{ name: "树", url: "https://scimg.22-7.top/images/resources/tree.png" }] } },
+                "斋月糖果": { "ramadan-sweets.png": { name: "斋月糖果", presets: [{ name: "斋月糖果", url: "https://scimg.22-7.top/images/resources/ramadan-sweets.png" }] } },
+                "巧克力冰淇淋": { "icecream-chocolate.png": { name: "巧克力冰淇淋", presets: [{ name: "巧克力冰淇淋", url: "https://scimg.22-7.top/images/resources/icecream-chocolate.png" }] } },
+                "苹果冰淇淋": { "icecream-apple.png": { name: "苹果冰淇淋", presets: [{ name: "苹果冰淇淋", url: "https://scimg.22-7.top/images/resources/icecream-apple.png" }] } }
             }
         }
     };
@@ -779,15 +1090,15 @@
          * @param {string} originalUrl - 原始图片 URL
          * @returns {string|null} - 替换后的 URL 或 null
          */
-         getReplacementUrl(originalUrl) {
+        getReplacementUrl(originalUrl) {
             if (!originalUrl) return null;
             const fullFileName = originalUrl.split('/').pop().split('?')[0].toLowerCase();
-        
+
             for (const key of this.allKeys) {
                 // 只有当 manifest 里的 key (如 construction_factory_tier06) 
                 // 确实出现在文件名中时才继续
                 const baseKey = key.replace('.png', '').toLowerCase();
-                
+
                 if (fullFileName.includes(baseKey)) {
                     const config = this.data[key];
                     if (config && config.enabled && config.target) {
@@ -904,11 +1215,11 @@
 
         processBgString(originalBgStr) {
             if (!originalBgStr || originalBgStr === 'none') return null;
-        
+
             // 关键：剥离可能存在的 !important，否则 join 后会变成 url(...) !important, url(...)
             const cleanBg = originalBgStr.replace(/\s*!important/g, '').trim();
             const parts = cleanBg.split(/,(?=(?:(?:[^"']*["']){2})*[^"']*$)/).map(s => s.trim());
-            
+
             let hasChanged = false;
             const newParts = parts.map(part => {
                 const urlMatch = part.match(/url\(['"]?([^'"]+)['"]?\)/);
@@ -922,19 +1233,19 @@
                 }
                 return part;
             });
-        
+
             return hasChanged ? newParts.join(', ') : null;
         },
-        
+
         processElementStyle(el) {
             const style = el.style;
             if (!style || !style.backgroundImage) return;
-        
+
             // 使用 dataset 记录最初的状态
             if (!el.dataset.scOriginalBg) {
                 el.dataset.scOriginalBg = style.backgroundImage;
             }
-        
+
             const newBg = this.processBgString(el.dataset.scOriginalBg);
             if (newBg) {
                 // 统一添加 !important 确保覆盖游戏原生样式
@@ -971,23 +1282,23 @@
     // ==========================================
     const SCobgUIManager = {
         panel: null,
-        
+
         init() {
             if (document.getElementById('scobg-panel')) return;
             this.injectCSS();
             this.createPanel();
             this.registerTampermonkeyMenu();
-            
+
             const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
             win.SCobg_TogglePanel = () => this.togglePanel();
         },
-    
+
         registerTampermonkeyMenu() {
             if (typeof GM_registerMenuCommand !== 'undefined') {
                 GM_registerMenuCommand("🎨 皮肤管理面板", () => this.togglePanel());
             }
         },
-    
+
         togglePanel() {
             if (!this.panel) return;
             const isVisible = this.panel.style.display === 'flex';
@@ -995,7 +1306,7 @@
             // 锁定背景滚动
             document.body.style.overflow = isVisible ? '' : 'hidden';
         },
-    
+
         injectCSS() {
             const style = document.createElement('style');
             style.id = 'scobg-ui-style';
@@ -1106,7 +1417,7 @@
             `;
             document.head.appendChild(style);
         },
-    
+
         createPanel() {
             this.panel = document.createElement('div');
             this.panel.id = 'scobg-panel';
@@ -1130,7 +1441,7 @@
                 </div>
             `;
             document.body.appendChild(this.panel);
-    
+
             this.panel.querySelector('#scobg-close').onclick = () => this.togglePanel();
             this.panel.querySelector('#scobg-apply').onclick = () => location.reload();
             this.panel.querySelector('#scobg-save').onclick = (e) => {
@@ -1142,32 +1453,32 @@
                     setTimeout(() => btn.textContent = oldText, 1500);
                 }
             };
-    
+
             this.renderSidebar();
         },
-    
+
         renderSidebar() {
             const sidebar = this.panel.querySelector('.scobg-sidebar');
             if (!sidebar || typeof UI_MANIFEST === 'undefined') return;
             sidebar.innerHTML = '';
-    
+
             for (const [l1Name, l1Data] of Object.entries(UI_MANIFEST)) {
                 const l1El = this.createTreeItem(l1Name, 'scobg-l1');
                 const l1Container = document.createElement('div');
                 l1Container.className = 'scobg-sub-container';
-    
+
                 l1El.onclick = () => this.toggleTree(l1El, l1Container);
-    
+
                 for (const [l2Name, l2Data] of Object.entries(l1Data)) {
                     const l2El = this.createTreeItem(l2Name, 'scobg-l2');
                     const l2Container = document.createElement('div');
                     l2Container.className = 'scobg-sub-container';
-    
+
                     l2El.onclick = (e) => {
                         e.stopPropagation();
                         this.toggleTree(l2El, l2Container);
                     };
-    
+
                     for (const [l3Name, l3Items] of Object.entries(l2Data)) {
                         const l3El = document.createElement('div');
                         l3El.className = 'scobg-tree-item scobg-l3';
@@ -1191,20 +1502,20 @@
                 sidebar.appendChild(l1Container);
             }
         },
-    
+
         createTreeItem(text, className) {
             const div = document.createElement('div');
             div.className = `scobg-tree-item ${className}`;
             div.innerHTML = `<span class="scobg-arrow">▶</span> ${text}`;
             return div;
         },
-    
+
         toggleTree(el, container) {
             const isShow = container.classList.toggle('show');
             const arrow = el.querySelector('.scobg-arrow');
             if (arrow) arrow.style.transform = isShow ? 'rotate(90deg)' : 'rotate(0deg)';
         },
-    
+
         renderContent(l1, l2, l3, items) {
             const content = this.panel.querySelector('.scobg-content');
             content.innerHTML = `
@@ -1219,12 +1530,12 @@
                 this.renderRow(grid, key, meta, () => this.renderContent(l1, l2, l3, items));
             }
         },
-    
+
         renderRow(container, key, meta, refresh) {
             const cfg = (typeof Settings !== 'undefined' && Settings.data[key]) || { enabled: false, target: "" };
             const relPath = (typeof PATH_MAP !== 'undefined' && PATH_MAP[key]) || `images/${key}`;
             const originalUrl = `${(typeof CONSTANTS !== 'undefined' ? CONSTANTS.STATIC_ROOT : '')}${relPath}`;
-    
+
             const row = document.createElement('div');
             row.className = 'scobg-row';
             row.innerHTML = `
@@ -1238,20 +1549,20 @@
                 <div class="scobg-imgs">
                     <div style="text-align:center"><div style="font-size:9px;color:#555;margin-bottom:2px">原图</div><img src="${originalUrl}" class="scobg-ui-img" style="opacity:0.2;filter:grayscale(1)"></div>
                     <div style="color:#333;font-size:12px">➔</div>
-                    <div style="text-align:center"><div style="font-size:9px;color:#2196f3;margin-bottom:2px">当前</div><img src="${cfg.target || originalUrl}" class="scobg-ui-img click select-trigger" style="border-color:${cfg.enabled?'#2196f3':'#444'}"></div>
+                    <div style="text-align:center"><div style="font-size:9px;color:#2196f3;margin-bottom:2px">当前</div><img src="${cfg.target || originalUrl}" class="scobg-ui-img click select-trigger" style="border-color:${cfg.enabled ? '#2196f3' : '#444'}"></div>
                 </div>
             `;
-    
+
             row.querySelector('input').onchange = (e) => this.update(key, cfg.target, e.target.checked, refresh);
             row.querySelector('.select-trigger').onclick = (e) => this.showMenu(e, meta, (url) => this.update(key, url, true, refresh));
             container.appendChild(row);
         },
-    
+
         showMenu(e, meta, onSelect) {
             const old = document.querySelector('.scobg-menu'); if (old) old.remove();
             const menu = document.createElement('div');
             menu.className = 'scobg-menu';
-            
+
             // 手机端居中策略
             if (window.innerWidth <= 768) {
                 menu.style.left = '50%';
@@ -1261,7 +1572,7 @@
                 menu.style.left = `${Math.min(e.clientX, window.innerWidth - 330)}px`;
                 menu.style.top = `${Math.min(e.clientY, window.innerHeight - 350)}px`;
             }
-    
+
             if (meta.presets) {
                 meta.presets.forEach(p => {
                     const item = document.createElement('div');
@@ -1271,7 +1582,7 @@
                     menu.appendChild(item);
                 });
             }
-    
+
             const foot = document.createElement('div');
             foot.style.cssText = 'grid-column: span 2; display: flex; flex-direction: column; gap: 8px; margin-top: 5px; border-top: 1px solid #444; padding-top: 10px;';
             foot.innerHTML = `
@@ -1280,18 +1591,18 @@
                     <button class="scobg-btn-blue" style="padding:0 15px;">确定</button>
                 </div>
             `;
-            
+
             const input = foot.querySelector('input');
             const btn = foot.querySelector('button');
-            const confirm = () => { if(input.value) { onSelect(input.value); menu.remove(); } };
-            
+            const confirm = () => { if (input.value) { onSelect(input.value); menu.remove(); } };
+
             btn.onclick = (ev) => { ev.stopPropagation(); confirm(); };
             input.onclick = (ev) => ev.stopPropagation();
-            input.onkeydown = (ev) => { if(ev.key === 'Enter') confirm(); };
-    
+            input.onkeydown = (ev) => { if (ev.key === 'Enter') confirm(); };
+
             menu.appendChild(foot);
             document.body.appendChild(menu);
-    
+
             setTimeout(() => {
                 const outClick = (ev) => {
                     if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', outClick); }
@@ -1299,7 +1610,7 @@
                 document.addEventListener('click', outClick);
             }, 50);
         },
-    
+
         update(key, url, enabled, refresh) {
             if (typeof Settings !== 'undefined') {
                 Settings.data[key] = { target: url, enabled: enabled };
@@ -1466,7 +1777,7 @@
             toast.className = 'sc-update-toast';
             toast.innerHTML = `
                 <div class="sc-update-close" id="sc-close" title="暂时关闭">&times;</div>
-                <div class="sc-update-header" id="sc-title">📢 发现新版本 v${version} (点击查看)</div>
+                <div class="sc-update-header" id="sc-title">SC图片替换插件 发现新版本 v${version} (点击查看)</div>
                 <div class="sc-update-body">
                     <p style="margin:0; font-weight:bold;">更新日志：</p>
                     <div class="sc-changelog-box">${changelog.replace(/\n/g, '<br>') || '修复已知问题，优化性能。'}</div>
@@ -1490,7 +1801,7 @@
             toast.onclick = (e) => {
                 if (!toast.classList.contains('expanded')) {
                     toast.classList.add('expanded');
-                    document.getElementById('sc-title').innerHTML = `🚀 发现新版本 v${version}`;
+                    document.getElementById('sc-title').innerHTML = `SC图片替换插件 发现新版本 v${version}`;
                 }
             };
 
@@ -1521,7 +1832,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    追加复活节兔兔
+            // @changelog    追加全部物品资源
 
             fetch(scriptUrl)
                 .then(res => res.text())
@@ -1539,7 +1850,7 @@
                     // 2. 只有确实有新版本时，才将 hasNewVersion 设为 true
                     if (isNewer) {
                         hasNewVersion = true; // 恢复你的原有逻辑
-                        console.log(`📢 发现新版本 v${latestVersion}`);
+                        console.log(`SC图片替换插件 发现新版本 v${latestVersion}`);
 
                         // 3. 检查是否被用户手动忽略过
                         const ignoredVersion = localStorage.getItem('sc_ignored_version');
