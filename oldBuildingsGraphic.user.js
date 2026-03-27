@@ -1979,7 +1979,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    追加全部物品资源
+            // @changelog    增加导入导出配置功能，追加春季道路，将基础信息改为远端存放
 
             fetch(scriptUrl)
                 .then(res => res.text())
