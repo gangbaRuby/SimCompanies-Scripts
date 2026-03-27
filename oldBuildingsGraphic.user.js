@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      2.2.2
+// @version      2.3.0
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -36,7 +36,7 @@
         'forrest_nursery_tier04_front',
     ];
 
-    const PATH_MAP = {
+    const DEFAULT_PATH_MAP = {
         "hangar_tier01.png": "images/buildings/production/hangar_tier01.png",
         "hangar_tier02.png": "images/buildings/production/hangar_tier02.png",
         "hangar_tier03.png": "images/buildings/production/hangar_tier03.png",
@@ -467,7 +467,7 @@
     /**
      * 三级菜单结构与图片定义 (来自 oldBuildingsGraphic1)
      */
-    const UI_MANIFEST = {
+    const DEFAULT_UI_MANIFEST = {
         "建筑外观": {
             "生产建筑": {
                 "机库": {
@@ -860,13 +860,13 @@
                     "concrete-1111.png": { name: "concrete-1111", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1111.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1111.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1111.png" }] }
                 },
                 "道路": {
-                    "intersection.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/intersection-xmas.png" }] },
-                    "road-left-00.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-00.png" }] },
-                    "road-left-01.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-01.png" }] },
-                    "road-left-10.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-10.png" }] },
-                    "road-00.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-00.png" }] },
-                    "road-01.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-01.png" }] },
-                    "road-10.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-10.png" }] },
+                    "intersection.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/intersection-xmas.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/intersection-spring.png" }] },
+                    "road-left-00.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-00.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-spring-00.png" }] },
+                    "road-left-01.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-01.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-spring-01.png" }] },
+                    "road-left-10.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-10.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-spring-10.png" }] },
+                    "road-00.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-00.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-spring-00.png" }] },
+                    "road-01.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-01.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-spring-01.png" }] },
+                    "road-10.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-10.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-spring-10.png" }] },
                 }
             }
         },
@@ -994,7 +994,7 @@
                 "喷气客机": { "jumbojet2.png": { name: "喷气客机", presets: [{ name: "喷气客机", url: "https://scimg.22-7.top/images/resources/jumbojet2.png" }] } },
                 "豪华飞机": { "private-jet.png": { name: "豪华飞机", presets: [{ name: "豪华飞机", url: "https://scimg.22-7.top/images/resources/private-jet.png" }] } },
                 "单引擎飞机": { "single-engine.png": { name: "单引擎飞机", presets: [{ name: "单引擎飞机", url: "https://scimg.22-7.top/images/resources/single-engine.png" }] } },
-                "人造卫星": { "satellite.png": { name: "人造卫星", presets: [{ name: "人造卫星", url: "https://scimg.22-7.top/images/resources/satellite.png" }] } }, 
+                "人造卫星": { "satellite.png": { name: "人造卫星", presets: [{ name: "人造卫星", url: "https://scimg.22-7.top/images/resources/satellite.png" }] } },
             },
             "原材料加工业": {
                 "水": { "water.png": { name: "水", presets: [{ name: "水", url: "https://scimg.22-7.top/images/resources/water.png" }] } },
@@ -1044,6 +1044,97 @@
         }
     };
 
+
+    // 声明为 let，允许被外部配置覆盖
+    let PATH_MAP = { ...DEFAULT_PATH_MAP };
+    let UI_MANIFEST = JSON.parse(JSON.stringify(DEFAULT_UI_MANIFEST));
+
+    // ==========================================
+    // 新增：远程配置与数据管理器
+    // ==========================================
+    const ConfigManager = {
+        LOCAL_CACHE_KEY: 'SC_SKIN_REMOTE_CONFIG',
+        currentVersion: 0, // 当前运行的版本号
+
+        init() {
+            // 1. 启动时瞬间读取本地缓存，不阻塞页面加载
+            try {
+                const cache = localStorage.getItem(this.LOCAL_CACHE_KEY);
+                if (cache) {
+                    const parsed = JSON.parse(cache);
+                    if (parsed.uiManifest && parsed.pathMap) {
+                        UI_MANIFEST = parsed.uiManifest;
+                        PATH_MAP = parsed.pathMap;
+                        this.currentVersion = parsed.version || 0;
+                        console.log(`[SC-Skin] 已加载本地配置缓存，当前数据版本: ${this.currentVersion}`);
+                    }
+                }
+            } catch (e) {
+                console.warn('[SC-Skin] 读取缓存配置失败，使用默认内置配置', e);
+            }
+
+            // 2. 启动后，在后台静默检查是否有新版本
+            this.checkAutoUpdate();
+        },
+
+        async checkAutoUpdate() {
+            try {
+                // 使用小时级的时间戳，防止死缓存
+                const cacheBuster = Math.floor(Date.now());
+                const url = `https://sc.22-7.top/scripts/oldBuildingsGraphicConfig.json?t=${cacheBuster}`;
+
+                const response = await fetch(url);
+                if (!response.ok) return;
+
+                const remoteData = await response.json();
+                const remoteVersion = remoteData.version || 0;
+
+                if (remoteVersion > this.currentVersion) {
+                    console.log(`[SC-Skin] ⬇️ 发现新版图库数据 (v${remoteVersion})，执行热替换...`);
+
+                    // 保存到本地缓存
+                    localStorage.setItem(this.LOCAL_CACHE_KEY, JSON.stringify(remoteData));
+
+                    // 动态更新内存中的数据
+                    UI_MANIFEST = remoteData.uiManifest;
+                    PATH_MAP = remoteData.pathMap;
+                    this.currentVersion = remoteVersion;
+
+                    // ==========================================
+                    // 🔥 核心：热替换 (Hot Reload) 逻辑
+                    // ==========================================
+                    // 1. 重新解析全新的 UI_MANIFEST，提取最新的图片 Key 列表
+                    Settings.init();
+
+                    // 2. 如果设置面板当前已经存在于页面上，强制刷新它的 UI
+                    if (typeof SCobgUIManager !== 'undefined' && SCobgUIManager.panel) {
+                        SCobgUIManager.renderSidebar(); // 重新生成左侧树形菜单
+
+                        const content = SCobgUIManager.panel.querySelector('.scobg-content');
+                        if (content) {
+                            // 清空右侧详情区，提示用户重新点击，避免旧菜单绑定旧数据的报错
+                            content.innerHTML = `
+                                <div style="height:100%; display:flex; align-items:center; justify-content:center; color:#555; flex-direction:column; gap:10px;">
+                                    <span style="font-size:40px;">🔄</span>
+                                    <span>图库已实时更新，请在侧边栏重新选择分类</span>
+                                </div>`;
+                        }
+                    }
+
+                    // 3. 触发全局扫描器，瞬间替换游戏地图和背景上的图片！
+                    if (typeof Scheduler !== 'undefined') {
+                        Scheduler.scanAll();
+                    }
+                    // ==========================================
+
+                    this.showUpdateNotification();
+                }
+            } catch (err) {
+                console.error('[SC-Skin] 后台更新数据失败:', err);
+            }
+        },
+
+    };
 
     // ==========================================
     // 2. Settings 模块 (数据管理中心)
@@ -1425,6 +1516,11 @@
                 <div class="scobg-header">
                     <span style="font-size:15px; font-weight:bold; letter-spacing:0.5px;">SC皮肤管理 <a href="https://showscimg.22-7.top/images" target="_blank" style="margin-left:8px; font-size:13px; color:#3498db; text-decoration:underline;">SC图片一览</a></span>
                     <div style="display:flex; gap:10px; align-items:center;">
+                        
+                        <button id="scobg-import-btn" class="scobg-btn-blue" style="background:#e67e22; padding:5px 12px;">导入配置</button>
+                        <input type="file" id="scobg-import-file" accept=".json" style="display:none;">
+                        <button id="scobg-export" class="scobg-btn-blue" style="background:#d35400; padding:5px 12px;">导出配置</button>
+                        
                         <button id="scobg-save" class="scobg-btn-blue" style="background:#2ecc71; padding:5px 12px;">保存</button>
                         <button id="scobg-apply" class="scobg-btn-blue" style="padding:5px 12px;">刷新</button>
                         <div id="scobg-close" style="padding:5px; cursor:pointer; font-size:22px; color:#777;">✕</div>
@@ -1442,6 +1538,7 @@
             `;
             document.body.appendChild(this.panel);
 
+            // 绑定基础事件
             this.panel.querySelector('#scobg-close').onclick = () => this.togglePanel();
             this.panel.querySelector('#scobg-apply').onclick = () => location.reload();
             this.panel.querySelector('#scobg-save').onclick = (e) => {
@@ -1452,6 +1549,56 @@
                     btn.textContent = '已存';
                     setTimeout(() => btn.textContent = oldText, 1500);
                 }
+            };
+
+            // =====================================
+            // 新增事件绑定：强制更新
+            // =====================================
+            // this.panel.querySelector('#scobg-force-update').onclick = () => {
+            //     const btn = this.panel.querySelector('#scobg-force-update');
+            //     btn.textContent = '更新中...';
+            //     ConfigManager.forceUpdateRemoteData().finally(() => {
+            //         btn.textContent = '强制更新数据';
+            //     });
+            // };
+
+            // =====================================
+            // 新增事件绑定：导出用户配置
+            // =====================================
+            this.panel.querySelector('#scobg-export').onclick = () => {
+                const dataStr = JSON.stringify(Settings.data, null, 2);
+                const blob = new Blob([dataStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sc_skin_backup_${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            // =====================================
+            // 新增事件绑定：导入用户配置
+            // =====================================
+            const importInput = this.panel.querySelector('#scobg-import-file');
+            this.panel.querySelector('#scobg-import-btn').onclick = () => importInput.click();
+            importInput.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const importedData = JSON.parse(ev.target.result);
+                        Settings.data = importedData;
+                        Settings.save();
+                        alert('✅ 皮肤配置导入成功！页面即将刷新。');
+                        location.reload();
+                    } catch (err) {
+                        alert('❌ 导入失败，文件格式不正确，请确保是之前导出的 JSON 文件！');
+                    }
+                };
+                reader.readAsText(file);
+                // 清空 input，允许重复导入同一个文件
+                e.target.value = '';
             };
 
             this.renderSidebar();
@@ -1878,11 +2025,12 @@
     // 9. 启动 & 全局暴露
     // ==========================================
     function main() {
-        Settings.init(); // 首先初始化配置
+        ConfigManager.init(); // 1. 先读取本地缓存的最新的 UI_MANIFEST (如果有)
+        Settings.init();      // 2. 初始化用户个人设置 (这步会遍历 UI_MANIFEST)
         StyleManager.init();
         NetworkHook.init();
         SCobgUIManager.init();
-        UpdateChecker.init(); // 启动更新检查
+        UpdateChecker.init();
 
         observer.observe(document.body, {
             childList: true,
@@ -1895,6 +2043,7 @@
 
         window.SC_Skin_Manager = {
             settings: Settings,
+            config: ConfigManager, // 暴露给外部调试
             forceRescan: () => Scheduler.scanAll()
         };
     }
