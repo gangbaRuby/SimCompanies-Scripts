@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.25.1
+// @version      1.26.3
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -17,6 +17,11 @@
     'use strict';
     let hasNewVersion, latestVersion;
     let localVersion = GM_info.script.version;
+    let SCXXCS = 0.8;
+    let PROFIT_PER_BUILDING_LEVEL = 330;
+    let RETAIL_ADJUSTMENT = {
+        B: 2.296
+    };
 
     // ======================
     // 计算用到的函数
@@ -40,9 +45,9 @@
     };
     const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
     const Bpt = (e, t, r, n, a, o) => {
-        const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+        const g = RETAIL_ADJUSTMENT[e] ?? 1;
         const s = Math.min(Math.max(2 - n, 0), 2), l = Math.max(0.9, s / 2 + 0.5), c = r / 12;
-        const d = zn.PROFIT_PER_BUILDING_LEVEL * (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) * g * (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) + (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
+        const d = PROFIT_PER_BUILDING_LEVEL * (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) * g * (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) + (t.modeledStoreWages ?? 0) * SCXXCS;
         // console.log(`t.buildingLevelsNeededPerUnitPerHour:${t.buildingLevelsNeededPerUnitPerHour}, t.modeledUnitsSoldAnHour:${t.modeledUnitsSoldAnHour}, t.modeledStoreWages:${t.modeledStoreWages} , s:${s} , c:${c}, g:${g}`)
         const h = t.modeledUnitsSoldAnHour * l;
         const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
@@ -403,10 +408,7 @@
                 const targetKeys = [
                     'AVERAGE_SALARY',
                     'SALES',
-                    'PROFIT_PER_BUILDING_LEVEL',
-                    'RETAIL_MODELING_QUALITY_WEIGHT',
-                    'RETAIL_ADJUSTMENT',
-                    'STORE_OVERCOMPENSATION'
+                    'RETAIL_MODELING_QUALITY_WEIGHT'
                 ];
 
                 // 提取变量值（支持数字 / 布尔 / 对象）
@@ -998,22 +1000,35 @@
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
-
-                    const isInstalled = typeof unsafeWindow.SCobg_TogglePanel === 'function';
-
-                    if (isInstalled) {
-                        btn.textContent = 'SC图片替换管理';
-                        btn.style.backgroundColor = '#9C27B0'; // 紫色，便于区分
-                        btn.onclick = () => unsafeWindow.SCobg_TogglePanel();
-                    } else {
-                        btn.textContent = 'SC图片替换管理 (未安装)';
-                        btn.style.backgroundColor = '#546E7A'; // 深灰色
-                        btn.onclick = () => {
-                            if (confirm('检测到未安装图片替换脚本，是否前往安装？')) {
-                                window.open('https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js', '_blank');
-                            }
-                        };
-                    }
+                    
+                    const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+                    
+                    // 初始状态（默认未安装）
+                    btn.textContent = 'SC图片替换管理 (检测中...)';
+                    btn.style.backgroundColor = '#546E7A';
+                    
+                    let retry = 0;
+                    const maxRetry = 20; // 最多等 20 次（约10秒）
+                    
+                    const timer = setInterval(() => {
+                        if (typeof win.SCobg_TogglePanel === 'function') {
+                            clearInterval(timer);
+                    
+                            btn.textContent = 'SC图片替换管理';
+                            btn.style.backgroundColor = '#9C27B0';
+                            btn.onclick = () => win.SCobg_TogglePanel();
+                        } else if (retry++ > maxRetry) {
+                            clearInterval(timer);
+                    
+                            btn.textContent = 'SC图片替换管理 (未安装)';
+                            btn.onclick = () => {
+                                if (confirm('检测到未安装图片替换脚本，是否前往安装？')) {
+                                    window.open('https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js', '_blank');
+                                }
+                            };
+                        }
+                    }, 500);
+                    
                     return btn;
                 })(),
                 (() => {
@@ -1926,7 +1941,8 @@
         const { lwe, zn, size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
             skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
             v, b,
-            cogs, quality, quantity, cardIndex, retryCount} = e.data;
+            cogs, quality, quantity, cardIndex, retryCount,
+            SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT} = e.data;
 
         // Utility functions defined inside to use local lwe and zn
         const wv = (e, t, r) => {
@@ -1939,15 +1955,15 @@
         };
         const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
         const Bpt = (e, t, r, n, a, o) => {
-            const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+            const g = RETAIL_ADJUSTMENT[e] ?? 1;
             const s = Math.min(Math.max(2 - n, 0), 2),
                   l = Math.max(0.9, s / 2 + 0.5),
                   c = r / 12;
-            const d = zn.PROFIT_PER_BUILDING_LEVEL *
+            const d = PROFIT_PER_BUILDING_LEVEL *
                 (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
                 g *
                 (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
+                (t.modeledStoreWages ?? 0) * SCXXCS;
             const h = t.modeledUnitsSoldAnHour * l;
             const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
             const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
@@ -2058,7 +2074,8 @@
                 skillCMO, skillCOO, saturation, // 备用
                 cogs, quality, quantity,
                 cardIndex: index,
-                retryCount: retryCount
+                retryCount: retryCount,
+                SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT
             });
         }
 
@@ -2190,7 +2207,8 @@
                             skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
                             v, b, cogs, quality, quantity,
                             cardIndex: index,
-                            retryCount: retryIdx // 发送当前是第几次尝试
+                            retryCount: retryIdx, // 发送当前是第几次尝试
+                            SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT
                         });
                     };
 
@@ -2285,7 +2303,7 @@
         // Worker 代码保持完全不变
         const workerCode = `
         self.onmessage = function(e) {
-        const { rowId, order, SCD, SRC } = e.data;
+        const { rowId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT} = e.data;
         const { price, quantity, quality, resourceId: resource } = order;
         const lwe = SCD.retailInfo;
         const zn = SCD.data;
@@ -2304,15 +2322,15 @@
         };
         const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
         const Bpt = (e, t, r, n, a, o) => {
-            const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+            const g = RETAIL_ADJUSTMENT[e] ?? 1;
             const s = Math.min(Math.max(2 - n, 0), 2),
                   l = Math.max(0.9, s / 2 + 0.5),
                   c = r / 12;
-            const d = zn.PROFIT_PER_BUILDING_LEVEL *
+            const d = PROFIT_PER_BUILDING_LEVEL *
                 (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
                 g *
                 (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
+                (t.modeledStoreWages ?? 0) * SCXXCS;
             const h = t.modeledUnitsSoldAnHour * l;
             const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
             const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
@@ -2753,7 +2771,7 @@
                 const rowId = rowIdCounter++;
                 pendingRows.set(rowId, row);
                 row.setAttribute('data-profit-calculated', '1');
-                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC });
+                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT});
             });
 
             // 即使没有新行增加，也要重算模拟结果
@@ -2880,7 +2898,7 @@
         // Worker 代码
         const workerCode = `
         self.onmessage = function(e) {
-            const { cardId, order, SCD, SRC } = e.data;
+            const { cardId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT} = e.data;
             const { price, quantity, quality, resourceId: resource } = order;
             const lwe = SCD.retailInfo;
             const zn = SCD.data;
@@ -2893,15 +2911,15 @@
             };
             const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
             const Bpt = (e, t, r, n, a, o) => {
-                const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+                const g = RETAIL_ADJUSTMENT[e] ?? 1;
                 const s = Math.min(Math.max(2 - n, 0), 2),
                       l = Math.max(0.9, s / 2 + 0.5),
                       c = r / 12;
-                const d = zn.PROFIT_PER_BUILDING_LEVEL *
+                const d = PROFIT_PER_BUILDING_LEVEL *
                     (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
                     g *
                     (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                    (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
+                    (t.modeledStoreWages ?? 0) * SCXXCS;
                 const h = t.modeledUnitsSoldAnHour * l;
                 const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
                 const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
@@ -3105,7 +3123,8 @@
                     quality: data.quality
                 },
                 SCD,
-                SRC
+                SRC,
+                SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT
             });
         }
 
@@ -4621,7 +4640,7 @@
         function createProfitWorker() {
             const workerCode = `
             self.onmessage = function(e) {
-                const { data, inputPercent, SCD, SRC } = e.data;
+                const { data, inputPercent, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT} = e.data;
                 // bring constants into worker scope
                 const lwe = SCD.retailInfo;
                 const zn = SCD.data;
@@ -4641,15 +4660,15 @@
                 };
                 const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
                 const Bpt = (e, t, r, n, a, o) => {
-                    const g = zn.RETAIL_ADJUSTMENT[e] ?? 1;
+                    const g = RETAIL_ADJUSTMENT[e] ?? 1;
                     const s = Math.min(Math.max(2 - n, 0), 2),
                           l = Math.max(0.9, s / 2 + 0.5),
                           c = r / 12;
-                    const d = zn.PROFIT_PER_BUILDING_LEVEL *
+                    const d = PROFIT_PER_BUILDING_LEVEL *
                         (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
                         g *
                         (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
-                        (t.modeledStoreWages ?? 0) * (zn.STORE_OVERCOMPENSATION ?? 1);
+                        (t.modeledStoreWages ?? 0) * SCXXCS;
                     const h = t.modeledUnitsSoldAnHour * l;
                     const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
                     const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
@@ -4773,7 +4792,7 @@
                     profitWorker.onmessage = (e) => {
                         resolve(e.data);
                     };
-                    profitWorker.postMessage({ data, inputPercent, SCD, SRC });
+                    profitWorker.postMessage({ data, inputPercent, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT});
                 });
             }
         };
@@ -4921,7 +4940,7 @@
         toast.className = 'sc-update-toast';
         toast.innerHTML = `
             <div class="sc-update-close" id="sc-close" title="暂时关闭">&times;</div>
-            <div class="sc-update-header" id="sc-title">📢 自动计算最大时利润插件发现新版本 v${version} (点击查看)</div>
+            <div class="sc-update-header" id="sc-title">自动计算最大时利润插件 发现新版本 v${version} (点击查看)</div>
             <div class="sc-update-body">
                 <p style="margin:0; font-weight:bold;">更新日志：</p>
                 <div class="sc-changelog-box">${changelog.replace(/\n/g, '<br>') || '修复已知问题，优化性能。'}</div>
@@ -4976,7 +4995,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加查询历史饱和度链接
+        // @changelog    将新参数设定前置以预防突然的修改，修改SC图片替换管理判断
 
         fetch(scriptUrl)
             .then(res => res.text())
