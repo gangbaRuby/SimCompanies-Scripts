@@ -17,10 +17,10 @@
     'use strict';
     let hasNewVersion, latestVersion;
     let localVersion = GM_info.script.version;
-    let SCXXCS = 0.6;
-    let PROFIT_PER_BUILDING_LEVEL = 340;
+    let SCXXCS = 0.4;
+    let PROFIT_PER_BUILDING_LEVEL = 350;
     let RETAIL_ADJUSTMENT = {
-        B: 2.292
+        B: 2.288
     };
 
     // ======================
