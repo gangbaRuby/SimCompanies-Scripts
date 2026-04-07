@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.27.0
+// @version      1.27.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -4856,6 +4856,151 @@
 
 
     // ======================
+    // 模块14：显示挖人培训历史记录
+    // ======================
+    (function () {
+        const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
+        const NOTIFICATIONS_KEYWORD = "/game-notifications/";
+        const EXEC_API_REGEX = /\/api\/v4\/executives\/(\d+)\/$/;
+    
+        // --- 工具函数 ---
+        const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
+        const save = (k, d) => localStorage.setItem(k, JSON.stringify(d));
+        const upsert = (arr, obj, key) => {
+            const i = arr.findIndex(x => x[key] === obj[key]);
+            if (i === -1) arr.push(obj); else arr[i] = obj;
+            return arr;
+        };
+        const trainingNameMap = (t) => ({ o: '管理培训', f: '会计课程', m: '沟通工作室', t: '科学界研讨会', g: '各领域课程' }[t] || t);
+    
+        // --- UI 渲染函数 ---
+        function renderSkillPanel(data, isError = false) {
+            const targetDiv = document.querySelector('.css-1flj9lk');
+            if (!targetDiv || document.getElementById('sc-plugin-panel')) return;
+    
+            const panel = document.createElement('div');
+            panel.id = 'sc-plugin-panel';
+            
+            // 样式定义
+            let contentHtml = "";
+            const baseStyle = `
+                margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 13px;
+                background-color: #f2f2f2; border: 1px solid #d1d1d1; color: #333;
+            `;
+    
+            if (isError) {
+                // 错误提示样式
+                contentHtml = `
+                    <div style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; padding: 8px; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                        ⚠️ <b>匹配失败：</b><br>
+                        在通知中未找到此高管的"已找到合适候选人"通知，本功能只能在收到通知的前提下使用。
+                    </div>
+                `;
+            } else {
+                // 正常数据展示
+                let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
+                const historyHtml = data.trainings?.map(t => {
+                    total.coo += t.skillCoo || 0; total.cfo += t.skillCfo || 0;
+                    total.cmo += t.skillCmo || 0; total.cto += t.skillCto || 0;
+                    return `<div style="padding:2px 0; border-bottom:1px dashed #eee; color:#555; font-size:11px;">在 ${t.employer.company} 参加了 ${trainingNameMap(t.training)}</div>`;
+                }).join('') || '无历史培训记录';
+    
+                const currentTraining = data.currentTraining ? trainingNameMap(data.currentTraining.training) : "无";
+    
+                contentHtml = `
+                    <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">
+                        培训一览 请注意：重找的数据为错误数据 <span style="color:#888; font-size:11px; font-weight:normal;">ID: ${data.id}</span>
+                    </div>
+                    <div style="font-size:11px; font-weight:bold; color:#666; margin-bottom:4px;">培训四项总和</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;">
+                        <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">管理: <b style="color:#d32f2f;">+${total.coo}</b></div>
+                        <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">会计: <b style="color:#d32f2f;">+${total.cfo}</b></div>
+                        <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">沟通: <b style="color:#d32f2f;">+${total.cmo}</b></div>
+                        <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">科学: <b style="color:#d32f2f;">+${total.cto}</b></div>
+                    </div>
+                    <div style="font-size:11px; font-weight:bold; color:#666; margin-bottom:4px;">历史培训一览</div>
+                    <div style="max-height:80px; overflow-y:auto; background:#fff; border:1px solid #ddd; padding:4px;">${historyHtml}</div>
+                    <div style="margin-top:8px; font-size:11px; display:flex; justify-content:space-between;">
+                        <span>📈 培训次数: <b>${data.trainings?.length || 0}</b></span>
+                        <span>🎓 当前培训中: <b>${currentTraining}</b></span>
+                    </div>
+                `;
+            }
+    
+            panel.style = baseStyle;
+            panel.innerHTML = contentHtml;
+            targetDiv.after(panel);
+        }
+    
+        // --- 数据拦截逻辑 ---
+        function processData(url, d) {
+            if (!d) return;
+            if (EXEC_API_REGEX.test(url)) renderSkillPanel(d);
+            if (url.includes(OFFERS_URL)) {
+                let s = load("SC-my-offers");
+                (d.offers || []).forEach(o => o.id && (s = upsert(s, { id: o.id, slotPosition: o.slotPosition }, "id")));
+                save("SC-my-offers", s);
+            }
+            if (url.includes(NOTIFICATIONS_KEYWORD)) {
+                let s = load("SC-AGENCY_FOUND_EXECUTIVE");
+                const list = Array.isArray(d) ? d : (d.notifications || []);
+                list.filter(n => n.notificationKind === "AGENCY_FOUND_EXECUTIVE").forEach(n => {
+                    s = upsert(s, { executiveId: n.executiveId, offerId: n.offerId }, "offerId");
+                });
+                save("SC-AGENCY_FOUND_EXECUTIVE", s);
+            }
+        }
+    
+        const _fetch = window.fetch;
+        window.fetch = async function(...args) {
+            const res = await _fetch.apply(this, args);
+            const url = typeof args[0] === 'string' ? args[0] : (args[0].url || "");
+            res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) {} });
+            return res;
+        };
+    
+        const _open = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(m, url) {
+            this.addEventListener("load", () => { try { processData(url, JSON.parse(this.responseText)); } catch (e) {} });
+            return _open.apply(this, arguments);
+        };
+    
+        // --- SPA 路由感应与逻辑判断 ---
+        setInterval(() => {
+            // 只有当页面是高管页且面板还没出来时才检查
+            const p = location.pathname;
+            if (p.includes('/executives/') && !document.getElementById('sc-plugin-panel')) {
+                const m = { "coo": "o", "cfo": "f", "cmo": "m", "cto": "t", "coo-apprentice": "v", "cfo-apprentice": "x", "cmo-apprentice": "y", "cto-apprentice": "z", "g1": "1", "g2": "2", "g3": "3", "g4": "4", "g5": "5" };
+                let slot = null;
+                for (let k in m) if (p.includes("/" + k)) { slot = m[k]; break; }
+    
+                if (slot) {
+                    const offers = load("SC-my-offers");
+                    const found = load("SC-AGENCY_FOUND_EXECUTIVE");
+                    const o = offers.find(x => x.slotPosition === slot);
+                    
+                    if (o) {
+                        const f = found.find(x => x.offerId === o.id);
+                        if (f) {
+                            // 找到关联，请求数据
+                            _fetch(`/api/v4/executives/${f.executiveId}/`).then(r => r.json()).then(renderSkillPanel);
+                        } else {
+                            // 找到了报价 ID 但没找到通知关联
+                            renderSkillPanel(null, true);
+                        }
+                    } else {
+                        // 连报价 ID 都没存下来（通常是没去过“我的报价”页面）
+                        renderSkillPanel(null, true);
+                    }
+                }
+            } else if (!p.includes('/executives/')) {
+                // 离开高管页时，如果以后需要清理标记可以在这里处理
+            }
+        }, 1500);
+    
+    })();
+
+    // ======================
     // 检测更新模块
     // ======================
     function compareVersions(v1, v2) {
@@ -4995,7 +5140,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    更新2026/03/30 20:55 新新零售第二次改动
+        // @changelog    增加显示挖人培训历史记录（测试中）
 
         fetch(scriptUrl)
             .then(res => res.text())
