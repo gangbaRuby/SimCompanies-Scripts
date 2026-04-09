@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.28.0
+// @version      1.28.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1000,26 +1000,26 @@
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
-                    
+
                     const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-                    
+
                     // 初始状态（默认未安装）
                     btn.textContent = 'SC图片替换管理 (检测中...)';
                     btn.style.backgroundColor = '#546E7A';
-                    
+
                     let retry = 0;
                     const maxRetry = 20; // 最多等 20 次（约10秒）
-                    
+
                     const timer = setInterval(() => {
                         if (typeof win.SCobg_TogglePanel === 'function') {
                             clearInterval(timer);
-                    
+
                             btn.textContent = 'SC图片替换管理';
                             btn.style.backgroundColor = '#9C27B0';
                             btn.onclick = () => win.SCobg_TogglePanel();
                         } else if (retry++ > maxRetry) {
                             clearInterval(timer);
-                    
+
                             btn.textContent = 'SC图片替换管理 (未安装)';
                             btn.onclick = () => {
                                 if (confirm('检测到未安装图片替换脚本，是否前往安装？')) {
@@ -1028,7 +1028,7 @@
                             };
                         }
                     }, 500);
-                    
+
                     return btn;
                 })(),
                 (() => {
@@ -2771,7 +2771,7 @@
                 const rowId = rowIdCounter++;
                 pendingRows.set(rowId, row);
                 row.setAttribute('data-profit-calculated', '1');
-                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT});
+                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT });
             });
 
             // 即使没有新行增加，也要重算模拟结果
@@ -3252,6 +3252,19 @@
                     console.log('[合同页面识别] 已进入合同页面');
                     incomingContractsHandler.init();
                 }
+            },
+            executivePage: {
+                pattern: /\/executives\/([a-z0-9-]+)\/?$/,
+                action: (url) => {
+                    const match = url.match(/\/executives\/([a-z0-9-]+)\/?$/);
+                    const slotCode = match ? match[1] : null;
+                    if (slotCode) {
+                        // 使用 setTimeout 是为了等待 .css-1flj9lk 元素渲染出来
+                        setTimeout(() => {
+                            ExecutiveTrainingModule.init(slotCode);
+                        }, 400);
+                    }
+                }
             }
         };
 
@@ -3285,12 +3298,51 @@
 
     // 提取 realmId 的函数
     function getRealmIdFromLink() {
-        const link = document.querySelector('a[href*="/company/"]'); // 选择第一个符合条件的 <a> 标签
-        if (link) {
-            const match = link.href.match(/\/company\/(\d+)\//); // 提取 href 中的 realmId
-            return match ? parseInt(match[1], 10) : null; // 如果匹配到 realmId，返回
+        let method1Result = null; // 图片法提取结果
+        let method2Result = null; // 链接法提取结果 (原逻辑)
+
+        // --- 方法 1：从特定的 Realm Logo 图片提取 ---
+        const realmLogoImg = document.querySelector('img[alt$="realm logo"]');
+        if (realmLogoImg) {
+            const src = realmLogoImg.src;
+            if (src.includes('Magnates')) {
+                method1Result = 0;
+            } else if (src.includes('Entrepeneurs')) {
+                method1Result = 1;
+            }
         }
-        return null; // 如果没有找到符合条件的链接，返回 null
+
+        // --- 方法 2：从链接提取 (你的原逻辑) ---
+        const link = document.querySelector('a[href*="/company/"]');
+        if (link) {
+            const match = link.href.match(/\/company\/(\d+)\//);
+            if (match) {
+                method2Result = parseInt(match[1], 10);
+            }
+        }
+
+        // --- 逻辑判断与返回 ---
+
+        // 情况 A：两个方法都成功拿到了数据，进行一致性校验
+        if (method1Result !== null && method2Result !== null) {
+            if (method1Result !== method2Result) {
+                console.warn(
+                    `[Realm检测冲突] 两个方法获取的 realmId 不一致：\n` +
+                    `第一个方法(图片法)结果: ${method1Result}\n` +
+                    `第二个方法(链接法)结果: ${method2Result}\n` +
+                    `已返回第二个方法的结果以确保代码正常运行。`
+                );
+                return method2Result;
+            }
+            return method2Result; // 结果一致
+        }
+
+        // 情况 B：只有一个方法成功，或者两个都失败
+        if (method2Result !== null) return method2Result; // 优先返回方法 2
+        if (method1Result !== null) return method1Result; // 方法 2 失败但方法 1 成功
+
+        // 情况 C：最终保底方案 —— 全部失败
+        return null;
     }
 
     // ConstantsAutoUpdater 用于更新常量数据
@@ -4792,7 +4844,7 @@
                     profitWorker.onmessage = (e) => {
                         resolve(e.data);
                     };
-                    profitWorker.postMessage({ data, inputPercent, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT});
+                    profitWorker.postMessage({ data, inputPercent, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT });
                 });
             }
         };
@@ -4858,84 +4910,147 @@
     // ======================
     // 模块14：显示挖人培训历史记录
     // ======================
-    (function () {
+    const ExecutiveTrainingModule = (function () {
         const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
         const NOTIFICATIONS_KEYWORD = "/game-notifications/";
         const EXEC_API_REGEX = /\/api\/v4\/executives\/(\d+)\/$/;
-    
-        // --- 工具函数 ---
-        const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
-        const save = (k, d) => localStorage.setItem(k, JSON.stringify(d));
+
+        // --- 内部工具函数 ---
+        const getScopedKey = (k) => {
+            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            return realmId !== null ? `R${realmId}-${k}` : k;
+        };
+
+        const load = (k) => {
+            const key = getScopedKey(k);
+            try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; }
+        };
+
+        const save = (k, d) => {
+            const key = getScopedKey(k);
+            localStorage.setItem(key, JSON.stringify(d));
+        };
+
         const upsert = (arr, obj, key) => {
             const i = arr.findIndex(x => x[key] === obj[key]);
             if (i === -1) arr.push(obj); else arr[i] = obj;
             return arr;
         };
-        const trainingNameMap = (t) => ({ o: '管理培训', f: '会计课程', m: '沟通工作室', t: '科学界研讨会', g: '各领域课程' }[t] || t);
-    
+
+        const positionMap = (p) => ({
+            o: 'COO', f: 'CFO', m: 'CMO', t: 'CTO',
+            v: 'COO学徒', x: 'CFO学徒', y: 'CMO学徒', z: 'CTO学徒',
+            '1': '职员1', '2': '职员2', '3': '职员3', '4': '职员4', '5': '职员5'
+        }[p] || p);
+
+        const trainingNameMap = (t) => ({
+            o: '管理培训', f: '会计课程', m: '沟通工作室', t: '科学界研讨会', g: '各领域课程'
+        }[t] || t);
+
+        const getCompanyLink = (realm, name) => `https://www.simcompanies.com/company/${realm}/${encodeURIComponent(name)}/`;
+
+        function getValidTargetContainer() {
+            const TARGET_BUTTON_CLASS = 'css-1r3lxky';
+            const PARENT_CONTAINER_CLASS = 'css-1flj9lk';
+            const btn = document.querySelector(`button.${TARGET_BUTTON_CLASS}`);
+            if (btn && btn.parentElement && btn.parentElement.classList.contains(PARENT_CONTAINER_CLASS)) {
+                return btn.parentElement;
+            }
+            return null;
+        }
+
         // --- UI 渲染函数 ---
         function renderSkillPanel(data, isError = false) {
-            const targetDiv = document.querySelector('.css-1flj9lk');
-            if (!targetDiv || document.getElementById('sc-plugin-panel')) return;
-    
+            const targetContainer = getValidTargetContainer();
+            if (!targetContainer || document.getElementById('sc-plugin-panel')) return;
+
             const panel = document.createElement('div');
             panel.id = 'sc-plugin-panel';
-            
-            // 样式定义
+            const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: #f2f2f2; border: 1px solid #d1d1d1; color: #333;`;
+
             let contentHtml = "";
-            const baseStyle = `
-                margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 13px;
-                background-color: #f2f2f2; border: 1px solid #d1d1d1; color: #333;
-            `;
-    
             if (isError) {
-                // 错误提示样式
-                contentHtml = `
-                    <div style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; padding: 8px; border-radius: 4px; font-size: 12px; line-height: 1.5;">
-                        ⚠️ <b>匹配失败：</b><br>
-                        在通知中未找到此高管的"已找到合适候选人"通知，本功能只能在收到通知的前提下使用。
-                    </div>
-                `;
+                contentHtml = `<div style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; padding: 8px; border-radius: 4px; font-size: 14px;">⚠️ <b>匹配失败：</b> 未在通知中找到此次挖人信息。</div>`;
             } else {
-                // 正常数据展示
+                const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : 0;
+
+                // 1. 详细培训历史
                 let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
-                const historyHtml = data.trainings?.map(t => {
+                const trainings = data.trainings || [];
+                const historyHtml = trainings.map(t => {
                     total.coo += t.skillCoo || 0; total.cfo += t.skillCfo || 0;
                     total.cmo += t.skillCmo || 0; total.cto += t.skillCto || 0;
-                    return `<div style="padding:2px 0; border-bottom:1px dashed #eee; color:#555; font-size:11px;">在 ${t.employer.company} 参加了 ${trainingNameMap(t.training)}</div>`;
-                }).join('') || '无历史培训记录';
-    
-                const currentTraining = data.currentTraining ? trainingNameMap(data.currentTraining.training) : "无";
-    
+                    const details = [];
+                    if (t.skillCoo) details.push(`管理+${t.skillCoo}`);
+                    if (t.skillCfo) details.push(`会计+${t.skillCfo}`);
+                    if (t.skillCmo) details.push(`沟通+${t.skillCmo}`);
+                    if (t.skillCto) details.push(`科学+${t.skillCto}`);
+                    const detailStr = details.length > 0 ? `<span style="color:#777; margin-left:4px;">(${details.join(' ')})</span>` : '';
+                    const cUrl = getCompanyLink(t.employer.realmId ?? currentRealm, t.employer.company);
+                    return `<div style="padding:2px 0; border-bottom:1px dashed #eee; color:#555; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
+                }).reverse().join('') || '无历史培训记录';
+
+                // 2. 从业履历
+                const workHistoryHtml = data.workHistory?.map(w => {
+                    const isCurrent = !w.end;
+                    const cUrl = getCompanyLink(w.employer.realmId ?? currentRealm, w.employer.company);
+                    const posName = positionMap(w.position);
+
+                    return `
+                    <div style="padding:4px 0; border-bottom:1px solid #eee; ${isCurrent ? 'background: #eef7ff;' : ''}">
+                        <span style="color:#444; font-size:14px;">
+                            ${isCurrent ? '⭐ ' : ''}在 
+                            <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a> 
+                            担任 <b>${w.daysActive}</b> 天的 <b>${posName}</b>
+                            ${isCurrent ? ' <span style="color:#2e7d32; font-size:14px;">(当前所在职位)</span>' : ''}
+                        </span>
+                    </div>`;
+                }).join('') || '无从业记录';
+
+                // 3. 当前培训状态
+                const currentTrainingStatus = data.currentTraining
+                    ? `<b style="color:#2196f3;">${trainingNameMap(data.currentTraining.training)}</b>`
+                    : `<span style="color:#999;">当前无培训</span>`;
+
                 contentHtml = `
-                    <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">
-                        培训一览 请注意：重找的数据为错误数据 <span style="color:#888; font-size:11px; font-weight:normal;">ID: ${data.id}</span>
-                    </div>
-                    <div style="font-size:11px; font-weight:bold; color:#666; margin-bottom:4px;">培训四项总和</div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;">
-                        <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">管理: <b style="color:#d32f2f;">+${total.coo}</b></div>
-                        <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">会计: <b style="color:#d32f2f;">+${total.cfo}</b></div>
-                        <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">沟通: <b style="color:#d32f2f;">+${total.cmo}</b></div>
-                        <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">科学: <b style="color:#d32f2f;">+${total.cto}</b></div>
-                    </div>
-                    <div style="font-size:11px; font-weight:bold; color:#666; margin-bottom:4px;">历史培训一览</div>
-                    <div style="max-height:80px; overflow-y:auto; background:#fff; border:1px solid #ddd; padding:4px;">${historyHtml}</div>
-                    <div style="margin-top:8px; font-size:11px; display:flex; justify-content:space-between;">
-                        <span>📈 培训次数: <b>${data.trainings?.length || 0}</b></span>
-                        <span>🎓 当前培训中: <b>${currentTraining}</b></span>
-                    </div>
-                `;
-            }
+                <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">高管解析 <span style="color:#888; font-size:14px; font-weight:normal;">高管名字: ${data.name}  ID: ${data.id}</span></div>
+                
+                <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">📊 目前培训技能总和 <span style="font-weight:normal; color:#888;">(已完成 ${trainings.length} 次)</span></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
+                    <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">管理: <b style="color:#d32f2f;">+${total.coo}</b></div>
+                    <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">会计: <b style="color:#d32f2f;">+${total.cfo}</b></div>
+                    <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">沟通: <b style="color:#d32f2f;">+${total.cmo}</b></div>
+                    <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">科学: <b style="color:#d32f2f;">+${total.cto}</b></div>
+                </div>
+                <div style="font-size:14px; margin-bottom:10px; padding-left:2px;">
+                    <span style="color:#666;">进行中：</span>${currentTrainingStatus}
+                </div>
     
+                <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">💼 从业履历</div>
+                <div style="max-height:100px; overflow-y:auto; background:#fff; border:1px solid #ddd; padding:4px; margin-bottom:10px; font-size:14px;">${workHistoryHtml}</div>
+    
+                <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">🎓 详细培训历史</div>
+                <div style="max-height:100px; overflow-y:auto; background:#fff; border:1px solid #ddd; padding:4px; font-size:14px;">${historyHtml}</div>
+    
+                <div style="margin-top:10px; padding:8px; background-color:#fff5f5; border:1px solid #ffcccc; border-radius:4px; font-size:14px; color:#c62828; line-height:1.4;">
+                    <b>⚠️请注意：</b><br>
+                    1. 本功能为插件功能，<b>请勿在游戏内聊天室提及</b>。<br>
+                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不显示。<br>
+                    3. 若通知内高管被他人抢先招募，<b>在点击“寻找其他候选人”后显示的数据无效</b>。
+                </div>`;
+            }
+
             panel.style = baseStyle;
             panel.innerHTML = contentHtml;
-            targetDiv.after(panel);
+            targetContainer.after(panel);
         }
-    
-        // --- 数据拦截逻辑 ---
+
+        // --- 数据处理层 ---
         function processData(url, d) {
             if (!d) return;
-            if (EXEC_API_REGEX.test(url)) renderSkillPanel(d);
+            if (EXEC_API_REGEX.test(url)) {
+                if (getValidTargetContainer()) renderSkillPanel(d);
+            }
             if (url.includes(OFFERS_URL)) {
                 let s = load("SC-my-offers");
                 (d.offers || []).forEach(o => o.id && (s = upsert(s, { id: o.id, slotPosition: o.slotPosition }, "id")));
@@ -4950,54 +5065,36 @@
                 save("SC-AGENCY_FOUND_EXECUTIVE", s);
             }
         }
-    
+
+        // --- 拦截部分保持不变 ---
         const _fetch = window.fetch;
-        window.fetch = async function(...args) {
+        window.fetch = async function (...args) {
             const res = await _fetch.apply(this, args);
             const url = typeof args[0] === 'string' ? args[0] : (args[0].url || "");
-            res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) {} });
+            res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) { } });
             return res;
         };
-    
         const _open = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function(m, url) {
-            this.addEventListener("load", () => { try { processData(url, JSON.parse(this.responseText)); } catch (e) {} });
+        XMLHttpRequest.prototype.open = function (m, url) {
+            this.addEventListener("load", () => { try { processData(url, JSON.parse(this.responseText)); } catch (e) { } });
             return _open.apply(this, arguments);
         };
-    
-        // --- SPA 路由感应与逻辑判断 ---
-        setInterval(() => {
-            // 只有当页面是高管页且面板还没出来时才检查
-            const p = location.pathname;
-            if (p.includes('/executives/') && !document.getElementById('sc-plugin-panel')) {
+
+        return {
+            init: function (slotCode) {
                 const m = { "coo": "o", "cfo": "f", "cmo": "m", "cto": "t", "coo-apprentice": "v", "cfo-apprentice": "x", "cmo-apprentice": "y", "cto-apprentice": "z", "g1": "1", "g2": "2", "g3": "3", "g4": "4", "g5": "5" };
-                let slot = null;
-                for (let k in m) if (p.includes("/" + k)) { slot = m[k]; break; }
-    
-                if (slot) {
-                    const offers = load("SC-my-offers");
-                    const found = load("SC-AGENCY_FOUND_EXECUTIVE");
-                    const o = offers.find(x => x.slotPosition === slot);
-                    
-                    if (o) {
-                        const f = found.find(x => x.offerId === o.id);
-                        if (f) {
-                            // 找到关联，请求数据
-                            _fetch(`/api/v4/executives/${f.executiveId}/`).then(r => r.json()).then(renderSkillPanel);
-                        } else {
-                            // 找到了报价 ID 但没找到通知关联
-                            renderSkillPanel(null, true);
-                        }
-                    } else {
-                        // 连报价 ID 都没存下来（通常是没去过“我的报价”页面）
-                        renderSkillPanel(null, true);
-                    }
-                }
-            } else if (!p.includes('/executives/')) {
-                // 离开高管页时，如果以后需要清理标记可以在这里处理
+                const internalSlot = m[slotCode];
+                if (!internalSlot) return;
+                const offers = load("SC-my-offers");
+                const found = load("SC-AGENCY_FOUND_EXECUTIVE");
+                const o = offers.find(x => x.slotPosition === internalSlot);
+                if (o) {
+                    const f = found.find(x => x.offerId === o.id);
+                    if (f) { _fetch(`/api/v4/executives/${f.executiveId}/`).then(r => r.json()).then(renderSkillPanel); }
+                    else { renderSkillPanel(null, true); }
+                } else { renderSkillPanel(null, true); }
             }
-        }, 1500);
-    
+        };
     })();
 
     // ======================
@@ -5140,7 +5237,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    更新2026/04/07 23:14 新新零售第三次改动
+        // @changelog    完善功能
 
         fetch(scriptUrl)
             .then(res => res.text())
