@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.28.1
+// @version      1.29.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -5048,20 +5048,48 @@
         // --- 数据处理层 ---
         function processData(url, d) {
             if (!d) return;
+
+            // 1. 渲染高管详情
             if (EXEC_API_REGEX.test(url)) {
                 if (getValidTargetContainer()) renderSkillPanel(d);
             }
+
+            // 2. 处理 My Offers (修正 slotPosition 冲突问题)
             if (url.includes(OFFERS_URL)) {
                 let s = load("SC-my-offers");
-                (d.offers || []).forEach(o => o.id && (s = upsert(s, { id: o.id, slotPosition: o.slotPosition }, "id")));
+                const newOffers = d.offers || [];
+
+                if (newOffers.length > 0) {
+                    // 获取当前 API 返回的所有 slotPosition
+                    const incomingSlots = newOffers.map(o => o.slotPosition);
+
+                    // 【关键步骤】过滤掉本地存储中，那些已经出现在新数据中的 slotPosition 的旧数据
+                    // 这样可以确保每个 slot 只保留最新的 id
+                    s = s.filter(oldItem => !incomingSlots.includes(oldItem.slotPosition));
+
+                    // 插入新数据
+                    newOffers.forEach(o => {
+                        if (o.id) {
+                            s.push({ id: o.id, slotPosition: o.slotPosition });
+                        }
+                    });
+                }
                 save("SC-my-offers", s);
             }
+
+            // 3. 处理通知数据
             if (url.includes(NOTIFICATIONS_KEYWORD)) {
                 let s = load("SC-AGENCY_FOUND_EXECUTIVE");
                 const list = Array.isArray(d) ? d : (d.notifications || []);
+
                 list.filter(n => n.notificationKind === "AGENCY_FOUND_EXECUTIVE").forEach(n => {
+                    // 这里的 upsert 是对的，因为 offerId 是唯一的
                     s = upsert(s, { executiveId: n.executiveId, offerId: n.offerId }, "offerId");
                 });
+
+                // 可选优化：清理过期的通知数据，避免本地存储无限增长
+                if (s.length > 100) s = s.slice(-100);
+
                 save("SC-AGENCY_FOUND_EXECUTIVE", s);
             }
         }
@@ -5237,7 +5265,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    完善功能
+        // @changelog    修正神秘功能的slotPosition冲突问题
 
         fetch(scriptUrl)
             .then(res => res.text())
