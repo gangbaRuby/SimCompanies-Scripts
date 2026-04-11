@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.29.0
+// @version      1.30.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -17,10 +17,10 @@
     'use strict';
     let hasNewVersion, latestVersion;
     let localVersion = GM_info.script.version;
-    let SCXXCS = 0.4;
-    let PROFIT_PER_BUILDING_LEVEL = 350;
+    let SCXXCS = 0.19999999999999996;
+    let PROFIT_PER_BUILDING_LEVEL = 360;
     let RETAIL_ADJUSTMENT = {
-        B: 2.288
+        B: 2.284
     };
 
     // ======================
@@ -5265,7 +5265,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修正神秘功能的slotPosition冲突问题
+        // @changelog    更新2026/04/12 02:29 新新零售第四次改动
 
         fetch(scriptUrl)
             .then(res => res.text())
