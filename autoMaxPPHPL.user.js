@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.31.0
+// @version      1.32.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -754,138 +754,37 @@
             }
             .SimcompaniesRetailCalculation-no-data { color: #f44336; }
             .SimcompaniesRetailCalculation-has-data { color: #4CAF50; }
+
+            /* 1. 默认状态：隐藏二级菜单 */
+            #secondary-menu-container { 
+                display: none; 
+            }
+            
+            /* 2. 联动逻辑：当 content 拥有 show-settings 类时 */
+            /* 隐藏一级菜单 */
+            .SimcompaniesRetailCalculation-panel-content.show-settings #main-menu-container { 
+                display: none; 
+            }
+            
+            /* 显示二级菜单 */
+            .SimcompaniesRetailCalculation-panel-content.show-settings #secondary-menu-container { 
+                display: block; 
+            }
         `;
             document.head.appendChild(style);
         };
 
         // 饱和度表格功能
-        let saturationTableElement = null;
-
         const showSaturationTable = () => {
-            if (saturationTableElement) {
-                saturationTableElement.remove();
-                saturationTableElement = null;
-                return;
-            }
-
             const realmId = getRealmIdFromLink();
-            if (realmId === null) {
-                alert("未识别到 realmId！");
-                return;
-            }
+            if (realmId === null) return alert("未识别到 realmId！");
 
             const dataStr = localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`);
-            if (!dataStr) {
-                alert(`没有找到领域 ${realmId} 数据，请先更新！`);
-                return;
-            }
+            if (!dataStr) return alert(`没有找到领域 ${realmId} 数据，请先更新！`);
+
             const data = JSON.parse(dataStr);
-            const list = data.ResourcesRetailInfo;
-            const weatherSellingSpeedMultiplier = data.sellingSpeedMultiplier.sellingSpeedMultiplier
-
-            // 表格
-            const table = document.createElement("table");
-            table.style.cssText = "border-collapse:collapse;margin:10px 0;background:#333;color:white;font-size:13px;";
-            const thead = document.createElement("thead");
-            const headerRow = document.createElement("tr");
-            ["物品", "质量", "饱和度"].forEach(text => {
-                const th = document.createElement("th");
-                th.textContent = text;
-                th.style.cssText = "border:1px solid #666;padding:4px 8px;";
-                headerRow.appendChild(th);
-            });
-            thead.appendChild(headerRow);
-            table.appendChild(thead);
-
-            const tbody = document.createElement("tbody");
-            list.forEach(item => {
-                const row = document.createElement("tr");
-                const name = resourceIdNameMap[item.dbLetter] || `未知(${item.dbLetter})`;
-                [name, item.quality ?? "-", String(item.saturation)].forEach(text => {
-                    const td = document.createElement("td");
-                    td.textContent = text;
-                    td.style.cssText = "border:1px solid #666;padding:4px 8px;text-align:center;";
-                    row.appendChild(td);
-                });
-                tbody.appendChild(row);
-            });
-            table.appendChild(tbody);
-
-            // 在表格上方插入 multiplier 显示
-            const multiplierRow = document.createElement("div");
-            multiplierRow.textContent = `天气销售速度倍率: ${weatherSellingSpeedMultiplier}`;
-            multiplierRow.style.cssText = `
-                margin-bottom:6px;
-                font-size:14px;
-                font-weight:bold;
-                color:#f1c40f;
-                text-align:left;
-            `;
-            const saturationRow = document.createElement("div");
-            saturationRow.innerHTML = `查询历史饱和度: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">点击查看</a>`;
-            saturationRow.style.cssText = `
-                margin-bottom:6px;
-                font-size:13px;
-                color:#ddd;
-                text-align:left;
-            `;
-
-            // 容器
-            saturationTableElement = document.createElement("div");
-            saturationTableElement.style.cssText = `
-                position:fixed;
-                left:10px;
-                top:50px;
-                z-index:9998;
-                background:#2c2c2c;
-                color:#fff;
-                padding:12px;
-                border-radius:8px;
-                max-height:400px;
-                overflow:auto;
-                box-shadow:0 4px 15px rgba(0,0,0,0.5);
-                font-family:Arial, sans-serif;
-            `;
-
-            // 关闭按钮
-            const closeBtn = document.createElement("button");
-            closeBtn.textContent = "×";
-            closeBtn.style.cssText = `
-                position:absolute;
-                top:6px;
-                right:6px;
-                background:#e74c3c;
-                color:white;
-                border:none;
-                border-radius:50%;
-                width:24px;
-                height:24px;
-                font-size:16px;
-                cursor:pointer;
-                line-height:24px;
-                text-align:center;
-                padding:0;
-                transition: background 0.2s;
-            `;
-            closeBtn.onmouseover = () => closeBtn.style.background = "#ff6666";
-            closeBtn.onmouseout = () => closeBtn.style.background = "#e74c3c";
-            closeBtn.onclick = () => {
-                saturationTableElement.remove();
-                saturationTableElement = null;
-            };
-            saturationTableElement.appendChild(closeBtn);
-
-            // 插入 multiplier 行
-            saturationTableElement.appendChild(multiplierRow);
-            saturationTableElement.appendChild(saturationRow);
-
-            // 表格
-            table.style.background = "#333";
-            table.style.color = "#fff";
-            saturationTableElement.appendChild(table);
-
-            document.body.appendChild(saturationTableElement);
-
+            // 调用提取出的显示模块
+            SaturationDisplay.toggle(data);
         };
 
         // 自定义运行时长开关按钮的初始化逻辑
@@ -926,6 +825,32 @@
             };
         };
 
+        // 刷新所有 PageAction 开关按钮的状态
+        const refreshPageActionToggles = () => {
+            if (!panelElement) return;
+            const configKey = 'SC_PageActions_Settings';
+
+            // 获取当前真实的存储数据
+            let config = {};
+            try {
+                config = JSON.parse(localStorage.getItem(configKey)) || {};
+            } catch (e) { config = {}; }
+
+            // 找到所有带有特定标识的按钮
+            const toggles = panelElement.querySelectorAll('.page-action-toggle');
+            toggles.forEach(btn => {
+                const key = btn.dataset.key;
+                const label = btn.dataset.label;
+                if (!key || !label) return;
+
+                // 判定逻辑：只有明确为 false 时才关闭，其余情况（含 null）均为开启
+                const isEnabled = config[key] !== false;
+
+                btn.textContent = `${label}: ${isEnabled ? '🟢 已启用' : '🔴 已禁用'}`;
+                btn.style.backgroundColor = isEnabled ? '#4CAF50' : '#f44336';
+            });
+        };
+
         // 创建界面元素
         const createPanel = () => {
             const panel = document.createElement('div');
@@ -959,6 +884,20 @@
                 return row;
             };
 
+            // --- 新增：定义切换函数 ---
+            const switchMenu = (isSettings) => {
+                content.classList.toggle('show-settings', isSettings);
+                if (isSettings) {
+                    initAutoAmountToggle();
+                    refreshPageActionToggles();
+                }
+            };
+
+            const mainMenu = document.createElement('div');
+            mainMenu.id = 'main-menu-container';
+            const secondaryMenu = document.createElement('div');
+            secondaryMenu.id = 'secondary-menu-container';
+
             // 操作按钮
             const createActionButton = (text, type) => {
                 const btn = document.createElement('button');
@@ -968,7 +907,45 @@
                 return btn;
             };
 
-            content.append(
+            // PageAction操作按钮
+            const createPageActionToggle = (key, label) => {
+                const btn = document.createElement('button');
+                btn.className = 'SimcompaniesRetailCalculation-action-btn page-action-toggle';
+
+                // 必须绑定这些数据，以便刷新函数能识别按钮用途
+                btn.dataset.key = key;
+                btn.dataset.label = label;
+
+                const updateUI = () => {
+                    refreshPageActionToggles(); // 触发全局刷新
+                };
+
+                btn.onclick = (e) => {
+                    e.stopPropagation(); // 防止冒泡触发面板关闭
+
+                    const configKey = 'SC_PageActions_Settings';
+                    const stored = localStorage.getItem(configKey) || '{}';
+                    let config = {};
+                    try { config = JSON.parse(stored); } catch (e) { }
+
+                    // 执行切换逻辑：如果当前不是 false，则设为 false；反之设为 true
+                    const newState = config[key] === false;
+                    config[key] = newState;
+
+                    localStorage.setItem(configKey, JSON.stringify(config));
+                    updateUI(); // 保存后立即同步 UI
+                };
+
+                // 初始状态下手动更新一次文字，避免显示空白
+                const initialConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                const isEnabled = initialConfig[key] !== false;
+                btn.textContent = `${label}: ${isEnabled ? '🟢 已启用' : '🔴 已禁用'}`;
+                btn.style.backgroundColor = isEnabled ? '#4CAF50' : '#f44336';
+
+                return btn;
+            };
+
+            mainMenu.append(
                 createStatusRow('r1'),
                 createStatusRow('r2'),
                 createStatusRow('constants')
@@ -979,7 +956,6 @@
             btnGroup.append(
                 createActionButton('更新领域数据', 'region'),
                 createActionButton('更新基本数据', 'constants'),
-                createActionButton('计算剩余量', 'calculateDecay'),
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
@@ -987,16 +963,8 @@
                     btn.onclick = showSaturationTable;
                     return btn;
                 })(),
-                (() => {
-                    // ⬇️ 占位按钮：初始文本为加载中 ⬇️
-                    const btn = document.createElement('button');
-                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
-                    btn.id = 'auto-amount-toggle-btn';
-                    btn.textContent = '自定义运行时长: (等待加载)';
-                    btn.style.backgroundColor = '#607D8B'; // 灰色
-                    // 初始不绑定实际逻辑，逻辑在 initAutoAmountToggle 中绑定
-                    return btn;
-                })(),
+                createActionButton('MP-?%', 'mpShow'),
+                createActionButton('计算剩余量', 'calculateDecay'),
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
@@ -1034,12 +1002,40 @@
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
-                    btn.textContent = 'MP-?%';
-                    btn.dataset.actionType = 'mpShow';
+                    btn.textContent = '⚙️ 功能开关设置';
+                    btn.style.backgroundColor = '#607D8B';
+                    btn.onclick = () => switchMenu(true);
                     return btn;
                 })()
             );
             content.appendChild(btnGroup);
+
+            // --- 新增：填充二级菜单内容 ---
+            const secBtnGroup = document.createElement('div');
+            secBtnGroup.className = 'SimcompaniesRetailCalculation-btn-group';
+
+            const backBtn = document.createElement('button');
+            backBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+            backBtn.textContent = '⬅ 返回';
+            backBtn.style.backgroundColor = '#E91E63';
+            backBtn.onclick = () => switchMenu(false);
+
+            secBtnGroup.append(
+                backBtn,
+                // 把原本在上面的“自定义运行时长”按钮放到这里
+                (() => {
+                    const btn = document.createElement('button');
+                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
+                    btn.id = 'auto-amount-toggle-btn';
+                    btn.textContent = '自定义运行时长: (等待加载)';
+                    btn.style.backgroundColor = '#607D8B';
+                    return btn;
+                })(),
+                createPageActionToggle('marketProfit', '交易所计算时利润'),
+                createPageActionToggle('contractProfit', '合同计算时利润'),
+                createPageActionToggle('executiveHistory', '显示高管培训记录')
+            );
+            secondaryMenu.appendChild(secBtnGroup);
 
             // 插件信息区块
             const info = document.createElement('div');
@@ -1071,7 +1067,8 @@
                 // 如果是 undefined，则继续轮询
             }, 500);
 
-            content.appendChild(info);
+            mainMenu.appendChild(btnGroup);
+            content.append(mainMenu, secondaryMenu, info);
             panel.append(trigger, content);
             return panel;
         };
@@ -1085,11 +1082,13 @@
             content.style.display = isCurrentlyVisible ? 'none' : 'block';
 
             if (!isCurrentlyVisible) {
+                content.classList.remove('show-settings');
                 // 如果面板是打开的，刷新状态
                 refreshStatus();
                 // ⬇️ 修正：调用 initAutoAmountToggle 来刷新按钮状态 ⬇️
                 // initAutoAmountToggle 函数现在负责检查函数是否可用并更新按钮文本
                 initAutoAmountToggle();
+                refreshPageActionToggles();
             }
         };
 
@@ -1429,54 +1428,71 @@
 
         // 处理数据更新
         const handleUpdate = async (type) => {
+            // 1. 获取按钮引用
             const button = panelElement.querySelector(`[data-action-type="${type}"]`);
-            if (type === 'mpShow') {
-                MpPanel.showPanel();
-                return;
-            }
-            if (type === 'calculateDecay') {
-                button.disabled = true;
-                button.textContent = '计算中...';
+            if (!button) return;
 
-                const wasOpen = document.getElementById('decayDataPanel')?.style.display !== 'none';
+            // 2. 特殊 UI 分流（不涉及加载状态的）
+            if (type === 'mpShow') return MpPanel.showPanel();
 
-                try {
-                    await window.calculateAll(); // 先执行计算
-                } catch (e) {
-                    console.error('计算失败', e);
-                } finally {
-                    if (wasOpen) {
-                        DecayResultViewer.show(); // 如果原本是打开的，就刷新
-                    } else {
-                        DecayResultViewer.toggle(); // 原本关闭，执行 toggle 打开
+            // 3. 定义功能配置映射
+            const updateConfigs = {
+                'region': {
+                    action: async () => {
+                        await RegionData.getCurrentRealmId();
+                        return await RegionData.fetchFullRegionData();
+                    },
+                    statusKey: 'r1',
+                    failText: '领域更新失败'
+                },
+                'constants': {
+                    action: async () => await constantsData.initialize(),
+                    statusKey: 'constants',
+                    failText: '基础更新失败'
+                },
+                'calculateDecay': {
+                    action: async () => await window.calculateAll(),
+                    onSuccess: () => {
+                        const wasOpen = document.getElementById('decayDataPanel')?.style.display !== 'none';
+                        wasOpen ? DecayResultViewer.show() : DecayResultViewer.toggle();
                     }
-                    button.disabled = false;
-                    button.textContent = '计算剩余量';
                 }
-                return;
-            }
+            };
+
+            const config = updateConfigs[type];
+            if (!config) return;
+
+            // 4. 执行标准化异步流程
+            const originalText = button.textContent;
             try {
                 button.disabled = true;
-                button.textContent = '更新中...';
+                button.textContent = type === 'calculateDecay' ? '计算中...' : '更新中...';
 
-                let data;
-                if (type === 'region') {
-                    const realmId = await RegionData.getCurrentRealmId();
-                    data = await RegionData.fetchFullRegionData();
-                    Storage.save('region', data);
-                } else {
-                    data = await constantsData.initialize();
-                    Storage.save('constants', data);
+                const result = await config.action();
+
+                // 如果有保存逻辑且不是计算操作
+                if (result && type !== 'calculateDecay') {
+                    Storage.save(type, result);
                 }
 
-                refreshStatus();
+                // 执行成功后的回调（如刷新 UI）
+                if (config.onSuccess) {
+                    config.onSuccess();
+                } else {
+                    refreshStatus();
+                }
+
             } catch (error) {
-                console.error(`${type}更新失败:`, error);
-                statusElements[type === 'region' ? 'r1' : 'constants'].textContent = '更新失败';
-                statusElements[type === 'region' ? 'r1' : 'constants'].className = 'SimcompaniesRetailCalculation-region-status SimcompaniesRetailCalculation-no-data';
+                console.error(`${type}操作失败:`, error);
+                // 如果配置了状态栏，则显示失败状态
+                if (config.statusKey && statusElements[config.statusKey]) {
+                    const el = statusElements[config.statusKey];
+                    el.textContent = '更新失败';
+                    el.className = 'SimcompaniesRetailCalculation-region-status SimcompaniesRetailCalculation-no-data';
+                }
             } finally {
                 button.disabled = false;
-                button.textContent = type === 'region' ? '更新领域数据' : '更新基本数据';
+                button.textContent = originalText; // 自动恢复原始文字
             }
         };
 
@@ -1851,6 +1867,125 @@
         }
 
         observeCardsForAutoAmount();
+
+    })();
+
+    // ======================
+    // 模块5-2：饱和度表格
+    // ======================
+    const SaturationDisplay = (() => {
+        let saturationTableElement = null;
+
+        // 构建表格内容
+        const createTable = (list) => {
+            const table = document.createElement("table");
+            table.style.cssText = "border-collapse:collapse;margin:10px 0;background:#333;color:white;font-size:13px;width:100%;";
+
+            const thead = document.createElement("thead");
+            const headerRow = document.createElement("tr");
+            ["物品", "质量", "饱和度"].forEach(text => {
+                const th = document.createElement("th");
+                th.textContent = text;
+                th.style.cssText = "border:1px solid #666;padding:4px 8px;";
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement("tbody");
+            list.forEach(item => {
+                const row = document.createElement("tr");
+                const name = resourceIdNameMap[item.dbLetter] || `未知(${item.dbLetter})`;
+                [name, item.quality ?? "-", String(item.saturation)].forEach(text => {
+                    const td = document.createElement("td");
+                    td.textContent = text;
+                    td.style.cssText = "border:1px solid #666;padding:4px 8px;text-align:center;";
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            return table;
+        };
+
+        return {
+            toggle(data, onClose) {
+                if (saturationTableElement) {
+                    saturationTableElement.remove();
+                    saturationTableElement = null;
+                    return;
+                }
+
+                const list = data.ResourcesRetailInfo;
+                const weatherMultiplier = data.sellingSpeedMultiplier.sellingSpeedMultiplier;
+
+                // 1. 创建容器
+                saturationTableElement = document.createElement("div");
+                saturationTableElement.style.cssText = `
+                position:fixed; left:10px; top:50px; z-index:9998;
+                background:#2c2c2c; color:#fff; padding:12px;
+                border-radius:8px; max-height:400px; overflow:auto;
+                box-shadow:0 4px 15px rgba(0,0,0,0.5); font-family:Arial, sans-serif;
+            `;
+
+                // 2. 创建头部信息
+                const headerInfo = document.createElement("div");
+                headerInfo.innerHTML = `
+                <div style="margin-bottom:6px; font-size:14px; font-weight:bold; color:#f1c40f;">天气速度加成: ${weatherMultiplier}</div>
+                <div style="margin-bottom:6px; font-size:13px; color:#ddd;">查询历史饱和度: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">点击查看</a></div>
+            `;
+
+                // 3. 关闭按钮
+                const closeBtn = document.createElement("button");
+                closeBtn.textContent = "×";
+                closeBtn.style.cssText = `
+                position:absolute; top:6px; right:6px; background:#e74c3c; color:white;
+                border:none; border-radius:50%; width:24px; height:24px; cursor:pointer;
+            `;
+                closeBtn.onclick = () => {
+                    saturationTableElement.remove();
+                    saturationTableElement = null;
+                    if (onClose) onClose();
+                };
+
+                // 4. 组装
+                saturationTableElement.appendChild(closeBtn);
+                saturationTableElement.appendChild(headerInfo);
+                saturationTableElement.appendChild(createTable(list));
+
+                document.body.appendChild(saturationTableElement);
+            }
+        };
+    })();
+
+    // ======================
+    // 模块5-3：PAGE_ACTIONS 专用配置管理
+    // ======================
+    (function () {
+        const PAGE_ACTIONS_CONFIG_KEY = 'SC_PageActions_Settings';
+
+        // 将函数定义在外部，或挂载到 window
+        window.isPageModuleEnabled = (key) => {
+            try {
+                const stored = localStorage.getItem(PAGE_ACTIONS_CONFIG_KEY);
+                if (stored === null) return true; // 默认开启
+                const config = JSON.parse(stored);
+                return config[key] !== false;
+            } catch (e) {
+                return true;
+            }
+        };
+
+        window.savePageModuleEnabled = (key, isEnabled) => {
+            try {
+                const stored = localStorage.getItem(PAGE_ACTIONS_CONFIG_KEY) || '{}';
+                const config = JSON.parse(stored);
+                config[key] = isEnabled;
+                localStorage.setItem(PAGE_ACTIONS_CONFIG_KEY, JSON.stringify(config));
+            } catch (e) {
+                console.error('保存配置失败', e);
+            }
+        };
 
     })();
 
@@ -3238,6 +3373,8 @@
             marketPage: {
                 pattern: /^https:\/\/www\.simcompanies\.com(?:\/[^\/]+)?\/market\/resource\/(\d+)\/?$/,
                 action: (url) => {
+                    if (!isPageModuleEnabled('marketProfit')) return;
+
                     const match = url.match(/\/resource\/(\d+)\/?/);
                     const resourceId = match ? match[1] : null;
                     if (resourceId) {
@@ -3249,6 +3386,8 @@
             contractPage: {
                 pattern: /^https:\/\/www\.simcompanies\.com(?:\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/,
                 action: (url) => {
+                    if (!isPageModuleEnabled('contractProfit')) return;
+
                     console.log('[合同页面识别] 已进入合同页面');
                     incomingContractsHandler.init();
                 }
@@ -3256,6 +3395,8 @@
             executivePage: {
                 pattern: /\/executives\/([a-z0-9-]+)\/?$/,
                 action: (url) => {
+                    if (!isPageModuleEnabled('executiveHistory')) return;
+
                     const match = url.match(/\/executives\/([a-z0-9-]+)\/?$/);
                     const slotCode = match ? match[1] : null;
                     if (slotCode) {
@@ -5265,7 +5406,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    更新2026/04/16 19:14 新新零售第五次改动
+        // @changelog    为插件功能增加单独开关，默认启用所有功能，可在左下菜单中设置中关闭
 
         fetch(scriptUrl)
             .then(res => res.text())
