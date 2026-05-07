@@ -63,9 +63,9 @@
     };
 
     // ======================
-    // 全局工具：高管数据计算器 (支持拖拽、折叠、自适应)
+    // 全局按钮：高管自定义数据
     // ======================
-    const ExecutiveManualCalculator = (function () {
+    const executiveCustomButton = (function () {
         let academyLevel = 15;
         let isCollapsed = false; // 折叠状态
 
@@ -187,7 +187,7 @@
 
             modal.innerHTML = `
             <div id="sc-calc-header" style="padding: 15px; background: #2196f3; color: white; cursor: move; display: flex; justify-content: space-between; align-items: center; user-select: none;">
-                <span style="font-weight: bold;">📊 高管加成计算器</span>
+                <span style="font-weight: bold;">📊 自定义高管数据</span>
                 <div style="display: flex; gap: 15px;">
                     <span id="sc-calc-arrow" style="cursor: pointer; padding: 0 5px;">▼</span>
                     <span id="sc-calc-close-x" style="cursor: pointer; padding: 0 5px;">&times;</span>
@@ -203,18 +203,18 @@
                 </div>
 
                 <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
-                    <tr style="color: #888;"><th align="left">职位</th><th>COO</th><th>CMO</th></tr>
+                    <tr style="color: #888;"><th align="left">职位</th><th>COO点数</th><th>CMO点数</th></tr>
                     <tr height="35"><td>COO</td><td><input id="sc-calc-o-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-o-cmo" type="number" style="${inputStyle}"></td></tr>
-                    <tr height="35"><td style="color:#9c27b0">COO学</td><td><input id="sc-calc-v-coo" type="number" style="${inputStyle}"></td><td align="center">-</td></tr>
+                    <tr height="35"><td style="color:#9c27b0">COO学徒</td><td><input id="sc-calc-v-coo" type="number" style="${inputStyle}"></td><td align="center">-</td></tr>
                     <tr height="35"><td>CFO</td><td><input id="sc-calc-f-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-f-cmo" type="number" style="${inputStyle}"></td></tr>
                     <tr height="35"><td>CMO</td><td><input id="sc-calc-m-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-m-cmo" type="number" style="${inputStyle}"></td></tr>
-                    <tr height="35"><td style="color:#9c27b0">CMO学</td><td align="center">-</td><td><input id="sc-calc-y-cmo" type="number" style="${inputStyle}"></td></tr>
+                    <tr height="35"><td style="color:#9c27b0">CMO学徒</td><td align="center">-</td><td><input id="sc-calc-y-cmo" type="number" style="${inputStyle}"></td></tr>
                     <tr height="35"><td>CTO</td><td><input id="sc-calc-t-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-t-cmo" type="number" style="${inputStyle}"></td></tr>
                 </table>
 
                 <div style="padding: 10px; background: rgba(0,0,0,0.1); border-radius: 8px; display: flex; justify-content: space-around; margin-bottom: 15px;">
-                    <div style="text-align: center;"><div style="font-size: 11px; opacity: 0.7;">管理</div><div id="sc-res-admin" style="font-size: 18px; font-weight: bold; color: #2196f3;">0</div></div>
-                    <div style="text-align: center;"><div style="font-size: 11px; opacity: 0.7;">销售</div><div id="sc-res-sale" style="font-size: 18px; font-weight: bold; color: #4caf50;">0%</div></div>
+                    <div style="text-align: center;"><div style="font-size: 11px; opacity: 0.7;">管理点数</div><div id="sc-res-admin" style="font-size: 18px; font-weight: bold; color: #2196f3;">0</div></div>
+                    <div style="text-align: center;"><div style="font-size: 11px; opacity: 0.7;">销售速度</div><div id="sc-res-sale" style="font-size: 18px; font-weight: bold; color: #4caf50;">0%</div></div>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -305,7 +305,7 @@
                     setTimeout(() => {
                         modal.remove();
                     }, 300);
-                }, 1200); // 1.2秒展示时间
+                }, 1000); // 1.2秒展示时间
             };
 
             // 初始初始化状态
@@ -317,6 +317,60 @@
 
         return { show };
     })();
+
+    // ======================
+    // 全局按钮：高管自定义开关
+    // ======================
+    const createGlobalCustomToggle = (key, label) => {
+        const CONFIG_KEY = 'SC_PageActions_Settings';
+
+        // 1. 创建包装容器
+        const wrapper = document.createElement('div');
+        wrapper.className = `custom-btn-wrapper-${key}`;
+        wrapper.style.cssText = "display: inline-block; margin-left: 10px; vertical-align: middle;";
+
+        // 2. 创建按钮
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'SimcompaniesRetailCalculation-action-btn';
+        btn.style.cssText = `
+        color: white; border: none; padding: 6px 14px; border-radius: 4px;
+        cursor: pointer; font-size: 13px; font-weight: bold; outline: none;
+        transition: all 0.2s;
+    `;
+
+        // 3. UI 刷新逻辑
+        const refreshUI = () => {
+            const config = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
+            // 逻辑：默认开启 (true)，除非显式设为 false
+            const isEnabled = config[key] !== false;
+
+            btn.textContent = `${label}：${isEnabled ? '开' : '关'}`;
+            btn.style.backgroundColor = isEnabled ? '#4CAF50' : '#607D8B';
+            btn.isEnabled = isEnabled; // 挂载状态供外部逻辑直接读取
+        };
+
+        // 4. 点击逻辑
+        btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const config = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
+            config[key] = config[key] === false; // 切换状态
+
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+            refreshUI();
+
+            // 如果你需要点击后立即触发某些逻辑，可以在这里添加回调
+            if (typeof onToggleCallback === 'function') onToggleCallback(btn.isEnabled);
+        };
+
+        // 初始化显示
+        refreshUI();
+        wrapper.appendChild(btn);
+
+        return { wrapper, btn };
+    };
 
     // 映射表
     const resourceIdNameMap = { 1: "电力", 2: "水", 3: "苹果", 4: "橘子", 5: "葡萄", 6: "谷物", 7: "牛排", 8: "香肠", 9: "鸡蛋", 10: "原油", 11: "汽油", 12: "柴油", 13: "运输单位", 14: "矿物", 15: "铝土矿", 16: "硅材", 17: "化合物", 18: "铝材", 19: "塑料", 20: "处理器", 21: "电子元件", 22: "电池", 23: "显示屏", 24: "智能手机", 25: "平板电脑", 26: "笔记本电脑", 27: "显示器", 28: "电视机", 29: "作物研究", 30: "能源研究", 31: "采矿研究", 32: "电器研究", 33: "畜牧研究", 34: "化学研究", 35: "软件", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "棉花", 41: "棉布", 42: "铁矿石", 43: "钢材", 44: "沙子", 45: "玻璃", 46: "皮革", 47: "车载电脑", 48: "电动马达", 49: "豪华车内饰", 50: "基本内饰", 51: "车身", 52: "内燃机", 53: "经济电动车", 54: "豪华电动车", 55: "经济燃油车", 56: "豪华燃油车", 57: "卡车", 58: "汽车研究", 59: "时装研究", 60: "内衣", 61: "手套", 62: "裙子", 63: "高跟鞋", 64: "手袋", 65: "运动鞋", 66: "种子", 67: "圣诞爆竹", 68: "金矿石", 69: "金条", 70: "名牌手表", 71: "项链", 72: "甘蔗", 73: "乙醇", 74: "甲烷", 75: "碳纤维", 76: "碳纤复合材", 77: "机身", 78: "机翼", 79: "精密电子元件", 80: "飞行计算机", 81: "座舱", 82: "姿态控制器", 83: "火箭燃料", 84: "燃料储罐", 85: "固体燃料助推器", 86: "火箭发动机", 87: "隔热板", 88: "离子推进器", 89: "喷气发动机", 90: "亚轨道二级火箭", 91: "亚轨道火箭", 92: "轨道助推器", 93: "星际飞船", 94: "BFR", 95: "喷气客机", 96: "豪华飞机", 97: "单引擎飞机", 98: "无人机", 99: "人造卫星", 100: "航空航天研究", 101: "钢筋混凝土", 102: "砖块", 103: "水泥", 104: "黏土", 105: "石灰石", 106: "木材", 107: "钢筋", 108: "木板", 109: "窗户", 110: "工具", 111: "建筑预构件", 112: "推土机", 113: "材料研究", 114: "机器人", 115: "牛", 116: "猪", 117: "牛奶", 118: "咖啡豆", 119: "咖啡粉", 120: "蔬菜", 121: "面包", 122: "芝士", 123: "苹果派", 124: "橙汁", 125: "苹果汁", 126: "姜汁汽水", 127: "披萨", 128: "面条", 129: "汉堡包", 130: "千层面", 131: "肉丸", 132: "混合果汁", 133: "面粉", 134: "黄油", 135: "糖", 136: "可可", 137: "面团", 138: "酱汁", 139: "动物饲料", 140: "巧克力", 141: "植物油", 142: "沙拉", 143: "咖喱角", 144: "圣诞装饰品", 145: "食谱", 146: "南瓜", 147: "杰克灯笼", 148: "女巫服", 149: "南瓜汤", 150: "树", 151: "复活节兔兔", 152: "斋月糖果", 153: "巧克力冰淇淋", 154: "苹果冰淇淋", 155: "奶油鸡蛋" };
@@ -3245,6 +3299,17 @@
                         //     toggleButton.textContent = isShowingProfit ? '用时' : '时利润';
                         // });
 
+                        // 创建按钮实例
+                        const myToggle = createGlobalCustomToggle('executiveCustomToggle', '自定义');
+
+                        // 插入到你指定的位置
+                        if (summaryDisplay && summaryDisplay.parentNode) {
+                            const actionArea = summaryDisplay.parentNode.querySelector('.css-1sr08ku');
+                            if (actionArea) {
+                                actionArea.after(myToggle.wrapper); // 插入容器
+                            }
+                        }
+
                         // 标记已完成注入
                         form.setAttribute('data-market-calc-initialized', 'true');
                     }
@@ -5978,7 +6043,7 @@
             btnCustom.style.cssText = baseStyle + "background-color: #673ab7;"; // 紫色区分
             btnCustom.onclick = (e) => {
                 e.preventDefault();
-                ExecutiveManualCalculator.show();
+                executiveCustomButton.show();
             };
 
             targetHeader.appendChild(btnSync);
