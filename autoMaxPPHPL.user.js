@@ -62,6 +62,262 @@
         return weather && (p /= weather.sellingSpeedMultiplier), p
     };
 
+    // ======================
+    // 全局工具：高管数据计算器 (支持拖拽、折叠、自适应)
+    // ======================
+    const ExecutiveManualCalculator = (function () {
+        let academyLevel = 15;
+        let isCollapsed = false; // 折叠状态
+
+        const getVal = (id) => parseFloat(document.getElementById(id)?.value) || 0;
+
+        // --- 核心逻辑：计算 ---
+        function calculate() {
+            const skills = {
+                o: { coo: getVal('sc-calc-o-coo'), cmo: getVal('sc-calc-o-cmo') },
+                v: { coo: getVal('sc-calc-v-coo') },
+                f: { coo: getVal('sc-calc-f-coo'), cmo: getVal('sc-calc-f-cmo') },
+                m: { coo: getVal('sc-calc-m-coo'), cmo: getVal('sc-calc-m-cmo') },
+                y: { cmo: getVal('sc-calc-y-cmo') },
+                t: { coo: getVal('sc-calc-t-coo'), cmo: getVal('sc-calc-t-cmo') }
+            };
+
+            let cooApp = (academyLevel >= 5) ? skills.v.coo / 2 : 0;
+            let cmoApp = (academyLevel >= 15) ? skills.y.cmo / 2 : 0;
+
+            let adminBonus = Math.floor(skills.o.coo + cooApp + (skills.f.coo + skills.m.coo + skills.t.coo) / 4);
+            if (adminBonus > 60) adminBonus = 60 + Math.floor((adminBonus - 60) / 2);
+            if (adminBonus > 80) adminBonus = 80 + Math.floor((adminBonus - 80) / 2);
+
+            let saleBonusRaw = Math.floor(skills.m.cmo + cmoApp + (skills.o.cmo + skills.f.cmo + skills.t.cmo) / 4);
+            if (saleBonusRaw > 60) saleBonusRaw = 60 + Math.floor((saleBonusRaw - 60) / 2);
+            if (saleBonusRaw > 80) saleBonusRaw = 80 + Math.floor((saleBonusRaw - 80) / 2);
+            let saleBonus = Math.floor(saleBonusRaw / 3);
+
+            const resAdminEl = document.getElementById('sc-res-admin');
+            const resSaleEl = document.getElementById('sc-res-sale');
+            if (resAdminEl) resAdminEl.textContent = adminBonus;
+            if (resSaleEl) resSaleEl.textContent = saleBonus + '%';
+
+            return { adminBonus, saleBonus };
+        }
+
+        // --- 核心逻辑：拖拽 ---
+        function makeDraggable(el, handle) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            let isDragging = false; // 新增：标记是否正在拖拽
+
+            handle.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                e.preventDefault();
+                isDragging = false; // 按下时重置
+
+                // 处理瞬移的核心：第一次点击时，将 translate 转换为绝对坐标
+                if (el.style.transform !== "none") {
+                    const rect = el.getBoundingClientRect();
+                    el.style.left = rect.left + "px";
+                    el.style.top = rect.top + "px";
+                    el.style.transform = "none";
+                    el.style.margin = "0";
+                }
+
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+            }
+
+            function elementDrag(e) {
+                e.preventDefault();
+                // 如果位移超过一定像素，判定为拖拽，不再触发点击
+                if (Math.abs(e.clientX - pos3) > 2 || Math.abs(e.clientY - pos4) > 2) {
+                    isDragging = true;
+                }
+
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                el.style.top = (el.offsetTop - pos2) + "px";
+                el.style.left = (el.offsetLeft - pos1) + "px";
+            }
+
+            function closeDragElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
+                // 如果刚才发生了拖拽，给 handle 加上一个临时标识，防止冒泡触发 onclick
+                if (isDragging) {
+                    handle.dataset.dragged = "true";
+                    setTimeout(() => handle.dataset.dragged = "false", 50);
+                }
+            }
+        }
+
+        // --- 核心逻辑：折叠 ---
+        function toggleCollapse() {
+            const body = document.getElementById('sc-calc-content');
+            const arrow = document.getElementById('sc-calc-arrow');
+            if (!body) return;
+
+            isCollapsed = !isCollapsed;
+            body.style.display = isCollapsed ? 'none' : 'block';
+            arrow.textContent = isCollapsed ? '▲' : '▼';
+        }
+
+        function show() {
+            if (document.getElementById('sc-calc-modal')) return;
+
+            const isDark = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number).reduce((a, b) => a + b, 0) < 380;
+            const bgColor = isDark ? 'rgba(30, 30, 30, 0.98)' : 'rgba(255, 255, 255, 0.98)';
+            const textColor = isDark ? '#efefef' : '#333';
+            const borderColor = isDark ? '#555' : '#ccc';
+            const inputBg = isDark ? '#222' : '#fff';
+
+            const modal = document.createElement('div');
+            modal.id = 'sc-calc-modal';
+            modal.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: ${bgColor}; backdrop-filter: blur(10px); border: 1px solid ${borderColor}; 
+            border-radius: 12px; z-index: 21000; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            width: 360px; color: ${textColor}; font-family: sans-serif; overflow: hidden;
+        `;
+
+            const inputStyle = `width: 75px; padding: 5px; border: 1px solid ${borderColor}; border-radius: 4px; background: ${inputBg}; color: ${isDark ? '#fff' : '#000'}; outline: none;`;
+
+            modal.innerHTML = `
+            <div id="sc-calc-header" style="padding: 15px; background: #2196f3; color: white; cursor: move; display: flex; justify-content: space-between; align-items: center; user-select: none;">
+                <span style="font-weight: bold;">📊 高管加成计算器</span>
+                <div style="display: flex; gap: 15px;">
+                    <span id="sc-calc-arrow" style="cursor: pointer; padding: 0 5px;">▼</span>
+                    <span id="sc-calc-close-x" style="cursor: pointer; padding: 0 5px;">&times;</span>
+                </div>
+            </div>
+            
+            <div id="sc-calc-content" style="padding: 20px;">
+                <div style="margin-bottom: 15px; font-size: 13px; background: ${isDark ? '#444' : '#f0f7ff'}; padding: 10px; border-radius: 8px;">
+                    <strong>学院:</strong>
+                    <label style="margin-left:8px;"><input type="radio" name="sc-aca-r" value="0"> <5</label>
+                    <label style="margin-left:8px;"><input type="radio" name="sc-aca-r" value="5"> ≥5</label>
+                    <label style="margin-left:8px;"><input type="radio" name="sc-aca-r" value="15" checked> ≥15</label>
+                </div>
+
+                <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
+                    <tr style="color: #888;"><th align="left">职位</th><th>COO</th><th>CMO</th></tr>
+                    <tr height="35"><td>COO</td><td><input id="sc-calc-o-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-o-cmo" type="number" style="${inputStyle}"></td></tr>
+                    <tr height="35"><td style="color:#9c27b0">COO学</td><td><input id="sc-calc-v-coo" type="number" style="${inputStyle}"></td><td align="center">-</td></tr>
+                    <tr height="35"><td>CFO</td><td><input id="sc-calc-f-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-f-cmo" type="number" style="${inputStyle}"></td></tr>
+                    <tr height="35"><td>CMO</td><td><input id="sc-calc-m-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-m-cmo" type="number" style="${inputStyle}"></td></tr>
+                    <tr height="35"><td style="color:#9c27b0">CMO学</td><td align="center">-</td><td><input id="sc-calc-y-cmo" type="number" style="${inputStyle}"></td></tr>
+                    <tr height="35"><td>CTO</td><td><input id="sc-calc-t-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-t-cmo" type="number" style="${inputStyle}"></td></tr>
+                </table>
+
+                <div style="padding: 10px; background: rgba(0,0,0,0.1); border-radius: 8px; display: flex; justify-content: space-around; margin-bottom: 15px;">
+                    <div style="text-align: center;"><div style="font-size: 11px; opacity: 0.7;">管理</div><div id="sc-res-admin" style="font-size: 18px; font-weight: bold; color: #2196f3;">0</div></div>
+                    <div style="text-align: center;"><div style="font-size: 11px; opacity: 0.7;">销售</div><div id="sc-res-sale" style="font-size: 18px; font-weight: bold; color: #4caf50;">0%</div></div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button id="sc-calc-close-btn" style="padding: 6px 12px; background: none; border: 1px solid ${borderColor}; border-radius: 4px; color: ${textColor};">取消</button>
+                    <button id="sc-calc-save-btn" style="padding: 6px 15px; background: #2196f3; border: none; border-radius: 4px; color: #fff; font-weight: bold;">保存数据</button>
+                </div>
+            </div>
+        `;
+
+            document.body.appendChild(modal);
+
+            // --- 事件绑定 ---
+            const header = document.getElementById('sc-calc-header');
+            const closeX = document.getElementById('sc-calc-close-x');
+            const closeBtn = document.getElementById('sc-calc-close-btn');
+            const saveBtn = document.getElementById('sc-calc-save-btn');
+
+            // 1. 绑定拖拽
+            makeDraggable(modal, header);
+
+            // 2. 绑定折叠 (增加拖拽判断)
+            header.onclick = (e) => {
+                // 如果刚刚发生过拖拽，或者点击的是关闭按钮，则不触发折叠
+                if (header.dataset.dragged === "true") return;
+                if (e.target.id === 'sc-calc-close-x') return;
+                toggleCollapse();
+            };
+
+            // 3. 关闭
+            const closeAction = () => modal.remove();
+            closeX.onclick = closeAction;
+            closeBtn.onclick = closeAction;
+
+            // 4. 输入与单选
+            modal.querySelectorAll('input').forEach(el => {
+                el.oninput = calculate;
+                if (el.type === 'radio') el.onchange = (e) => {
+                    academyLevel = parseInt(e.target.value);
+                    // 更新学徒框状态
+                    const v = document.getElementById('sc-calc-v-coo');
+                    const y = document.getElementById('sc-calc-y-cmo');
+                    v.disabled = academyLevel < 5; v.style.opacity = v.disabled ? '0.3' : '1';
+                    y.disabled = academyLevel < 15; y.style.opacity = y.disabled ? '0.3' : '1';
+                    calculate();
+                };
+            });
+
+            // 5. 保存
+            // 5. 保存逻辑 (带动画反馈)
+            saveBtn.onclick = async () => {
+                const res = calculate();
+                const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : 0;
+
+                // 写入本地存储
+                localStorage.setItem(`R${rId}-SC-Saved-Bonuses`, JSON.stringify({
+                    adminBonus: res.adminBonus,
+                    saleBonus: res.saleBonus,
+                    timestamp: Date.now(),
+                    source: 'manual'
+                }));
+
+                // --- 优雅的 UI 反馈流程 ---
+
+                // 1. 隐藏内容区域，仅保留标题栏
+                const content = document.getElementById('sc-calc-content');
+                const headerTitle = header.querySelector('span'); // 获取标题文字节点
+
+                if (content) {
+                    content.style.transition = "all 0.3s ease";
+                    content.style.opacity = "0";
+                    content.style.height = "0";
+                    content.style.padding = "0";
+                    content.style.overflow = "hidden";
+                }
+
+                // 2. 修改标题栏状态
+                const originalHeaderText = headerTitle.textContent;
+                header.style.transition = "background-color 0.3s ease";
+                header.style.backgroundColor = "#4caf50"; // 变成绿色
+                headerTitle.textContent = "✅ 数据保存成功";
+
+                // 3. 短暂延迟后关闭整个窗口
+                setTimeout(() => {
+                    modal.style.transition = "all 0.3s ease";
+                    modal.style.opacity = "0";
+                    modal.style.transform = modal.style.transform + " scale(0.9)"; // 缩小消失
+
+                    setTimeout(() => {
+                        modal.remove();
+                    }, 300);
+                }, 1200); // 1.2秒展示时间
+            };
+
+            // 初始初始化状态
+            const v = document.getElementById('sc-calc-v-coo');
+            const y = document.getElementById('sc-calc-y-cmo');
+            v.disabled = false; y.disabled = false;
+            calculate();
+        }
+
+        return { show };
+    })();
+
     // 映射表
     const resourceIdNameMap = { 1: "电力", 2: "水", 3: "苹果", 4: "橘子", 5: "葡萄", 6: "谷物", 7: "牛排", 8: "香肠", 9: "鸡蛋", 10: "原油", 11: "汽油", 12: "柴油", 13: "运输单位", 14: "矿物", 15: "铝土矿", 16: "硅材", 17: "化合物", 18: "铝材", 19: "塑料", 20: "处理器", 21: "电子元件", 22: "电池", 23: "显示屏", 24: "智能手机", 25: "平板电脑", 26: "笔记本电脑", 27: "显示器", 28: "电视机", 29: "作物研究", 30: "能源研究", 31: "采矿研究", 32: "电器研究", 33: "畜牧研究", 34: "化学研究", 35: "软件", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "棉花", 41: "棉布", 42: "铁矿石", 43: "钢材", 44: "沙子", 45: "玻璃", 46: "皮革", 47: "车载电脑", 48: "电动马达", 49: "豪华车内饰", 50: "基本内饰", 51: "车身", 52: "内燃机", 53: "经济电动车", 54: "豪华电动车", 55: "经济燃油车", 56: "豪华燃油车", 57: "卡车", 58: "汽车研究", 59: "时装研究", 60: "内衣", 61: "手套", 62: "裙子", 63: "高跟鞋", 64: "手袋", 65: "运动鞋", 66: "种子", 67: "圣诞爆竹", 68: "金矿石", 69: "金条", 70: "名牌手表", 71: "项链", 72: "甘蔗", 73: "乙醇", 74: "甲烷", 75: "碳纤维", 76: "碳纤复合材", 77: "机身", 78: "机翼", 79: "精密电子元件", 80: "飞行计算机", 81: "座舱", 82: "姿态控制器", 83: "火箭燃料", 84: "燃料储罐", 85: "固体燃料助推器", 86: "火箭发动机", 87: "隔热板", 88: "离子推进器", 89: "喷气发动机", 90: "亚轨道二级火箭", 91: "亚轨道火箭", 92: "轨道助推器", 93: "星际飞船", 94: "BFR", 95: "喷气客机", 96: "豪华飞机", 97: "单引擎飞机", 98: "无人机", 99: "人造卫星", 100: "航空航天研究", 101: "钢筋混凝土", 102: "砖块", 103: "水泥", 104: "黏土", 105: "石灰石", 106: "木材", 107: "钢筋", 108: "木板", 109: "窗户", 110: "工具", 111: "建筑预构件", 112: "推土机", 113: "材料研究", 114: "机器人", 115: "牛", 116: "猪", 117: "牛奶", 118: "咖啡豆", 119: "咖啡粉", 120: "蔬菜", 121: "面包", 122: "芝士", 123: "苹果派", 124: "橙汁", 125: "苹果汁", 126: "姜汁汽水", 127: "披萨", 128: "面条", 129: "汉堡包", 130: "千层面", 131: "肉丸", 132: "混合果汁", 133: "面粉", 134: "黄油", 135: "糖", 136: "可可", 137: "面团", 138: "酱汁", 139: "动物饲料", 140: "巧克力", 141: "植物油", 142: "沙拉", 143: "咖喱角", 144: "圣诞装饰品", 145: "食谱", 146: "南瓜", 147: "杰克灯笼", 148: "女巫服", 149: "南瓜汤", 150: "树", 151: "复活节兔兔", 152: "斋月糖果", 153: "巧克力冰淇淋", 154: "苹果冰淇淋", 155: "奶油鸡蛋" };
 
@@ -5606,6 +5862,145 @@
         }
 
         return { forceInject: injectMoreInfoButtons };
+    })();
+
+    // ======================
+    // 模块16：手动保存高管与环境数据 (常开版)
+    // ======================
+    // ======================
+    // 模块16：手动同步高管与环境数据
+    // ======================
+    const ExecutiveDataSaverModule = (function () {
+
+        // --- 内部工具函数 ---
+        const getScopedKey = (k) => {
+            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            return realmId !== null ? `R${realmId}-${k}` : k;
+        };
+
+        const save = (k, d) => {
+            localStorage.setItem(getScopedKey(k), JSON.stringify(d));
+        };
+
+        // --- 核心保存逻辑 ---
+        async function performManualSave() {
+            const currentRealmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            if (currentRealmId === null) return;
+
+            const btn = document.getElementById('sc-save-exec-btn');
+            const originalText = btn ? btn.textContent : "保存当前高管数据";
+
+            try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = "⏳ 正在同步...";
+                }
+
+                // 1. 直接复用你现有的 handleUpdate('region') 逻辑
+                // 如果 handleUpdate 在全局可用，直接调用。如果不可用，则直接运行其内部的 action
+                if (typeof handleUpdate === 'function') {
+                    await handleUpdate('region');
+                } else {
+                    // 如果 handleUpdate 作用域不可直接访问，则直接执行底层 API
+                    await RegionData.getCurrentRealmId();
+                    const result = await RegionData.fetchFullRegionData();
+                    if (result && typeof Storage !== 'undefined') {
+                        Storage.save('region', result);
+                    }
+                }
+
+                // 2. 提取 SRC 加成数据 (此时 RegionData 已完成 fetch，本地缓存已更新)
+                const srcKey = `SimcompaniesRetailCalculation_${currentRealmId}`;
+                const srcRaw = localStorage.getItem(srcKey);
+
+                if (srcRaw) {
+                    const SRC = JSON.parse(srcRaw);
+                    const dataToSave = {
+                        adminBonus: SRC.adminBonus || 0,
+                        saleBonus: SRC.saleBonus || 0,
+                        timestamp: Date.now()
+                    };
+
+                    // 3. 存储关键加成
+                    save("SC-Saved-Bonuses", dataToSave);
+
+                    // 4. 成功反馈
+                    if (btn) {
+                        btn.textContent = "✅ 已同步";
+                        btn.style.backgroundColor = "#2e7d32";
+                        setTimeout(() => {
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                            btn.style.backgroundColor = "#2196f3";
+                        }, 2000);
+                    }
+                }
+            } catch (e) {
+                console.error("模块16: 同步失败", e);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "❌ 失败";
+                    btn.style.backgroundColor = "#d32f2f";
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.backgroundColor = "#2196f3";
+                    }, 2000);
+                }
+            }
+        }
+
+        // --- UI 注入逻辑 ---
+        function injectSaveButton() {
+            const container = document.querySelector('.css-1wne25x');
+            if (!container) return;
+
+            const targetHeader = container.querySelector('h3');
+            if (!targetHeader || targetHeader.querySelector('#sc-custom-exec-btn')) return;
+
+            // 按钮通用样式
+            const baseStyle = `
+                margin-left: 10px; padding: 4px 10px; color: white; border: none; 
+                border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; 
+                vertical-align: middle; transition: all 0.2s;
+            `;
+
+            // 按钮 1: 原有的同步按钮
+            const btnSync = document.createElement('button');
+            btnSync.id = 'sc-save-exec-btn';
+            btnSync.textContent = "同步高管数据";
+            btnSync.style.cssText = baseStyle + "background-color: #2196f3;";
+            btnSync.onclick = (e) => { e.preventDefault(); performManualSave(); };
+
+            // 按钮 2: 新增的自定义按钮
+            const btnCustom = document.createElement('button');
+            btnCustom.id = 'sc-custom-exec-btn';
+            btnCustom.textContent = "自定义高管数据";
+            btnCustom.style.cssText = baseStyle + "background-color: #673ab7;"; // 紫色区分
+            btnCustom.onclick = (e) => {
+                e.preventDefault();
+                ExecutiveManualCalculator.show();
+            };
+
+            targetHeader.appendChild(btnSync);
+            targetHeader.appendChild(btnCustom);
+        }
+
+        // --- 监听与初始化 ---
+        const observer = new MutationObserver(() => injectSaveButton());
+
+        function init() {
+            // 常开模式，不设开关判断
+            observer.observe(document.body, { childList: true, subtree: true });
+            injectSaveButton();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+
+        return { forceInject: injectSaveButton };
     })();
 
     // ======================
