@@ -964,7 +964,7 @@
                     return btn;
                 })(),
                 createActionButton('MP-?%', 'mpShow'),
-                createActionButton('计算剩余量', 'calculateDecay'),
+                createActionButton('计算当前冰淇淋剩余量', 'calculateDecay'),
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
@@ -1033,7 +1033,8 @@
                 })(),
                 createPageActionToggle('marketProfit', '交易所计算时利润'),
                 createPageActionToggle('contractProfit', '合同计算时利润'),
-                createPageActionToggle('executiveHistory', '显示高管培训记录')
+                createPageActionToggle('executiveHistory', '显示高管培训记录'),
+                createPageActionToggle('formerExecEnhance', '前任高管更多信息')
             );
             secondaryMenu.appendChild(secBtnGroup);
 
@@ -2363,6 +2364,8 @@
             } catch (err) { }
         }
 
+        window.initAutoPricing = initAutoPricing;
+
         // 启动观察器，只在商品卡片变化时运行自动定价逻辑
         function observeCardsForAutoPricing() {
             // 防抖计时器
@@ -3406,7 +3409,34 @@
                         }, 400);
                     }
                 }
-            }
+            },
+            formerExecutivesPage: {
+                pattern: /\/headquarters\/executives\/?$/,
+                action: (url) => {
+
+                    if (!isPageModuleEnabled('formerExecEnhance')) return;
+
+                    setTimeout(() => {
+                        if (typeof FormerExecutivesModule.forceInject === 'function') {
+                            FormerExecutivesModule.forceInject();
+                        }
+                    }, 500);
+                }
+            },
+            buildingPage: {
+                pattern: /\/b\/\d+\/?$/,
+                action: () => {
+                    setTimeout(() => {
+                        // 检查全局函数是否存在，避免报错
+                        if (typeof window.initAutoAmountButtons === 'function') {
+                            window.initAutoAmountButtons();
+                        }
+                        if (typeof window.initAutoPricing === 'function') {
+                            window.initAutoPricing();
+                        }
+                    }, 300);
+                }
+            },
         };
 
         function handlePage() {
@@ -5129,7 +5159,7 @@
                     const detailStr = details.length > 0 ? `<span style="color:#777; margin-left:4px;">(${details.join(' ')})</span>` : '';
                     const cUrl = getCompanyLink(t.employer.realmId ?? currentRealm, t.employer.company);
                     return `<div style="padding:2px 0; border-bottom:1px dashed #eee; color:#555; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
-                }).reverse().join('') || '无历史培训记录';
+                }).join('') || '无历史培训记录';
 
                 // 2. 从业履历
                 const workHistoryHtml = data.workHistory?.map(w => {
@@ -5264,6 +5294,318 @@
                 } else { renderSkillPanel(null, true); }
             }
         };
+    })();
+
+    // ======================
+    // 模块15：前任高管详细信息展示
+    // ======================
+    const FormerExecutivesModule = (function () {
+        const FORMER_EXEC_API_REGEX = /\/api\/v2\/companies\/(\d+)\/former-executives\//;
+        const EXEC_DETAIL_API = (id) => `/api/v4/executives/${id}/`;
+
+        // --- 内部工具函数 ---
+        const getScopedKey = (k) => {
+            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            return realmId !== null ? `R${realmId}-${k}` : k;
+        };
+
+        const load = (k) => {
+            try { return JSON.parse(localStorage.getItem(getScopedKey(k)) || "[]"); } catch { return []; }
+        };
+
+        const save = (k, d) => {
+            localStorage.setItem(getScopedKey(k), JSON.stringify(d));
+        };
+
+        const positionMap = (p) => ({
+            o: 'COO', f: 'CFO', m: 'CMO', t: 'CTO',
+            v: 'COO学徒', x: 'CFO学徒', y: 'CMO学徒', z: 'CTO学徒',
+            '1': '职员1', '2': '职员2', '3': '职员3', '4': '职员4', '5': '职员5'
+        }[p] || p);
+
+        const trainingNameMap = (t) => ({
+            o: '管理培训', f: '会计课程', m: '沟通工作室', t: '科学界研讨会', g: '各领域课程'
+        }[t] || t);
+
+        const getCompanyLink = (realm, name) => `https://www.simcompanies.com/company/${realm}/${encodeURIComponent(name)}/`;
+
+        // --- 注入动态 CSS ---
+        function injectStyles() {
+            if (document.getElementById('sc-module15-styles')) return;
+            const style = document.createElement('style');
+            style.id = 'sc-module15-styles';
+            style.textContent = `
+            @keyframes sc-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            .sc-spinner { border: 3px solid #f3f3f3; border-top: 3px solid #2196f3; border-radius: 50%; width: 30px; height: 30px; animation: sc-spin 1s linear infinite; margin: 0 auto 10px auto; }
+            .sc-modal-btn { margin-left: auto; padding: 6px 12px; background-color: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: all 0.2s; }
+            .sc-modal-btn:hover { background-color: #1976d2; transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        `;
+            document.head.appendChild(style);
+        }
+
+        // --- 数据处理层 ---
+        function processData(url, d) {
+            if (!d) return;
+            if (FORMER_EXEC_API_REGEX.test(url)) {
+                const executives = d.executives || [];
+                if (executives.length > 0) {
+                    save("SC-former-executives", executives);
+                    setTimeout(injectMoreInfoButtons, 500);
+                }
+            }
+        }
+
+        // --- 拦截网络请求 ---
+        const _fetch = window.fetch;
+        window.fetch = async function (...args) {
+            const res = await _fetch.apply(this, args);
+            const url = typeof args[0] === 'string' ? args[0] : (args[0].url || "");
+            res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) { } });
+            return res;
+        };
+
+        const _open = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (m, url) {
+            this.addEventListener("load", () => { try { processData(url, JSON.parse(this.responseText)); } catch (e) { } });
+            return _open.apply(this, arguments);
+        };
+
+        // --- UI 渲染层 (悬浮窗) ---
+        function showExecutiveModal(executiveId) {
+            // 清理旧弹窗
+            const existingModal = document.getElementById('sc-exec-modal-overlay');
+            if (existingModal) existingModal.remove();
+
+            // 1. 锁定背景滚动
+            const originalBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+
+            // 2. 创建遮罩层
+            const overlay = document.createElement('div');
+            overlay.id = 'sc-exec-modal-overlay';
+            overlay.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(2px); z-index: 99999;
+            display: flex; justify-content: center; align-items: center;
+            opacity: 0; transition: opacity 0.2s ease-in-out;
+        `;
+
+            // 3. 创建弹窗容器
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+            background: #fff; border-radius: 8px; width: 450px; max-width: 90vw;
+            max-height: 85vh; overflow-y: auto; padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); position: relative;
+            font-family: sans-serif; transform: scale(0.95); transition: transform 0.2s ease-in-out;
+        `;
+
+            // 初始显示加载状态
+            modal.innerHTML = `
+            <div style="display:flex; justify-content:flex-end;">
+                <button id="sc-modal-close-temp" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1;">&times;</button>
+            </div>
+            <div style="text-align:center; padding: 30px 20px; color:#666;">
+                <div class="sc-spinner"></div>
+                <div>正在调取高管档案...</div>
+            </div>
+        `;
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            // 触发动画
+            requestAnimationFrame(() => {
+                overlay.style.opacity = '1';
+                modal.style.transform = 'scale(1)';
+            });
+
+            // --- 统一关闭逻辑 ---
+            const closeModal = () => {
+                overlay.style.opacity = '0';
+                modal.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    overlay.remove();
+                    document.body.style.overflow = originalBodyOverflow; // 恢复背景滚动
+                    document.removeEventListener('keydown', handleEsc);  // 移除按键监听
+                }, 200);
+            };
+
+            // 事件监听：点击遮罩层关闭
+            overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+            // 事件监听：临时关闭按钮
+            document.getElementById('sc-modal-close-temp').onclick = closeModal;
+            // 事件监听：Esc键关闭
+            const handleEsc = (e) => { if (e.key === 'Escape') closeModal(); };
+            document.addEventListener('keydown', handleEsc);
+
+            // 4. 发起按需数据请求
+            fetch(EXEC_DETAIL_API(executiveId))
+                .then(res => res.json())
+                .then(data => {
+                    const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : 0;
+                    const trainings = data.trainings || [];
+                    let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
+
+                    const historyHtml = trainings.map(t => {
+                        total.coo += t.skillCoo || 0; total.cfo += t.skillCfo || 0;
+                        total.cmo += t.skillCmo || 0; total.cto += t.skillCto || 0;
+                        const details = [];
+                        if (t.skillCoo) details.push(`管理+${t.skillCoo}`);
+                        if (t.skillCfo) details.push(`会计+${t.skillCfo}`);
+                        if (t.skillCmo) details.push(`沟通+${t.skillCmo}`);
+                        if (t.skillCto) details.push(`科学+${t.skillCto}`);
+                        const detailStr = details.length > 0 ? `<span style="color:#777; margin-left:4px;">(${details.join(' ')})</span>` : '';
+                        const cUrl = getCompanyLink(t.employer.realmId ?? currentRealm, t.employer.company);
+                        return `<div style="padding:6px 0; border-bottom:1px dashed #eee; color:#555; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
+                    }).join('') || '<div style="color:#999; text-align:center; padding:10px;">无历史培训记录</div>';
+
+                    const workHistoryHtml = data.workHistory?.map(w => {
+                        const isCurrent = !w.end;
+                        const cUrl = getCompanyLink(w.employer.realmId ?? currentRealm, w.employer.company);
+                        const posName = positionMap(w.position);
+                        return `
+                    <div style="padding:8px 0; border-bottom:1px solid #eee; ${isCurrent ? 'background: #eef7ff; padding-left:5px; border-left:3px solid #2196f3;' : ''}">
+                        <span style="color:#444; font-size:14px;">
+                            ${isCurrent ? '⭐ ' : ''}在 
+                            <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a> 
+                            担任 <b>${w.daysActive}</b> 天的 <b>${posName}</b>
+                            ${isCurrent ? ' <span style="color:#2e7d32; font-size:13px;">(当前所在职位)</span>' : ''}
+                        </span>
+                    </div>`;
+                    }).join('') || '<div style="color:#999; text-align:center; padding:10px;">无从业记录</div>';
+
+                    const currentTrainingStatus = data.currentTraining
+                        ? `<b style="color:#2196f3;">${trainingNameMap(data.currentTraining.training)}</b>`
+                        : `<span style="color:#999;">当前无培训</span>`;
+
+                    // 替换弹窗内容为真实数据
+                    modal.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #eee; padding-bottom:10px; margin-bottom:15px;">
+                        <div>
+                            <h3 style="margin:0 0 4px 0; font-size:18px; color:#333;">${data.name}</h3>
+                            <div style="color:#888; font-size:12px;">高管ID: ${data.id}</div>
+                        </div>
+                        <button id="sc-modal-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1; padding:0 0 5px 10px;">&times;</button>
+                    </div>
+                    
+                    <div style="font-size:14px; font-weight:bold; color:#555; margin-bottom:8px;">📊 培训技能总计 <span style="font-weight:normal; color:#888; font-size:12px;">(完成 ${trainings.length} 次)</span></div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+                        <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
+                            <span style="color:#666;">管理:</span> <b style="color:#d32f2f;">+${total.coo}</b>
+                        </div>
+                        <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
+                            <span style="color:#666;">会计:</span> <b style="color:#d32f2f;">+${total.cfo}</b>
+                        </div>
+                        <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
+                            <span style="color:#666;">沟通:</span> <b style="color:#d32f2f;">+${total.cmo}</b>
+                        </div>
+                        <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
+                            <span style="color:#666;">科学:</span> <b style="color:#d32f2f;">+${total.cto}</b>
+                        </div>
+                    </div>
+                    <div style="font-size:14px; margin-bottom:20px; background:#eef7ff; padding:8px 12px; border-radius:6px; border:1px solid #cce5ff;">
+                        <span style="color:#666;">进行中：</span>${currentTrainingStatus}
+                    </div>
+
+                    <div style="font-size:14px; font-weight:bold; color:#555; margin-bottom:8px;">💼 从业履历</div>
+                    <div style="max-height:160px; overflow-y:auto; background:#fff; border:1px solid #eee; border-radius:6px; padding:0 12px; margin-bottom:20px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">${workHistoryHtml}</div>
+
+                    <div style="font-size:14px; font-weight:bold; color:#555; margin-bottom:8px;">🎓 详细培训历史</div>
+                    <div style="max-height:160px; overflow-y:auto; background:#fff; border:1px solid #eee; border-radius:6px; padding:0 12px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">${historyHtml}</div>
+                `;
+
+                    // 重新绑定真实数据的关闭按钮
+                    document.getElementById('sc-modal-close').onclick = closeModal;
+                })
+                .catch(() => {
+                    modal.innerHTML = `
+                    <div style="display:flex; justify-content:flex-end;">
+                        <button id="sc-modal-close-err" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1;">&times;</button>
+                    </div>
+                    <div style="text-align:center; padding: 30px 20px;">
+                        <div style="color:#d32f2f; font-size:40px; margin-bottom:10px;">⚠️</div>
+                        <div style="color:#d32f2f; font-weight:bold; margin-bottom:15px;">档案调取失败</div>
+                        <div style="color:#666; font-size:14px;">网络可能开小差了，请稍后重试。</div>
+                    </div>
+                `;
+                    document.getElementById('sc-modal-close-err').onclick = closeModal;
+                });
+        }
+
+        // --- DOM 注入逻辑 ---
+        function injectMoreInfoButtons() {
+            if (!isPageModuleEnabled('formerExecEnhance')) return;
+            const headers = Array.from(document.querySelectorAll('h3'));
+            const targetHeader = headers.find(h => h.textContent.includes('前任公司高管'));
+
+            if (!targetHeader || !targetHeader.parentElement) return;
+
+            const container = targetHeader.parentElement;
+            const rows = container.querySelectorAll('.css-19er0v9');
+            const storedExecs = load("SC-former-executives");
+
+            if (storedExecs.length === 0) return;
+
+            rows.forEach(row => {
+                if (row.dataset.scInjected) return;
+
+                const infoDiv = row.children[1];
+                if (!infoDiv) return;
+
+                const nameElement = infoDiv.children[0];
+                if (!nameElement) return;
+
+                const nameText = nameElement.textContent || "";
+                const nameMatch = nameText.match(/(.+?)\s*\(\d+岁\)/) || nameText.match(/(.+?)\s*\(\d+/);
+                const execName = nameMatch ? nameMatch[1].trim() : nameText.trim();
+
+                const execData = storedExecs.find(e => e.name === execName);
+
+                if (execData) {
+                    row.style.display = 'flex';
+                    row.style.alignItems = 'center';
+
+                    const btn = document.createElement('button');
+                    btn.className = 'sc-modal-btn';
+                    btn.textContent = "详细";
+
+                    btn.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showExecutiveModal(execData.id);
+                    };
+
+                    row.appendChild(btn);
+                    row.dataset.scInjected = "true";
+                }
+            });
+        }
+
+        // --- 页面监听器 (SPA 适配) ---
+        const observer = new MutationObserver((mutations) => {
+            let shouldCheck = false;
+            for (let mutation of mutations) {
+                if (mutation.addedNodes.length > 0) {
+                    shouldCheck = true;
+                    break;
+                }
+            }
+            if (shouldCheck) {
+                clearTimeout(window._scInjectTimer);
+                window._scInjectTimer = setTimeout(injectMoreInfoButtons, 300);
+            }
+        });
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                injectStyles();
+                observer.observe(document.body, { childList: true, subtree: true });
+            });
+        } else {
+            injectStyles();
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
+
+        return { forceInject: injectMoreInfoButtons };
     })();
 
     // ======================
@@ -5406,7 +5748,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    为插件功能增加单独开关，默认启用所有功能，可在左下菜单中设置中关闭
+        // @changelog    增加前任高管详细信息查看，尝试解决进入商店时不显示按钮的问题
 
         fetch(scriptUrl)
             .then(res => res.text())
