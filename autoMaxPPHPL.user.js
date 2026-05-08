@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.1
+// @version      1.32.2
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -178,7 +178,7 @@
             modal.id = 'sc-calc-modal';
             modal.style.cssText = `
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: ${bgColor}; backdrop-filter: blur(10px); border: 1px solid ${borderColor}; 
+            background: ${bgColor}; backdrop-filter: blur(10px); border: 1px solid ${borderColor};
             border-radius: 12px; z-index: 21000; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
             width: 360px; color: ${textColor}; font-family: sans-serif; overflow: hidden;
         `;
@@ -193,7 +193,7 @@
                     <span id="sc-calc-close-x" style="cursor: pointer; padding: 0 5px;">&times;</span>
                 </div>
             </div>
-            
+
             <div id="sc-calc-content" style="padding: 20px;">
                 <div style="margin-bottom: 15px; font-size: 13px; background: ${isDark ? '#444' : '#f0f7ff'}; padding: 10px; border-radius: 8px;">
                     <strong>学院:</strong>
@@ -262,7 +262,6 @@
                 };
             });
 
-            // 5. 保存
             // 5. 保存逻辑 (带动画反馈)
             saveBtn.onclick = async () => {
                 const res = calculate();
@@ -321,54 +320,51 @@
     // ======================
     // 全局按钮：高管自定义开关
     // ======================
-    const createGlobalCustomToggle = (key, label) => {
+    const createGlobalCustomToggle = (key, label, nativeStyles = {}, onToggleCallback) => {
         const CONFIG_KEY = 'SC_PageActions_Settings';
-
-        // 1. 创建包装容器
+        const DEFAULT_VALUE = (key === 'executiveCustomToggle') ? false : true;
         const wrapper = document.createElement('div');
-        wrapper.className = `custom-btn-wrapper-${key}`;
-        wrapper.style.cssText = "display: inline-block; margin-left: 10px; vertical-align: middle;";
 
-        // 2. 创建按钮
+        // console.log(`[调试] 按钮 ${label} 初始化，传入样式:`, nativeStyles);
+
+        // 初始赋值（如果此时还没抓到，这里会是空）
+        if (nativeStyles.wrapperClass) {
+            wrapper.className = nativeStyles.wrapperClass;
+        }
+        wrapper.style.marginLeft = "10px";
+        wrapper.style.display = "inline-block";
+
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'SimcompaniesRetailCalculation-action-btn';
-        btn.style.cssText = `
-        color: white; border: none; padding: 6px 14px; border-radius: 4px;
-        cursor: pointer; font-size: 13px; font-weight: bold; outline: none;
-        transition: all 0.2s;
-    `;
+        if (nativeStyles.buttonClass) {
+            btn.className = nativeStyles.buttonClass;
+        }
 
-        // 3. UI 刷新逻辑
+        btn.style.cssText = `
+            color: white; border: none; padding: 4px 12px; border-radius: 4px;
+            cursor: pointer; font-size: 12px; font-weight: bold; outline: none;
+            transition: all 0.2s;
+        `;
+
         const refreshUI = () => {
             const config = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
-            // 逻辑：默认开启 (true)，除非显式设为 false
-            const isEnabled = config[key] !== false;
-
+            const isEnabled = config[key] !== undefined ? config[key] : DEFAULT_VALUE;
             btn.textContent = `${label}：${isEnabled ? '开' : '关'}`;
             btn.style.backgroundColor = isEnabled ? '#4CAF50' : '#607D8B';
-            btn.isEnabled = isEnabled; // 挂载状态供外部逻辑直接读取
         };
 
-        // 4. 点击逻辑
         btn.onclick = (e) => {
             e.preventDefault();
-            e.stopPropagation();
-
             const config = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
-            config[key] = config[key] === false; // 切换状态
-
+            const currentValue = config[key] !== undefined ? config[key] : DEFAULT_VALUE;
+            config[key] = !currentValue;
             localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
             refreshUI();
-
-            // 如果你需要点击后立即触发某些逻辑，可以在这里添加回调
-            if (typeof onToggleCallback === 'function') onToggleCallback(btn.isEnabled);
+            if (onToggleCallback) onToggleCallback(config[key] !== false);
         };
 
-        // 初始化显示
         refreshUI();
         wrapper.appendChild(btn);
-
         return { wrapper, btn };
     };
 
@@ -1066,19 +1062,19 @@
             .SimcompaniesRetailCalculation-has-data { color: #4CAF50; }
 
             /* 1. 默认状态：隐藏二级菜单 */
-            #secondary-menu-container { 
-                display: none; 
+            #secondary-menu-container {
+                display: none;
             }
-            
+
             /* 2. 联动逻辑：当 content 拥有 show-settings 类时 */
             /* 隐藏一级菜单 */
-            .SimcompaniesRetailCalculation-panel-content.show-settings #main-menu-container { 
-                display: none; 
+            .SimcompaniesRetailCalculation-panel-content.show-settings #main-menu-container {
+                display: none;
             }
-            
+
             /* 显示二级菜单 */
-            .SimcompaniesRetailCalculation-panel-content.show-settings #secondary-menu-container { 
-                display: block; 
+            .SimcompaniesRetailCalculation-panel-content.show-settings #secondary-menu-container {
+                display: block;
             }
         `;
             document.head.appendChild(style);
@@ -2751,7 +2747,7 @@
         // Worker 代码保持完全不变
         const workerCode = `
         self.onmessage = function(e) {
-        const { rowId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT} = e.data;
+        const { rowId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB} = e.data;
         const { price, quantity, quality, resourceId: resource } = order;
         const lwe = SCD.retailInfo;
         const zn = SCD.data;
@@ -2798,8 +2794,8 @@
             acceleration = SRC.acceleration,
             economyState = SRC.economyState,
             salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
-            skillCMO = SRC.saleBonus,
-            skillCOO = SRC.adminBonus;
+            skillCMO = (isCustomEnabled && SSB) ? SSB.saleBonus : SRC.saleBonus;
+            skillCOO = (isCustomEnabled && SSB) ? SSB.adminBonus : SRC.adminBonus;
 
         const saturation = (() => {
             const list = SRC.ResourcesRetailInfo;
@@ -3200,13 +3196,45 @@
             }
         }
 
-        async function processNewRows(tbody) {
+        async function processNewRows(tbody, forceReset = false) {
+            if (forceReset) {
+                tbody.querySelectorAll('tr[data-profit-calculated]').forEach(row => {
+                    row.removeAttribute('data-profit-calculated');
+                    row.__profitData = null; // 清除缓存的数值数据
+                    const oldTd = row.querySelector('td.auto-profit-info');
+                    if (oldTd) oldTd.remove(); // 移除旧的 UI 单元格
+                });
+                allProfitSpans.clear();
+            }
             // 此时已确定 currentIsRetail 为 true，直接获取数据即可
             const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
             if (!SCD_raw) return;
             const SCD = JSON.parse(SCD_raw);
             const SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${currentRealmId}`));
             if (!SRC) return;
+            // 1. 获取开关状态 (复用你的存储键名)
+            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
+
+            // 2. 初始化 SSB 变量
+            let SSB = null;
+
+            // 3. 只有当开关打开时，才尝试读取 Bonus 数据
+            if (isCustomEnabled) {
+                const bonusKey = `R${currentRealmId}-SC-Saved-Bonuses`;
+                const savedData = localStorage.getItem(bonusKey);
+
+                if (savedData) {
+                    try {
+                        SSB = JSON.parse(savedData);
+                    } catch (e) {
+                        console.error("解析 SSB 数据失败:", e);
+                        SSB = null; // 解析失败则置空
+                    }
+                } else {
+                    SSB = null; // 键不存在
+                }
+            }
 
             // 扫描还未处理过的行
             const rows = Array.from(tbody.querySelectorAll('tr'))
@@ -3219,7 +3247,7 @@
                 const rowId = rowIdCounter++;
                 pendingRows.set(rowId, row);
                 row.setAttribute('data-profit-calculated', '1');
-                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT });
+                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB });
             });
 
             // 即使没有新行增加，也要重算模拟结果
@@ -3299,14 +3327,66 @@
                         //     toggleButton.textContent = isShowingProfit ? '用时' : '时利润';
                         // });
 
-                        // 创建按钮实例
-                        const myToggle = createGlobalCustomToggle('executiveCustomToggle', '自定义');
+                        // --- 模块 7 内部 tryInit 注入逻辑 ---
 
-                        // 插入到你指定的位置
                         if (summaryDisplay && summaryDisplay.parentNode) {
-                            const actionArea = summaryDisplay.parentNode.querySelector('.css-1sr08ku');
-                            if (actionArea) {
-                                actionArea.after(myToggle.wrapper); // 插入容器
+                            const container = summaryDisplay.parentNode;
+                            const form = container.querySelector('form');
+
+                            if (form && !form.querySelector('#sc-custom-toggle-wrapper')) {
+                                // 1. 【精准定位】先找到那个 type="submit" 的购买按钮
+                                // 这是页面上唯一的提交按钮，特征最明显
+                                const realBuyBtn = form.querySelector('button[type="submit"]');
+
+                                if (realBuyBtn && realBuyBtn.parentElement) {
+                                    // 2. 它的父元素就是我们要抄的 wrapper (css-1sr08ku)
+                                    const realWrapper = realBuyBtn.parentElement;
+
+                                    const capturedStyles = {
+                                        wrapperClass: realWrapper.className,
+                                        buttonClass: realBuyBtn.className
+                                    };
+
+                                    // console.log("[调试] 成功锁定购买按钮，抄袭样式:", capturedStyles);
+
+                                    // 3. 创建开关（传入抓到的样式）
+                                    const myToggle = createGlobalCustomToggle('executiveCustomToggle', '自定义', capturedStyles);
+                                    myToggle.wrapper.id = 'sc-custom-toggle-wrapper';
+
+                                    // 4. 绑定点击重算逻辑
+                                    const originalOnClick = myToggle.btn.onclick;
+                                    myToggle.btn.onclick = (e) => {
+                                        originalOnClick(e);
+                                        const tbody = findValidTbody();
+                                        if (tbody) {
+                                            requestAnimationFrame(() => processNewRows(tbody, true));
+                                        }
+                                    };
+
+                                    // 5. 创建紫色设置按钮
+                                    const purpleWrapper = document.createElement('div');
+                                    purpleWrapper.className = capturedStyles.wrapperClass; // 抄袭 css-1sr08ku
+                                    purpleWrapper.style.marginLeft = "5px";
+
+                                    const btnSettings = document.createElement('button');
+                                    btnSettings.className = capturedStyles.buttonClass; // 抄袭 btn-primary
+                                    btnSettings.textContent = "自定义高管数据";
+                                    // 这里的样式继承并覆盖背景色
+                                    btnSettings.style.cssText = myToggle.btn.style.cssText + "background-color: #673ab7 !important;";
+                                    btnSettings.onclick = (e) => {
+                                        e.preventDefault();
+                                        if (typeof executiveCustomButton !== 'undefined') executiveCustomButton.show();
+                                    };
+                                    purpleWrapper.appendChild(btnSettings);
+
+                                    // 6. 执行插入：插在“购买按钮容器”的后面
+                                    realWrapper.after(myToggle.wrapper);
+                                    myToggle.wrapper.after(purpleWrapper);
+
+                                    // console.log("[调试] 注入完成，位置：购买按钮之后");
+                                } else {
+                                    console.warn("[调试] 无法定位购买按钮，请检查页面是否已加载按钮");
+                                }
                             }
                         }
 
@@ -3357,7 +3437,7 @@
         // Worker 代码
         const workerCode = `
         self.onmessage = function(e) {
-            const { cardId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT} = e.data;
+            const { cardId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB} = e.data;
             const { price, quantity, quality, resourceId: resource } = order;
             const lwe = SCD.retailInfo;
             const zn = SCD.data;
@@ -3398,8 +3478,8 @@
                 acceleration = SRC.acceleration,
                 economyState = SRC.economyState,
                 salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
-                skillCMO = SRC.saleBonus,
-                skillCOO = SRC.adminBonus;
+                skillCMO = (isCustomEnabled && SSB) ? SSB.saleBonus : SRC.saleBonus;
+                skillCOO = (isCustomEnabled && SSB) ? SSB.adminBonus : SRC.adminBonus;
 
             const saturation = (() => {
                 const list = SRC.ResourcesRetailInfo;
@@ -3538,7 +3618,7 @@
             const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
 
             if (!localStorage.getItem(constantsKey) || !localStorage.getItem(regionKey)) {
-                console.log('[合同卡片] 缺少数据，尝试初始化...');
+                // console.log('[合同卡片] 缺少数据，尝试初始化...');
                 card.setAttribute('data-retry', 'true'); // 👈 表明后续还要再处理
                 constantsData.initialize()
                     .then(data => {
@@ -3547,7 +3627,7 @@
                     })
                     .then(regionData => {
                         Storage.save('region', regionData);
-                        console.log('[合同卡片] 数据初始化完成，重新处理卡片');
+                        // console.log('[合同卡片] 数据初始化完成，重新处理卡片');
                         handleCard(card); // ✅ 数据准备好再重试
                     })
                     .catch(err => {
@@ -3561,12 +3641,35 @@
 
             const SCD = JSON.parse(localStorage.getItem(constantsKey));
             const SRC = JSON.parse(localStorage.getItem(regionKey));
+            // 1. 获取开关状态 (复用你的存储键名)
+            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
+
+            // 2. 初始化 SSB 变量
+            let SSB = null;
+
+            // 3. 只有当开关打开时，才尝试读取 Bonus 数据
+            if (isCustomEnabled) {
+                const bonusKey = `R${realmId}-SC-Saved-Bonuses`;
+                const savedData = localStorage.getItem(bonusKey);
+
+                if (savedData) {
+                    try {
+                        SSB = JSON.parse(savedData);
+                    } catch (e) {
+                        console.error("解析 SSB 数据失败:", e);
+                        SSB = null; // 解析失败则置空
+                    }
+                } else {
+                    SSB = null; // 键不存在
+                }
+            }
 
             const isRetail = Object.values(SCD.data.SALES).some(arr =>
                 arr.includes(parseInt(data.dbLetter))
             );
             if (!isRetail) {
-                console.log(`[合同卡片] 非零售商品，跳过处理: dbLetter=${data.dbLetter}`);
+                // console.log(`[合同卡片] 非零售商品，跳过处理: dbLetter=${data.dbLetter}`);
                 return;
             }
 
@@ -3583,12 +3686,29 @@
                 },
                 SCD,
                 SRC,
-                SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT
+                SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB
+            });
+        }
+
+        function refreshAllContractProfits() {
+            const contractCards = document.querySelectorAll('div[tabindex="0"]');
+            contractCards.forEach(card => {
+                // 1. 移除旧的利润显示（防止重复堆叠）
+                const oldProfits = card.querySelectorAll('b');
+                oldProfits.forEach(b => {
+                    if (b.textContent.includes('时利润')) b.remove();
+                });
+
+                // 2. 移除 data-found 标记，让 handleCard 认为这是一个新卡片
+                card.removeAttribute('data-found');
+
+                // 3. 重新执行处理逻辑
+                handleCard(card);
             });
         }
 
         function parseContractCard(card) {
-            console.log(card)
+            // console.log(card)
             const result = {
                 quantity: null,
                 quality: null,
@@ -3674,8 +3794,42 @@
                 if (!insertTarget || insertTarget === parent) return;
 
                 const tip = document.createElement('div');
-                tip.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。';
+                tip.style.cssText = `
+                    display: flex; 
+                    align-items: end; 
+                `;
                 tip.dataset.warningText = 'true';
+
+                // 1. 插入文本提示
+                const textSpan = document.createElement('span');
+                textSpan.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。';
+                tip.appendChild(textSpan);
+
+                // 2. 插入“开关”按钮
+                // 这里的 nativeStyles 尝试抓取卡片里按钮的类名，或者直接传空对象使用函数默认样式
+                const toggle = createGlobalCustomToggle(
+                    'executiveCustomToggle',
+                    '自定义',
+                    { buttonClass: 'btn btn-primary' },
+                    (isEnabled) => {
+                        // 当开关切换时，触发全局卡片重绘
+                        refreshAllContractProfits();
+                    }
+                );
+                toggle.wrapper.style.marginLeft = "15px";
+                tip.appendChild(toggle.wrapper);
+
+                // 3. 插入“自定义数据”功能按钮
+                const customBtn = document.createElement('button');
+                customBtn.type = 'button';
+                customBtn.textContent = '自定义高管数据';
+                customBtn.style.cssText = `
+                    margin-left: 10px; padding: 4px 12px; background: #2196f3; 
+                    color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                    font-weight: bold; white-space: nowrap; flex-shrink: 0;
+                `;
+                customBtn.onclick = () => executiveCustomButton.show();
+                tip.appendChild(customBtn)
 
                 insertTarget.appendChild(tip);
             });
@@ -3702,7 +3856,7 @@
                     const match = url.match(/\/resource\/(\d+)\/?/);
                     const resourceId = match ? match[1] : null;
                     if (resourceId) {
-                        console.log('进入 market 页面，资源ID：', resourceId);
+                        // console.log('进入 market 页面，资源ID：', resourceId);
                         ResourceMarketHandler.init(resourceId);
                     }
                 }
@@ -3712,7 +3866,7 @@
                 action: (url) => {
                     if (!isPageModuleEnabled('contractProfit')) return;
 
-                    console.log('[合同页面识别] 已进入合同页面');
+                    // console.log('[合同页面识别] 已进入合同页面');
                     incomingContractsHandler.init();
                 }
             },
@@ -3860,7 +4014,7 @@
             try {
                 const data = await constantsData.initialize();
                 Storage.save('constants', data);
-                console.log('[ConstantsAutoUpdater] 基本数据已更新');
+                // console.log('[ConstantsAutoUpdater] 基本数据已更新');
             } catch (err) {
                 console.error('[ConstantsAutoUpdater] 基本数据更新失败', err);
             }
@@ -3868,10 +4022,10 @@
 
         const checkAndUpdate = () => {
             if (needsUpdate()) {
-                console.log('[ConstantsAutoUpdater] 开始更新基本数据...');
+                // console.log('[ConstantsAutoUpdater] 开始更新基本数据...');
                 update();
             } else {
-                console.log('[ConstantsAutoUpdater] 基本数据是最新的');
+                // console.log('[ConstantsAutoUpdater] 基本数据是最新的');
             }
         };
 
@@ -3943,7 +4097,7 @@
                 let data;
                 data = await RegionData.fetchFullRegionData();
                 Storage.save('region', data);
-                console.log(`[RegionAutoUpdater] 领域数据（${realmId}）已更新`);
+                // console.log(`[RegionAutoUpdater] 领域数据（${realmId}）已更新`);
             } catch (err) {
                 console.error(`[RegionAutoUpdater] 领域数据（${realmId}）更新失败`, err);
             }
@@ -3956,10 +4110,10 @@
             }
 
             if (needsUpdate(realmId)) {
-                console.log(`[RegionAutoUpdater] 开始更新领域数据（${realmId}）...`);
+                // console.log(`[RegionAutoUpdater] 开始更新领域数据（${realmId}）...`);
                 update(realmId);
             } else {
-                console.log(`[RegionAutoUpdater] 领域数据（${realmId}）是最新的`);
+                // console.log(`[RegionAutoUpdater] 领域数据（${realmId}）是最新的`);
             }
         };
 
@@ -5491,8 +5645,8 @@
                     return `
                     <div style="padding:4px 0; border-bottom:1px solid #eee; ${isCurrent ? 'background: #eef7ff;' : ''}">
                         <span style="color:#444; font-size:14px;">
-                            ${isCurrent ? '⭐ ' : ''}在 
-                            <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a> 
+                            ${isCurrent ? '⭐ ' : ''}在
+                            <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a>
                             担任 <b>${w.daysActive}</b> 天的 <b>${posName}</b>
                             ${isCurrent ? ' <span style="color:#2e7d32; font-size:14px;">(当前所在职位)</span>' : ''}
                         </span>
@@ -5506,7 +5660,7 @@
 
                 contentHtml = `
                 <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">高管解析 <span style="color:#888; font-size:14px; font-weight:normal;">高管名字: ${data.name}  ID: ${data.id}</span></div>
-                
+
                 <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">📊 目前培训技能总和 <span style="font-weight:normal; color:#888;">(已完成 ${trainings.length} 次)</span></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
                     <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">管理: <b style="color:#d32f2f;">+${total.coo}</b></div>
@@ -5517,13 +5671,13 @@
                 <div style="font-size:14px; margin-bottom:10px; padding-left:2px;">
                     <span style="color:#666;">进行中：</span>${currentTrainingStatus}
                 </div>
-    
+
                 <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">💼 从业履历</div>
                 <div style="max-height:100px; overflow-y:auto; background:#fff; border:1px solid #ddd; padding:4px; margin-bottom:10px; font-size:14px;">${workHistoryHtml}</div>
-    
+
                 <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">🎓 详细培训历史</div>
                 <div style="max-height:100px; overflow-y:auto; background:#fff; border:1px solid #ddd; padding:4px; font-size:14px;">${historyHtml}</div>
-    
+
                 <div style="margin-top:10px; padding:8px; background-color:#fff5f5; border:1px solid #ffcccc; border-radius:4px; font-size:14px; color:#c62828; line-height:1.4;">
                     <b>⚠️请注意：</b><br>
                     1. 本功能为插件功能，<b>请勿在游戏内聊天室提及</b>。<br>
@@ -5786,8 +5940,8 @@
                         return `
                     <div style="padding:8px 0; border-bottom:1px solid #eee; ${isCurrent ? 'background: #eef7ff; padding-left:5px; border-left:3px solid #2196f3;' : ''}">
                         <span style="color:#444; font-size:14px;">
-                            ${isCurrent ? '⭐ ' : ''}在 
-                            <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a> 
+                            ${isCurrent ? '⭐ ' : ''}在
+                            <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a>
                             担任 <b>${w.daysActive}</b> 天的 <b>${posName}</b>
                             ${isCurrent ? ' <span style="color:#2e7d32; font-size:13px;">(当前所在职位)</span>' : ''}
                         </span>
@@ -5807,7 +5961,7 @@
                         </div>
                         <button id="sc-modal-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1; padding:0 0 5px 10px;">&times;</button>
                     </div>
-                    
+
                     <div style="font-size:14px; font-weight:bold; color:#555; margin-bottom:8px;">📊 培训技能总计 <span style="font-weight:normal; color:#888; font-size:12px;">(完成 ${trainings.length} 次)</span></div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
                         <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
@@ -5930,10 +6084,7 @@
     })();
 
     // ======================
-    // 模块16：手动保存高管与环境数据 (常开版)
-    // ======================
-    // ======================
-    // 模块16：手动同步高管与环境数据
+    // 模块16：保存当前高管数据
     // ======================
     const ExecutiveDataSaverModule = (function () {
 
@@ -5958,7 +6109,7 @@
             try {
                 if (btn) {
                     btn.disabled = true;
-                    btn.textContent = "⏳ 正在同步...";
+                    btn.textContent = "正在保存...";
                 }
 
                 // 1. 直接复用你现有的 handleUpdate('region') 逻辑
@@ -5991,7 +6142,7 @@
 
                     // 4. 成功反馈
                     if (btn) {
-                        btn.textContent = "✅ 已同步";
+                        btn.textContent = "✅ 已保存";
                         btn.style.backgroundColor = "#2e7d32";
                         setTimeout(() => {
                             btn.disabled = false;
@@ -6024,15 +6175,15 @@
 
             // 按钮通用样式
             const baseStyle = `
-                margin-left: 10px; padding: 4px 10px; color: white; border: none; 
-                border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; 
+                margin-left: 10px; padding: 4px 10px; color: white; border: none;
+                border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;
                 vertical-align: middle; transition: all 0.2s;
             `;
 
             // 按钮 1: 原有的同步按钮
             const btnSync = document.createElement('button');
             btnSync.id = 'sc-save-exec-btn';
-            btnSync.textContent = "同步高管数据";
+            btnSync.textContent = "保存当前高管数据";
             btnSync.style.cssText = baseStyle + "background-color: #2196f3;";
             btnSync.onclick = (e) => { e.preventDefault(); performManualSave(); };
 
@@ -6208,7 +6359,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加前任高管详细信息查看，尝试解决进入商店时不显示按钮的问题
+        // @changelog    高管页增加保存当前高管信息，入库合同和交易所增加自定义高管数据
 
         fetch(scriptUrl)
             .then(res => res.text())
