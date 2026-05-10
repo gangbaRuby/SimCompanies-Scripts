@@ -265,7 +265,7 @@
             // 5. 保存逻辑 (带动画反馈)
             saveBtn.onclick = async () => {
                 const res = calculate();
-                const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : 0;
+                const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
 
                 // 写入本地存储
                 localStorage.setItem(`R${rId}-SC-Saved-Bonuses`, JSON.stringify({
@@ -5618,7 +5618,7 @@
             if (isError) {
                 contentHtml = `<div style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; padding: 8px; border-radius: 4px; font-size: 14px;">⚠️ <b>匹配失败：</b> 未在通知中找到此次挖人信息。</div>`;
             } else {
-                const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : 0;
+                const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
 
                 // 1. 详细培训历史
                 let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
@@ -5916,7 +5916,76 @@
             fetch(EXEC_DETAIL_API(executiveId))
                 .then(res => res.json())
                 .then(data => {
-                    const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : 0;
+                    const workHistory = data.workHistory || [];
+                    let myDaysActiveSum = 0;
+                    let isSeveranceBroken = false;
+                    
+                    // 0. 获取当前 Realm（后续多处使用）
+                    const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+                    
+                    // 1. 从本地缓存取出 savedExecInfo（含 salary, unemployed）
+                    const savedExecs = load("SC-former-executives");
+                    const savedExecInfo = savedExecs.find(e => e.id === executiveId) || null;
+                    
+                    // 2. 获取本公司名
+                    let myCompanyName = null;
+                    if (currentRealm !== null) {
+                        const srcKey = `SimcompaniesRetailCalculation_${currentRealm}`;
+                        const SRC = JSON.parse(localStorage.getItem(srcKey) || "{}");
+                        myCompanyName = SRC.company; 
+                    }
+                    
+                    if (myCompanyName && workHistory.length > 0) {
+                        // 3. 找到你在履历中最后一次出现的索引 (时间最近的一条)
+                        //     workHistory 从 0(最新) 到 N(最旧) 排列
+                        const myLastIndex = workHistory.findIndex(w => w.employer && w.employer.company === myCompanyName);
+                    
+                        if (myLastIndex !== -1) {
+                            // 4. 核心：检查从「当前职位(索引0)」到「你在该高管的最后职位(myLastIndex)」之间
+                            //    是否所有相邻记录的 start 都等于上一条的 end（无缝衔接）
+                            //    逻辑：workHistory[i] 是较新的职位，workHistory[i+1] 是较旧的职位
+                            for (let i = 0; i < myLastIndex; i++) {
+                                const newerJobStart = workHistory[i].start;
+                                const olderJobEnd = workHistory[i+1].end;
+                    
+                                // 如果旧职位的 end 缺失，或 不等于新职位的 start → 断层
+                                if (!olderJobEnd || newerJobStart !== olderJobEnd) {
+                                    isSeveranceBroken = true;
+                                    break;
+                                }
+                            }
+                    
+                            // 5. 若无断层，计算该高管在贵公司累计天数
+                            if (!isSeveranceBroken) {
+                                myDaysActiveSum = workHistory
+                                    .filter(w => w.employer && w.employer.company === myCompanyName)
+                                    .reduce((sum, w) => sum + (w.daysActive || 0), 0);
+                            }
+                        } else {
+                            isSeveranceBroken = true; // 没雇佣过，自然没补偿
+                        }
+                    }
+                    
+                    // 6. 补偿金 HTML 渲染
+                    let severanceHtml = '';
+                    if (savedExecInfo) {
+                        const { salary, unemployed } = savedExecInfo;
+                        
+                        if (unemployed) {
+                            severanceHtml = `<span style="color:#999;">高管当前不在职</span>`;
+                        } else if (isSeveranceBroken) {
+                            severanceHtml = `<span style="color:#d32f2f;">补偿金已断开 (曾有失业/被开除)</span>`;
+                        } else if (myDaysActiveSum < 2) {
+                            severanceHtml = `<span style="color:#999;">在职不足2天，无补偿金</span>`;
+                        } else if (myDaysActiveSum >= 2) {
+                            const compensation = Math.floor(salary * myDaysActiveSum * 1 / (2 * 100)); // 计算补偿金
+                            severanceHtml = `<span style="color:#e67e22; font-weight:bold;">持续补偿: $${Math.round(compensation).toLocaleString()}</span>`;
+                        }
+                    }
+
+
+
+
                     const trainings = data.trainings || [];
                     let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
 
@@ -5957,7 +6026,10 @@
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #eee; padding-bottom:10px; margin-bottom:15px;">
                         <div>
                             <h3 style="margin:0 0 4px 0; font-size:18px; color:#333;">${data.name}</h3>
-                            <div style="color:#888; font-size:12px;">高管ID: ${data.id}</div>
+                            <div style="display:flex; justify-content:space-between; color:#888; font-size:12px; padding-right:10px;">
+                            <span>高管ID: ${data.id}</span>
+                            ${severanceHtml}
+                        </div>
                         </div>
                         <button id="sc-modal-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1; padding:0 0 5px 10px;">&times;</button>
                     </div>
