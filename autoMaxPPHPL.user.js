@@ -3552,7 +3552,8 @@
             const card = pendingCards.get(cardId);
             if (!card) return;
             pendingCards.delete(cardId);
-            injectHourlyProfit(card, maxProfit * 3600);
+            const mpPercent = card.__mpPercent || null;
+            injectHourlyProfit(card, maxProfit * 3600, mpPercent);
         };
 
         function init() {
@@ -3609,7 +3610,59 @@
             return null; // 如果没有找到符合条件的链接，返回 null
         }
 
-        function handleCard(card) {
+        // 获取市场数据（含1分钟缓存过期检查）
+        async function getMarketDataForResource(realmId, resourceId) {
+            const key = `market_${realmId}_${resourceId}`;
+            const raw = localStorage.getItem(key);
+
+            if (raw) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    const dataArray = Array.isArray(parsed) ? parsed : parsed.data;
+                    // 检查时间戳是否在1分钟内有效
+                    if (parsed.timestamp && (Date.now() - parsed.timestamp < 60000)) {
+                        console.log(`[合同-MP] ${key} 缓存命中，共${dataArray.length}条，${Math.floor((Date.now()-parsed.timestamp)/1000)}s前`);
+                        return dataArray;
+                    }
+                    console.log(`[合同-MP] ${key} 缓存已过期(${Math.floor((Date.now()-parsed.timestamp)/1000)}s)，重新请求`);
+                } catch (e) {
+                    console.warn(`[合同-MP] ${key} 缓存解析失败，重新请求`, e);
+                }
+            } else {
+                console.log(`[合同-MP] ${key} 无缓存，发起请求`);
+            }
+
+            // 需要重新请求
+            try {
+                const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
+                const response = await fetch(url);
+                const json = await response.json();
+                if (Array.isArray(json)) {
+                    const dataToSave = {
+                        timestamp: Date.now(),
+                        data: json
+                    };
+                    localStorage.setItem(key, JSON.stringify(dataToSave));
+                    console.log(`[合同-MP] ${key} 请求成功，${json.length}条数据已缓存`);
+                    return json;
+                }
+                console.warn(`[合同-MP] ${key} 响应非数组:`, typeof json);
+            } catch (e) {
+                console.error(`[合同-MP] ${key} 请求失败:`, e);
+                // 如果 fetch 失败但有旧数据，返回旧数据
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        const fallback = Array.isArray(parsed) ? parsed : parsed.data;
+                        console.log(`[合同-MP] ${key} 请求失败，使用${fallback?.length||0}条过期数据`);
+                        return fallback;
+                    } catch { }
+                }
+            }
+            return null;
+        }
+
+        async function handleCard(card) {
             // ✅ 提前返回条件改成：
             if (card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) return;
 
@@ -3668,42 +3721,104 @@
                 }
             }
 
+            // 排除特定ID（91=亚轨道火箭,94=BFR,95=喷气客机,96=豪华飞机,97=单引擎飞机,99=人造卫星）
+            const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
+            const resourceId = parseInt(data.dbLetter);
+            if (EXCLUDED_IDS.includes(resourceId)) return;
+
+            // 判断是否为零售物品（用于决定是否计算利润）
             const isRetail = Object.values(SCD.data.SALES).some(arr =>
-                arr.includes(parseInt(data.dbLetter))
+                arr.includes(resourceId)
             );
-            if (!isRetail) {
-                // console.log(`[合同卡片] 非零售商品，跳过处理: dbLetter=${data.dbLetter}`);
-                return;
+
+            // 获取市场数据计算 MP-?%
+            let mpPercent = null;
+            try {
+                const targetQuality = (data.quality !== null && data.quality !== undefined) ? data.quality : 0;
+                const marketData = await getMarketDataForResource(realmId, data.dbLetter);
+                if (marketData && Array.isArray(marketData) && marketData.length > 0) {
+                    // 先精确匹配合同品质，再降级匹配更高品质
+                    let matchingOrders = marketData.filter(order => order.quality === targetQuality && order.price > 0);
+                    let usedQuality = targetQuality;
+
+                    if (matchingOrders.length === 0) {
+                        // ID=150（树）只能精确匹配品质；ID=114（机器人）Q0也只能精确匹配
+                        const noFallback = (resourceId === 150) || (resourceId === 114 && targetQuality === 0);
+                        if (!noFallback) {
+                            // 无精确匹配，尝试使用更高品质
+                            const higherQualityOrders = marketData.filter(order => order.quality > targetQuality && order.price > 0);
+                            if (higherQualityOrders.length > 0) {
+                                // 按品质分组，取最低的更高品质
+                                const qualityGroups = {};
+                                higherQualityOrders.forEach(o => {
+                                    if (!qualityGroups[o.quality]) qualityGroups[o.quality] = [];
+                                    qualityGroups[o.quality].push(o);
+                                });
+                                const sortedQualities = Object.keys(qualityGroups).map(Number).sort((a, b) => a - b);
+                                usedQuality = sortedQualities[0];
+                                matchingOrders = qualityGroups[usedQuality];
+                                console.log(`[合同-MP] 资源${data.dbLetter} 无Q${targetQuality}，降级使用Q${usedQuality} (${matchingOrders.length}条)`);
+                            }
+                        }
+                    }
+
+                    console.log(`[合同-MP] 资源${data.dbLetter} Q${targetQuality} 匹配${matchingOrders.length}条订单 (共${marketData.length}条)`);
+                    if (matchingOrders.length > 0) {
+                        const lowestPrice = Math.min(...matchingOrders.map(o => parseFloat(o.price)));
+                        if (lowestPrice > 0 && data.unitPrice > 0) {
+                            mpPercent = ((lowestPrice - data.unitPrice) / lowestPrice) * 100;
+                            console.log(`[合同-MP] 合同单价${data.unitPrice} 最低市场价${lowestPrice} = MP-${mpPercent.toFixed(2)}%`);
+                            if (usedQuality !== targetQuality) {
+                                card.__mpNotes = `参考Q${usedQuality}价`;
+                            }
+                        }
+                    } else {
+                        card.__mpNotes = '市场无对应品质';
+                        console.log(`[合同-MP] 资源${data.dbLetter} Q${targetQuality} 市场无对应品质订单`);
+                    }
+                }
+            } catch (e) {
+                console.error('[合同-MP] 获取市场数据失败:', e);
             }
+
+            // 在卡片上暂存 mpPercent，供 worker 回调使用
+            card.__mpPercent = mpPercent;
 
             const cardId = cardIdCounter++;
             pendingCards.set(cardId, card);
 
-            profitWorker.postMessage({
-                cardId,
-                order: {
-                    resourceId: data.dbLetter,
-                    price: data.unitPrice,
-                    quantity: data.quantity,
-                    quality: data.quality
-                },
-                SCD,
-                SRC,
-                SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB
-            });
+            // 仅零售物品才发送给 Worker 计算利润
+            if (isRetail) {
+                profitWorker.postMessage({
+                    cardId,
+                    order: {
+                        resourceId: data.dbLetter,
+                        price: data.unitPrice,
+                        quantity: data.quantity,
+                        quality: data.quality
+                    },
+                    SCD,
+                    SRC,
+                    SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB
+                });
+            } else {
+                // 非零售物品只展示 MP-?% 无需等待 worker
+                injectHourlyProfit(card, null, mpPercent);
+            }
         }
 
         function refreshAllContractProfits() {
             const contractCards = document.querySelectorAll('div[tabindex="0"]');
             contractCards.forEach(card => {
-                // 1. 移除旧的利润显示（防止重复堆叠）
+                // 1. 移除旧的利润/MP显示（防止重复堆叠）
                 const oldProfits = card.querySelectorAll('b');
                 oldProfits.forEach(b => {
-                    if (b.textContent.includes('时利润')) b.remove();
+                    if (b.textContent.includes('时利润') || b.textContent.includes('MP-')) b.remove();
                 });
 
                 // 2. 移除 data-found 标记，让 handleCard 认为这是一个新卡片
                 card.removeAttribute('data-found');
+                delete card.__mpNotes;
 
                 // 3. 重新执行处理逻辑
                 handleCard(card);
@@ -3765,18 +3880,55 @@
             return result;
         }
 
-        function injectHourlyProfit(card, profitValue) {
+        function injectHourlyProfit(card, profitValue, mpPercent) {
             const infoDiv = Array.from(card.querySelectorAll('div'))
                 .find(div => div.textContent?.includes('@') && div.querySelector('b'));
 
             const priceBox = infoDiv?.querySelector('b');
-            if (!priceBox) return;
+            if (!priceBox) {
+                console.warn('[合同-MP] injectHourlyProfit: 未找到priceBox');
+                return;
+            }
 
+            // 检查是否已注入过
             if (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
-                priceBox.nextSibling.textContent?.includes('时利润')) return;
+                (priceBox.nextSibling.textContent?.includes('时利润') || priceBox.nextSibling.textContent?.includes('MP-'))) {
+                console.log('[合同-MP] injectHourlyProfit: 已注入过，跳过');
+                return;
+            }
 
             const profitDisplay = document.createElement('b');
-            profitDisplay.textContent = ` 时利润：${profitValue.toFixed(2)}`;
+            let displayText = '';
+
+            // 显示时利润（仅零售物品有有效值）
+            if (profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
+                displayText = ` 时利润：${profitValue.toFixed(2)}`;
+            }
+
+            // 显示 MP-?% （所有非排除物品）
+            const mpNotes = card.__mpNotes || null;
+            if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
+                if (displayText) displayText += ' |';
+                const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
+                const mpColor = mpPercent < 0 ? 'color:#ff4444;' : '';
+                displayText += `<span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
+                // 如有备注（如"参考Q1价"），追加在百分比后面
+                if (mpNotes) {
+                    displayText += `<span style="color:#999;font-size:0.85em;">(${mpNotes})</span>`;
+                }
+            } else if (mpNotes) {
+                // 仅有备注无计算结果（市场无对应品质）
+                if (displayText) displayText += ' |';
+                displayText += `<span style="color:#999;">${mpNotes}</span>`;
+            }
+
+            if (!displayText) {
+                console.warn('[合同-MP] injectHourlyProfit: 无内容可展示 profitValue=', profitValue, 'mpPercent=', mpPercent);
+                return;
+            }
+
+            console.log('[合同-MP] injectHourlyProfit: 注入文本=', displayText);
+            profitDisplay.innerHTML = displayText;
             profitDisplay.style.marginLeft = '8px';
             priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
         }
@@ -5512,9 +5664,11 @@
         window.fetch = async function (...args) {
             const url = args[0];
             const match = typeof url === 'string' && url.match(/\/api\/v3\/market\/(\d+)\/(\d+)\/?($|\?)/);
-            if (match) {
-                const realm = parseInt(match[1], 10);
-                const id = parseInt(match[2], 10);
+            const matchAll = typeof url === 'string' && url.match(/\/api\/v3\/market\/all\/(\d+)\/(\d+)\/?($|\?)/);
+            const m = match || matchAll;
+            if (m) {
+                const realm = parseInt(m[1], 10);
+                const id = parseInt(m[2], 10);
 
                 const response = await originalFetch(...args);
                 response.clone().json().then(json => {
@@ -5531,9 +5685,11 @@
         XMLHttpRequest.prototype.open = function (method, url, ...rest) {
             try {
                 const match = typeof url === 'string' && url.match(/\/api\/v3\/market\/(\d+)\/(\d+)(\/|$|\?)/);
-                if (match) {
-                    const realm = parseInt(match[1], 10);
-                    const id = parseInt(match[2], 10);
+                const matchAll = typeof url === 'string' && url.match(/\/api\/v3\/market\/all\/(\d+)\/(\d+)(\/|$|\?)/);
+                const m = match || matchAll;
+                if (m) {
+                    const realm = parseInt(m[1], 10);
+                    const id = parseInt(m[2], 10);
                     this._realm = realm;
                     this._id = id;
                     this.addEventListener('readystatechange', () => {
