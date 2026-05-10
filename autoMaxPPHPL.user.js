@@ -1438,7 +1438,7 @@
                 updateContent('请点击计算');
                 const titleEl = document.querySelector('#mp-floating-box div:first-child div');
                 if (titleEl) {
-                    titleEl.textContent = `MP-?% - 点合同时利润降序，点公司跳转私信`;
+                    titleEl.textContent = `MP-?% - 点合同时利润降序，点卖家跳转私信`;
                 }
             });
 
@@ -1652,7 +1652,10 @@
 
                     let data;
                     try {
-                        data = JSON.parse(raw);
+                        const parsed = JSON.parse(raw);
+                        // 新格式: { timestamp: ..., data: [...] }
+                        // 旧格式: [...] (直接数组，兼容处理)
+                        data = Array.isArray(parsed) ? parsed : parsed.data;
                     } catch {
                         updateContent('市场数据解析错误');
                         calcBtn.disabled = false;
@@ -3848,7 +3851,7 @@
     // ======================
     (function () {
         const PAGE_ACTIONS = {
-            marketPage: {
+            marketPage: { //交易所页面
                 pattern: /^https:\/\/www\.simcompanies\.com(?:\/[^\/]+)?\/market\/resource\/(\d+)\/?$/,
                 action: (url) => {
                     if (!isPageModuleEnabled('marketProfit')) return;
@@ -3861,7 +3864,7 @@
                     }
                 }
             },
-            contractPage: {
+            contractPage: { //合同页面
                 pattern: /^https:\/\/www\.simcompanies\.com(?:\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/,
                 action: (url) => {
                     if (!isPageModuleEnabled('contractProfit')) return;
@@ -3870,7 +3873,7 @@
                     incomingContractsHandler.init();
                 }
             },
-            executivePage: {
+            executivePage: { //高管挖人
                 pattern: /\/executives\/([a-z0-9-]+)\/?$/,
                 action: (url) => {
                     if (!isPageModuleEnabled('executiveHistory')) return;
@@ -3885,7 +3888,7 @@
                     }
                 }
             },
-            formerExecutivesPage: {
+            formerExecutivesPage: { //前任高管
                 pattern: /\/headquarters\/executives\/?$/,
                 action: (url) => {
 
@@ -3898,7 +3901,7 @@
                     }, 500);
                 }
             },
-            buildingPage: {
+            buildingPage: { //建筑页面
                 pattern: /\/b\/\d+\/?$/,
                 action: () => {
                     setTimeout(() => {
@@ -5309,7 +5312,7 @@
     (function () {
         let cachedRetailIds = null;
 
-        function getRetailIds() {
+        function getRetailIds() { 
             if (cachedRetailIds) return cachedRetailIds;
             const SCDStr = localStorage.getItem("SimcompaniesConstantsData");
             if (!SCDStr) return new Set();
@@ -5498,7 +5501,11 @@
         // 3. processMarketData
         function processMarketData(json, realm, id) {
             if (!Array.isArray(json)) return;
-            localStorage.setItem(`market_${realm}_${id}`, JSON.stringify(json));
+            const dataToSave = {
+                timestamp: Date.now(),
+                data: json
+            };
+            localStorage.setItem(`market_${realm}_${id}`, JSON.stringify(dataToSave));
         }
 
         const originalFetch = window.fetch;
@@ -5508,7 +5515,6 @@
             if (match) {
                 const realm = parseInt(match[1], 10);
                 const id = parseInt(match[2], 10);
-                if (!isRetailId(id)) return originalFetch(...args);
 
                 const response = await originalFetch(...args);
                 response.clone().json().then(json => {
@@ -5523,25 +5529,21 @@
         const originalSend = XMLHttpRequest.prototype.send;
 
         XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-            this._isTargetMarketRequest = false;
             try {
                 const match = typeof url === 'string' && url.match(/\/api\/v3\/market\/(\d+)\/(\d+)(\/|$|\?)/);
                 if (match) {
                     const realm = parseInt(match[1], 10);
                     const id = parseInt(match[2], 10);
-                    if (isRetailId(id)) {
-                        this._isTargetMarketRequest = true;
-                        this._realm = realm;
-                        this._id = id;
-                        this.addEventListener('readystatechange', () => {
-                            if (this.readyState === 4 && this.status >= 200 && this.status < 300) {
-                                try {
-                                    const json = JSON.parse(this.responseText);
-                                    processMarketData(json, this._realm, this._id);
-                                } catch { }
-                            }
-                        }, false);
-                    }
+                    this._realm = realm;
+                    this._id = id;
+                    this.addEventListener('readystatechange', () => {
+                        if (this.readyState === 4 && this.status >= 200 && this.status < 300) {
+                            try {
+                                const json = JSON.parse(this.responseText);
+                                processMarketData(json, this._realm, this._id);
+                            } catch { }
+                        }
+                    }, false);
                 }
             } catch { }
             return originalOpen.call(this, method, url, ...rest);
@@ -5916,75 +5918,72 @@
             fetch(EXEC_DETAIL_API(executiveId))
                 .then(res => res.json())
                 .then(data => {
-                    const workHistory = data.workHistory || [];
-                    let myDaysActiveSum = 0;
-                    let isSeveranceBroken = false;
+                    // const workHistory = data.workHistory || [];
+                    // let myDaysActiveSum = 0;
+                    // let isSeveranceBroken = false;
                     
-                    // 0. 获取当前 Realm（后续多处使用）
-                    const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+                    // // 0. 获取当前 Realm（后续多处使用）
+                    // const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
                     
-                    // 1. 从本地缓存取出 savedExecInfo（含 salary, unemployed）
-                    const savedExecs = load("SC-former-executives");
-                    const savedExecInfo = savedExecs.find(e => e.id === executiveId) || null;
+                    // // 1. 从本地缓存取出 savedExecInfo（含 salary, unemployed）
+                    // const savedExecs = load("SC-former-executives");
+                    // const savedExecInfo = savedExecs.find(e => e.id === executiveId) || null;
                     
-                    // 2. 获取本公司名
-                    let myCompanyName = null;
-                    if (currentRealm !== null) {
-                        const srcKey = `SimcompaniesRetailCalculation_${currentRealm}`;
-                        const SRC = JSON.parse(localStorage.getItem(srcKey) || "{}");
-                        myCompanyName = SRC.company; 
-                    }
+                    // // 2. 获取本公司名
+                    // let myCompanyName = null;
+                    // if (currentRealm !== null) {
+                    //     const srcKey = `SimcompaniesRetailCalculation_${currentRealm}`;
+                    //     const SRC = JSON.parse(localStorage.getItem(srcKey) || "{}");
+                    //     myCompanyName = SRC.company; 
+                    // }
                     
-                    if (myCompanyName && workHistory.length > 0) {
-                        // 3. 找到你在履历中最后一次出现的索引 (时间最近的一条)
-                        //     workHistory 从 0(最新) 到 N(最旧) 排列
-                        const myLastIndex = workHistory.findIndex(w => w.employer && w.employer.company === myCompanyName);
+                    // if (myCompanyName && workHistory.length > 0) {
+                    //     // 3. 找到你在履历中最后一次出现的索引 (时间最近的一条)
+                    //     //     workHistory 从 0(最新) 到 N(最旧) 排列
+                    //     const myLastIndex = workHistory.findIndex(w => w.employer && w.employer.company === myCompanyName);
                     
-                        if (myLastIndex !== -1) {
-                            // 4. 核心：检查从「当前职位(索引0)」到「你在该高管的最后职位(myLastIndex)」之间
-                            //    是否所有相邻记录的 start 都等于上一条的 end（无缝衔接）
-                            //    逻辑：workHistory[i] 是较新的职位，workHistory[i+1] 是较旧的职位
-                            for (let i = 0; i < myLastIndex; i++) {
-                                const newerJobStart = workHistory[i].start;
-                                const olderJobEnd = workHistory[i+1].end;
+                    //     if (myLastIndex !== -1) {
+                    //         // 4. 核心：检查从「当前职位(索引0)」到「你在该高管的最后职位(myLastIndex)」之间
+                    //         //    是否所有相邻记录的 start 都等于上一条的 end（无缝衔接）
+                    //         //    逻辑：workHistory[i] 是较新的职位，workHistory[i+1] 是较旧的职位
+                    //         for (let i = 0; i < myLastIndex; i++) {
+                    //             const newerJobStart = workHistory[i].start;
+                    //             const olderJobEnd = workHistory[i+1].end;
                     
-                                // 如果旧职位的 end 缺失，或 不等于新职位的 start → 断层
-                                if (!olderJobEnd || newerJobStart !== olderJobEnd) {
-                                    isSeveranceBroken = true;
-                                    break;
-                                }
-                            }
+                    //             // 如果旧职位的 end 缺失，或 不等于新职位的 start → 断层
+                    //             if (!olderJobEnd || newerJobStart !== olderJobEnd) {
+                    //                 isSeveranceBroken = true;
+                    //                 break;
+                    //             }
+                    //         }
                     
-                            // 5. 若无断层，计算该高管在贵公司累计天数
-                            if (!isSeveranceBroken) {
-                                myDaysActiveSum = workHistory
-                                    .filter(w => w.employer && w.employer.company === myCompanyName)
-                                    .reduce((sum, w) => sum + (w.daysActive || 0), 0);
-                            }
-                        } else {
-                            isSeveranceBroken = true; // 没雇佣过，自然没补偿
-                        }
-                    }
+                    //         // 5. 若无断层，计算该高管在贵公司累计天数
+                    //         if (!isSeveranceBroken) {
+                    //             myDaysActiveSum = workHistory
+                    //                 .filter(w => w.employer && w.employer.company === myCompanyName)
+                    //                 .reduce((sum, w) => sum + (w.daysActive || 0), 0);
+                    //         }
+                    //     } else {
+                    //         isSeveranceBroken = true; // 没雇佣过，自然没补偿
+                    //     }
+                    // }
                     
-                    // 6. 补偿金 HTML 渲染
-                    let severanceHtml = '';
-                    if (savedExecInfo) {
-                        const { salary, unemployed } = savedExecInfo;
+                    // // 6. 补偿金 HTML 渲染
+                    // let severanceHtml = '';
+                    // if (savedExecInfo) {
+                    //     const { salary, unemployed } = savedExecInfo;
                         
-                        if (unemployed) {
-                            severanceHtml = `<span style="color:#999;">高管当前不在职</span>`;
-                        } else if (isSeveranceBroken) {
-                            severanceHtml = `<span style="color:#d32f2f;">补偿金已断开 (曾有失业/被开除)</span>`;
-                        } else if (myDaysActiveSum < 2) {
-                            severanceHtml = `<span style="color:#999;">在职不足2天，无补偿金</span>`;
-                        } else if (myDaysActiveSum >= 2) {
-                            const compensation = Math.floor(salary * myDaysActiveSum * 1 / (2 * 100)); // 计算补偿金
-                            severanceHtml = `<span style="color:#e67e22; font-weight:bold;">持续补偿: $${Math.round(compensation).toLocaleString()}</span>`;
-                        }
-                    }
-
-
-
+                    //     if (unemployed) {
+                    //         severanceHtml = `<span style="color:#999;">高管当前不在职</span>`;
+                    //     } else if (isSeveranceBroken) {
+                    //         severanceHtml = `<span style="color:#d32f2f;">补偿金已断开 (曾有失业/被开除)</span>`;
+                    //     } else if (myDaysActiveSum < 2) {
+                    //         severanceHtml = `<span style="color:#999;">在职不足2天，无补偿金</span>`;
+                    //     } else if (myDaysActiveSum >= 2) {
+                    //         const compensation = Math.floor(salary * myDaysActiveSum * 1 / (2 * 100)); // 计算补偿金
+                    //         severanceHtml = `<span style="color:#e67e22; font-weight:bold;">持续补偿: $${Math.round(compensation).toLocaleString()}</span>`;
+                    //     }
+                    // }
 
                     const trainings = data.trainings || [];
                     let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
@@ -6026,10 +6025,7 @@
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #eee; padding-bottom:10px; margin-bottom:15px;">
                         <div>
                             <h3 style="margin:0 0 4px 0; font-size:18px; color:#333;">${data.name}</h3>
-                            <div style="display:flex; justify-content:space-between; color:#888; font-size:12px; padding-right:10px;">
-                            <span>高管ID: ${data.id}</span>
-                            ${severanceHtml}
-                        </div>
+                            <div style="color:#888; font-size:12px;">高管ID: ${data.id}</div>
                         </div>
                         <button id="sc-modal-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1; padding:0 0 5px 10px;">&times;</button>
                     </div>
