@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.2
+// @version      1.32.3
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -6583,7 +6583,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    高管页增加保存当前高管信息，入库合同和交易所增加自定义高管数据
+        // @changelog    合同页面增加与MP的比较
 
         fetch(scriptUrl)
             .then(res => res.text())
