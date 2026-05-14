@@ -1,7 +1,7 @@
-// ==UserScript==
+﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.3
+// @version      1.32.4
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -2504,7 +2504,13 @@
             } = comp.props;
 
             // 解构 State
-            const { cogs, quality, quantity } = comp.state;
+            const { cogs: originalCogs, quality, quantity } = comp.state;
+
+            // 读取自定义单位成本（通过 index 找到对应卡片上的输入框），仅当 >0 时覆盖 cogs
+            const cardEl = document.querySelectorAll('div[style="overflow: visible;"]')[index];
+            const customCostEl = cardEl?.querySelector('.custom-unit-cost-input');
+            const customUnitCostVal = customCostEl ? (parseFloat(customCostEl.value) || 0) : 0;
+            const cogs = customUnitCostVal > 0 ? customUnitCostVal * quantity : originalCogs;
 
             // 在主线程预计算 Worker 无法访问的函数结果
             // ⚠️ 这里直接使用了父作用域中的 Ul 函数
@@ -2622,6 +2628,15 @@
                     profitDisplay.textContent = `等待计算...`;
                     profitDisplay.style = `margin-top: 5px; font-size: 14px; color: white; background: gray; padding: 4px 8px; text-align: center; border-radius: 4px;`;
 
+                    // 自定义成本输入框
+                    const customCostInput = document.createElement('input');
+                    customCostInput.type = 'number';
+                    customCostInput.className = 'custom-unit-cost-input';
+                    customCostInput.placeholder = '假设单位成本';
+                    customCostInput.min = '0';
+                    customCostInput.step = '0.01';
+                    customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: #fff; font-size: 13px; box-sizing: border-box;`;
+
                     // --- 提取核心发送逻辑 ---
                     // 这样按钮点击能用，后续重试也能用
                     const startCalc = (targetComp, retryIdx = 0) => {
@@ -2642,7 +2657,11 @@
 
                         // 重新获取最新的 state 和 props
                         const { size, acceleration, economyState, resource, salesModifierWithRecreationBonus, skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather = null } = targetComp.props;
-                        const { cogs, quality, quantity } = targetComp.state;
+                        const { cogs: originalCogs, quality, quantity } = targetComp.state;
+
+                        // 读取自定义单位成本，仅当输入 >0 时用 单位成本*数量 覆盖 cogs
+                        const customUnitCost = parseFloat(customCostInput.value) || 0;
+                        const cogs = customUnitCost > 0 ? customUnitCost * quantity : originalCogs;
 
                         const v = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
                         const b = Ul(administrationOverhead, skillCOO);
@@ -2668,6 +2687,7 @@
 
                     priceInput.parentNode.insertBefore(btn, priceInput.nextSibling);
                     priceInput.parentNode.insertBefore(profitDisplay, btn.nextSibling);
+                    priceInput.parentNode.insertBefore(customCostInput, profitDisplay.nextSibling);
                     card.dataset.autoPricingAdded = 'true';
                 });
             } catch (err) { }
@@ -2946,7 +2966,8 @@
 
             // 如果连一行数据都没有，显示空状态
             if (rawRows.length === 0) {
-                summaryDisplay.style.display = "none";
+                const simContent = document.getElementById('sc-sim-content');
+                if (simContent) simContent.innerHTML = '<div style="color:#888;font-size:12px;text-align:center;padding:8px;">暂无订单数据</div>';
                 return;
             }
 
@@ -3039,8 +3060,8 @@
                 const profitableRows = rawRows.filter(r => r.profit > 0);
 
                 if (profitableRows.length === 0) {
-                    summaryDisplay.style.display = "block";
-                    summaryDisplay.innerHTML = `<div style="color: #ff9800; font-size: 13px; text-align: center;">⚠️ 无正利润订单</div>`;
+                    const simContent = document.getElementById('sc-sim-content');
+                    if (simContent) simContent.innerHTML = '<div style="color: #ff9800; font-size: 13px; text-align: center;">⚠️ 无正利润订单</div>';
                     return;
                 }
 
@@ -3097,10 +3118,11 @@
             const durationStr = formatDuration(totalTimeSeconds / 3600);
 
             const renderUI = () => {
-                summaryDisplay.style.display = "block";
+                const simContent = document.getElementById('sc-sim-content');
+                if (!simContent) return;
                 summaryDisplay.style.borderLeft = `4px solid ${borderColor}`;
 
-                summaryDisplay.innerHTML = `
+                simContent.innerHTML = `
                     <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: 8px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 6px;">
                             <span style="color: #aaa; font-size: 12px;">${displayTitle}</span>
@@ -3291,107 +3313,66 @@
                     // 3. 提取 Realm ID
                     extractRealmIdOnce(tbody);
 
-                    // 4. 插入 UI 元素
-                    const parentDiv = form.parentElement;
-                    const container = parentDiv?.parentElement?.parentElement;
+                    // 4. 插入 UI 元素 — 固定 CSS 类名 .css-rnlot4 是表单外层容器（大小屏幕均存在）
+                    const formContainer = form.closest('.css-rnlot4');
 
-                    if (container && !container.querySelector('[data-custom-notice]')) {
-                        // 创建提示文案
-                        const infoText = document.createElement('div');
-                        infoText.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。所有展示内容均为1级建筑。';
-                        infoText.style.cssText = "font-size: 11px; color: #888; margin-bottom: 4px;";
-                        infoText.dataset.customNotice = 'true';
-
-                        // 创建汇总面板
+                    if (formContainer && formContainer.parentNode && !formContainer.parentNode.querySelector('[data-custom-notice]')) {
+                        // 扫货模拟面板：固定头部（提示+按钮）+ 动态结果区
                         summaryDisplay = document.createElement('div');
-                        summaryDisplay.style.cssText = "background: #222; padding: 12px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #4CAF50; display: none; min-height: 40px;";
+                        summaryDisplay.style.cssText = "background: #222; padding: 12px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #4CAF50; min-height: 40px;";
+                        summaryDisplay.dataset.customNotice = 'true';
 
-                        container.appendChild(infoText);
-                        container.insertBefore(summaryDisplay, infoText);
+                        // 固定头部行
+                        const infoHeader = document.createElement('div');
+                        infoHeader.style.cssText = "display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #444;";
 
-                        // // 创建切换按钮
-                        // const toggleButton = document.createElement('button');
-                        // toggleButton.type = 'button';
-                        // toggleButton.textContent = '切换至：用时';
-                        // toggleButton.className = "btn btn-primary";
-                        // toggleButton.style.marginLeft = "10px";
+                        const infoText = document.createElement('span');
+                        infoText.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。所有展示内容均为1级建筑。';
+                        infoText.style.cssText = "font-size: 11px; color: #888; flex: 1 1 auto; min-width: 150px;";
 
-                        // const lastDiv = form.querySelector('.css-1491xfy > div:last-child');
-                        // if (lastDiv) {
-                        //     lastDiv.insertAdjacentElement('afterend', toggleButton);
-                        // }
+                        const toggleBtn = document.createElement('button');
+                        toggleBtn.type = 'button';
+                        toggleBtn.id = 'sc-custom-toggle-wrapper';
+                        toggleBtn.style.cssText = "font-size: 11px; color: #aaa; background: none; border: 1px solid #555; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;";
+                        const refreshToggleUI = () => {
+                            const config = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                            const isEnabled = config['executiveCustomToggle'] !== undefined ? config['executiveCustomToggle'] : false;
+                            toggleBtn.textContent = `自定义：${isEnabled ? '开' : '关'}`;
+                            toggleBtn.style.color = isEnabled ? '#4CAF50' : '#aaa';
+                            toggleBtn.style.borderColor = isEnabled ? '#4CAF50' : '#555';
+                        };
+                        refreshToggleUI();
+                        toggleBtn.onclick = (e) => {
+                            e.preventDefault();
+                            const config = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                            config['executiveCustomToggle'] = !(config['executiveCustomToggle'] === true);
+                            localStorage.setItem('SC_PageActions_Settings', JSON.stringify(config));
+                            refreshToggleUI();
+                            const tbody = findValidTbody();
+                            if (tbody) requestAnimationFrame(() => processNewRows(tbody, true));
+                        };
 
-                        // toggleButton.addEventListener('click', () => {
-                        //     isShowingProfit = !isShowingProfit;
-                        //     document.querySelectorAll('.auto-profit-info span').forEach(span => {
-                        //         const { p, t } = span.dataset;
-                        //         if (p && t) span.textContent = isShowingProfit ? p : t;
-                        //     });
-                        //     toggleButton.textContent = isShowingProfit ? '用时' : '时利润';
-                        // });
+                        const btnSettings = document.createElement('button');
+                        btnSettings.type = 'button';
+                        btnSettings.textContent = "自定义高管数据";
+                        btnSettings.style.cssText = "font-size: 11px; color: #aaa; background: none; border: 1px solid #673ab7; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;";
+                        btnSettings.onclick = (e) => {
+                            e.preventDefault();
+                            if (typeof executiveCustomButton !== 'undefined') executiveCustomButton.show();
+                        };
 
-                        // --- 模块 7 内部 tryInit 注入逻辑 ---
+                        infoHeader.appendChild(infoText);
+                        infoHeader.appendChild(toggleBtn);
+                        infoHeader.appendChild(btnSettings);
+                        summaryDisplay.appendChild(infoHeader);
 
-                        if (summaryDisplay && summaryDisplay.parentNode) {
-                            const container = summaryDisplay.parentNode;
-                            const form = container.querySelector('form');
+                        // 动态结果区（由 renderUI 填充）
+                        const simContent = document.createElement('div');
+                        simContent.id = 'sc-sim-content';
+                        simContent.innerHTML = '<div style="color:#888;font-size:12px;text-align:center;padding:8px;">等待数据加载…</div>';
+                        summaryDisplay.appendChild(simContent);
 
-                            if (form && !form.querySelector('#sc-custom-toggle-wrapper')) {
-                                // 1. 【精准定位】先找到那个 type="submit" 的购买按钮
-                                // 这是页面上唯一的提交按钮，特征最明显
-                                const realBuyBtn = form.querySelector('button[type="submit"]');
-
-                                if (realBuyBtn && realBuyBtn.parentElement) {
-                                    // 2. 它的父元素就是我们要抄的 wrapper (css-1sr08ku)
-                                    const realWrapper = realBuyBtn.parentElement;
-
-                                    const capturedStyles = {
-                                        wrapperClass: realWrapper.className,
-                                        buttonClass: realBuyBtn.className
-                                    };
-
-                                    // console.log("[调试] 成功锁定购买按钮，抄袭样式:", capturedStyles);
-
-                                    // 3. 创建开关（传入抓到的样式）
-                                    const myToggle = createGlobalCustomToggle('executiveCustomToggle', '自定义', capturedStyles);
-                                    myToggle.wrapper.id = 'sc-custom-toggle-wrapper';
-
-                                    // 4. 绑定点击重算逻辑
-                                    const originalOnClick = myToggle.btn.onclick;
-                                    myToggle.btn.onclick = (e) => {
-                                        originalOnClick(e);
-                                        const tbody = findValidTbody();
-                                        if (tbody) {
-                                            requestAnimationFrame(() => processNewRows(tbody, true));
-                                        }
-                                    };
-
-                                    // 5. 创建紫色设置按钮
-                                    const purpleWrapper = document.createElement('div');
-                                    purpleWrapper.className = capturedStyles.wrapperClass; // 抄袭 css-1sr08ku
-                                    purpleWrapper.style.marginLeft = "5px";
-
-                                    const btnSettings = document.createElement('button');
-                                    btnSettings.className = capturedStyles.buttonClass; // 抄袭 btn-primary
-                                    btnSettings.textContent = "自定义高管数据";
-                                    // 这里的样式继承并覆盖背景色
-                                    btnSettings.style.cssText = myToggle.btn.style.cssText + "background-color: #673ab7 !important;";
-                                    btnSettings.onclick = (e) => {
-                                        e.preventDefault();
-                                        if (typeof executiveCustomButton !== 'undefined') executiveCustomButton.show();
-                                    };
-                                    purpleWrapper.appendChild(btnSettings);
-
-                                    // 6. 执行插入：插在“购买按钮容器”的后面
-                                    realWrapper.after(myToggle.wrapper);
-                                    myToggle.wrapper.after(purpleWrapper);
-
-                                    // console.log("[调试] 注入完成，位置：购买按钮之后");
-                                } else {
-                                    console.warn("[调试] 无法定位购买按钮，请检查页面是否已加载按钮");
-                                }
-                            }
-                        }
+                        formContainer.after(summaryDisplay);
 
                         // 标记已完成注入
                         form.setAttribute('data-market-calc-initialized', 'true');
@@ -6583,7 +6564,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    合同页面增加与MP的比较
+        // @changelog    商店内增加假设单位成本，优化交易所页面的提示信息
 
         fetch(scriptUrl)
             .then(res => res.text())
