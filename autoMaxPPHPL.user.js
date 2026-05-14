@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.5
+// @version      1.32.6
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3314,7 +3314,7 @@
                     extractRealmIdOnce(tbody);
 
                     // 4. 插入 UI 元素 — 固定 CSS 类名 .css-rnlot4 是表单外层容器（大小屏幕均存在）
-                    const formContainer = form.closest('.css-rnlot4');
+                    const formContainer = form.closest('.css-rnlot4') || form.closest('.css-1b1lwg7');
 
                     if (formContainer && formContainer.parentNode && !formContainer.parentNode.querySelector('[data-custom-notice]')) {
                         // 扫货模拟面板：固定头部（提示+按钮）+ 动态结果区
@@ -6564,7 +6564,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修复前任高管按钮丢失问题
+        // @changelog    暂时修复交易所深浅模式匹配问题
 
         fetch(scriptUrl)
             .then(res => res.text())
