@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      2.3.0
+// @version      2.3.1
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -1114,7 +1114,7 @@
                         if (content) {
                             // 清空右侧详情区，提示用户重新点击，避免旧菜单绑定旧数据的报错
                             content.innerHTML = `
-                                <div style="height:100%; display:flex; align-items:center; justify-content:center; color:#555; flex-direction:column; gap:10px;">
+                                <div class="scobg-content-empty">
                                     <span style="font-size:40px;">🔄</span>
                                     <span>图库已实时更新，请在侧边栏重新选择分类</span>
                                 </div>`;
@@ -1373,6 +1373,7 @@
     // ==========================================
     const SCobgUIManager = {
         panel: null,
+        overlay: null,
 
         init() {
             if (document.getElementById('scobg-panel')) return;
@@ -1393,9 +1394,35 @@
         togglePanel() {
             if (!this.panel) return;
             const isVisible = this.panel.style.display === 'flex';
-            this.panel.style.display = isVisible ? 'none' : 'flex';
-            // 锁定背景滚动
+            if (isVisible) {
+                this.panel.style.display = 'none';
+                this.hideOverlay();
+            } else {
+                this.panel.style.display = 'flex';
+                this.showOverlay();
+            }
             document.body.style.overflow = isVisible ? '' : 'hidden';
+        },
+
+        showOverlay() {
+            if (window.innerWidth > 768) return; // 仅移动端显示遮罩
+            if (!this.overlay) {
+                this.overlay = document.createElement('div');
+                this.overlay.id = 'scobg-overlay';
+                this.overlay.style.cssText = `
+                    position: fixed; inset: 0; z-index: 99999;
+                    background: rgba(0,0,0,0.5);
+                `;
+                this.overlay.onclick = () => this.togglePanel();
+            }
+            if (!document.getElementById('scobg-overlay')) {
+                document.body.appendChild(this.overlay);
+            }
+        },
+
+        hideOverlay() {
+            const overlay = document.getElementById('scobg-overlay');
+            if (overlay) overlay.remove();
         },
 
         injectCSS() {
@@ -1421,6 +1448,13 @@
                     justify-content: space-between; align-items: center; 
                     background: #21262e; 
                 }
+                .scobg-header-title { 
+                    font-size:15px; font-weight:bold; letter-spacing:0.5px; 
+                    white-space: nowrap; flex-shrink: 0;
+                }
+                .scobg-header-actions { 
+                    display:flex; gap:8px; align-items:center; flex-shrink: 0;
+                }
     
                 /* 主体响应式布局 */
                 .scobg-body { display: flex; flex: 1; overflow: hidden; }
@@ -1433,36 +1467,16 @@
     
                 /* 内容区 */
                 .scobg-content { flex: 1; overflow-y: auto; background: #1a1e26; position: relative; }
-    
-                /* 手机端适配逻辑 (iPhone SE 核心修复) */
-                @media screen and (max-width: 768px) {
-                    #scobg-panel { width: 100vw; height: 100vh; max-height: 100vh; top: 0; left: 0; transform: none; border-radius: 0; }
-                    .scobg-body { flex-direction: column; }
-                    
-                    /* 手机端侧边栏占用上半部分，增加滚动流畅度 */
-                    .scobg-sidebar { 
-                        width: 100%; height: 40%; border-right: none; 
-                        border-bottom: 1px solid #2a2f3a; -webkit-overflow-scrolling: touch; 
-                    }
-                    .scobg-content { height: 60%; -webkit-overflow-scrolling: touch; }
-    
-                    /* 列表项改为垂直堆叠 */
-                    .scobg-row { 
-                        flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; 
-                        padding: 12px !important;
-                    }
-                    .scobg-imgs { width: 100%; justify-content: space-between; }
-                    .scobg-info { width: 100%; }
-                    
-                    /* 按钮在手机上更大更易点 */
-                    .scobg-btn-blue { padding: 8px 16px; font-size: 13px; }
+                .scobg-content-empty {
+                    height:100%; display:flex; align-items:center; justify-content:center; 
+                    color:#555; flex-direction:column; gap:10px; text-align:center; padding:20px;
                 }
     
                 /* 树形菜单细节 */
                 .scobg-tree-item { 
                     cursor: pointer; padding: 12px 15px; color: #aaa; 
                     font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.02);
-                    display: flex; align-items: center;
+                    display: flex; align-items: center; user-select: none;
                 }
                 .scobg-l1 { font-weight: bold; background: #1c2129; color: #eee; }
                 .scobg-l2 { padding-left: 25px; font-size: 13px; background: #11151a; }
@@ -1479,20 +1493,21 @@
                     background: #252a35; padding: 15px; margin-bottom: 12px; 
                     border-radius: 8px; border: 1px solid #333; 
                     display: flex; align-items: center; justify-content: space-between; 
+                    gap: 16px;
                 }
                 .scobg-name { font-size: 15px; font-weight: bold; margin-bottom: 6px; color: #fff; }
                 .scobg-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888; cursor: pointer; }
                 .scobg-check input { width: 18px; height: 18px; cursor: pointer; }
     
                 /* 图片预览区 */
-                .scobg-imgs { display: flex; align-items: center; gap: 12px; }
+                .scobg-imgs { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
                 .scobg-ui-img { 
                     width: 90px; height: 60px; object-fit: contain; 
                     background: #000; border: 1px solid #444; border-radius: 6px; 
                 }
                 .scobg-ui-img.click { border-color: #555; cursor: pointer; }
     
-                /* 响应式弹窗菜单 (iPhone SE 适配核心) */
+                /* 响应式弹窗菜单 */
                 .scobg-menu { 
                     position: fixed; background: #2c323d; border: 1px solid #555; 
                     border-radius: 12px; z-index: 100001; padding: 12px; 
@@ -1503,8 +1518,151 @@
                 .scobg-menu-item { text-align: center; cursor: pointer; }
                 .scobg-menu-item img { width: 100%; height: 50px; object-fit: contain; background: #000; border-radius: 4px; }
                 .scobg-menu-item span { font-size: 11px; color: #bbb; display: block; margin-top: 5px; }
+                .scobg-menu-foot { grid-column: span 2; }
     
                 .scobg-btn-blue { background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+                .scobg-btn-sm { padding: 5px 10px; font-size: 12px; }
+    
+                /* ================================ */
+                /* 📱 平板端 (≤768px)                */
+                /* ================================ */
+                @media screen and (max-width: 768px) {
+                    #scobg-panel { 
+                        width: 100vw; height: 100vh; max-height: 100vh; 
+                        top: 0; left: 0; transform: none; border-radius: 0; 
+                    }
+    
+                    /* 头部：允许换行，增加高度 */
+                    .scobg-header { 
+                        height: auto; min-height: 50px; 
+                        flex-wrap: wrap; gap: 8px; 
+                        padding: 8px 12px;
+                    }
+                    .scobg-header-title { font-size: 14px; }
+                    /* 隐藏长链接文字，仅保留短文案 */
+                    .scobg-header-title a { font-size: 11px; margin-left: 4px !important; }
+    
+                    /* 按钮缩小间距 */
+                    .scobg-header-actions { gap: 5px; }
+                    .scobg-header-actions .scobg-btn-blue { 
+                        padding: 5px 8px; font-size: 11px; 
+                    }
+                    /* 关闭按钮加大触控区 */
+                    .scobg-header-actions #scobg-close { 
+                        font-size: 24px; padding: 5px 8px; 
+                    }
+    
+                    .scobg-body { flex-direction: column; }
+                    
+                    /* 侧边栏：占据上方 35%，增大触控区域 */
+                    .scobg-sidebar { 
+                        width: 100%; min-height: 120px; height: 35%; 
+                        border-right: none; border-bottom: 1px solid #2a2f3a; 
+                        overflow-y: auto; 
+                    }
+                    .scobg-content { height: 65%; overflow-y: auto; }
+    
+                    /* 树形菜单：增大触控区域 */
+                    .scobg-tree-item { 
+                        padding: 14px 15px; font-size: 14px; 
+                        min-height: 46px; 
+                    }
+                    .scobg-l2 { padding-left: 28px; }
+                    .scobg-l3 { padding-left: 48px; }
+    
+                    /* 行：垂直堆叠 */
+                    .scobg-row { 
+                        flex-direction: column; align-items: flex-start; 
+                        gap: 14px; padding: 14px;
+                    }
+                    .scobg-info { width: 100%; }
+                    .scobg-imgs { width: 100%; justify-content: space-around; }
+                    /* 图片预览缩小 */
+                    .scobg-ui-img { width: 70px; height: 48px; }
+    
+                    /* 弹窗菜单 */
+                    .scobg-menu { 
+                        max-width: 280px; 
+                        grid-template-columns: repeat(2, 1fr); 
+                        gap: 8px; padding: 10px;
+                    }
+                    .scobg-menu-item img { height: 42px; }
+                    .scobg-menu-item span { font-size: 10px; }
+    
+                    /* 空状态提示 */
+                    .scobg-content-empty { font-size: 14px; }
+                    .scobg-content-empty span:first-child { font-size: 32px !important; }
+                }
+    
+                /* ================================ */
+                /* 📱 小屏手机端 (≤480px)            */
+                /* ================================ */
+                @media screen and (max-width: 480px) {
+                    /* 头部变为两行：标题独占一行，按钮独占第二行 */
+                    .scobg-header { 
+                        flex-direction: column; 
+                        align-items: stretch;
+                        padding: 8px 10px; gap: 6px;
+                    }
+                    .scobg-header-title { 
+                        text-align: center; width: 100%; 
+                        font-size: 13px;
+                    }
+                    .scobg-header-title a { display: none; }
+                    .scobg-header-actions { 
+                        width: 100%; justify-content: center; 
+                        gap: 4px; flex-wrap: wrap;
+                    }
+                    /* 按钮进一步缩小 */
+                    .scobg-header-actions .scobg-btn-blue { 
+                        padding: 6px 8px; font-size: 10px; 
+                        border-radius: 4px;
+                    }
+    
+                    /* 侧边栏占 35% */
+                    .scobg-sidebar { height: 35%; min-height: 100px; }
+                    .scobg-content { height: 65%; }
+    
+                    /* 树形菜单 */
+                    .scobg-tree-item { 
+                        padding: 12px 12px; font-size: 13px; 
+                        min-height: 44px;
+                    }
+                    .scobg-l2 { padding-left: 24px; }
+                    .scobg-l3 { padding-left: 40px; }
+    
+                    /* 行 */
+                    .scobg-row { padding: 12px; gap: 12px; }
+                    .scobg-grid { padding: 8px; }
+                    .scobg-name { font-size: 13px; }
+                    .scobg-check { font-size: 12px; }
+                    .scobg-check input { width: 20px; height: 20px; }
+    
+                    /* 图片进一步缩小 */
+                    .scobg-imgs { gap: 8px; }
+                    .scobg-ui-img { width: 56px; height: 38px; }
+    
+                    /* 弹窗菜单全屏化 */
+                    .scobg-menu { 
+                        width: 94vw; max-width: 94vw; 
+                        grid-template-columns: repeat(3, 1fr); 
+                        gap: 6px; padding: 10px;
+                        border-radius: 16px 16px 0 0;
+                        left: 3vw !important; top: auto !important;
+                        bottom: 0 !important; transform: none !important;
+                    }
+                    .scobg-menu-item img { height: 40px; }
+                    .scobg-menu-item span { font-size: 10px; margin-top: 3px; }
+                    /* 自定义链接输入区域：极小屏下占满 3 列 */
+                    .scobg-menu-foot { 
+                        grid-column: span 3 !important; 
+                    }
+    
+                    /* 内容面包屑 */
+                    .scobg-content > div:first-child { 
+                        padding: 10px 12px !important; 
+                    }
+                }
             `;
             document.head.appendChild(style);
         },
@@ -1512,26 +1670,25 @@
         createPanel() {
             this.panel = document.createElement('div');
             this.panel.id = 'scobg-panel';
+            const isSmallScreen = window.innerWidth <= 768;
             this.panel.innerHTML = `
                 <div class="scobg-header">
-                    <span style="font-size:15px; font-weight:bold; letter-spacing:0.5px;">SC皮肤管理 <a href="https://showscimg.22-7.top/images" target="_blank" style="margin-left:8px; font-size:13px; color:#3498db; text-decoration:underline;">SC图片一览</a></span>
-                    <div style="display:flex; gap:10px; align-items:center;">
-                        
-                        <button id="scobg-import-btn" class="scobg-btn-blue" style="background:#e67e22; padding:5px 12px;">导入配置</button>
+                    <span class="scobg-header-title">SC皮肤管理 <a href="https://showscimg.22-7.top/images" target="_blank" style="margin-left:8px; font-size:13px; color:#3498db; text-decoration:underline;">SC图片一览</a></span>
+                    <div class="scobg-header-actions">
+                        <button id="scobg-import-btn" class="scobg-btn-blue scobg-btn-sm" style="background:#e67e22;">导入配置</button>
                         <input type="file" id="scobg-import-file" accept=".json" style="display:none;">
-                        <button id="scobg-export" class="scobg-btn-blue" style="background:#d35400; padding:5px 12px;">导出配置</button>
-                        
-                        <button id="scobg-save" class="scobg-btn-blue" style="background:#2ecc71; padding:5px 12px;">保存</button>
-                        <button id="scobg-apply" class="scobg-btn-blue" style="padding:5px 12px;">刷新</button>
-                        <div id="scobg-close" style="padding:5px; cursor:pointer; font-size:22px; color:#777;">✕</div>
+                        <button id="scobg-export" class="scobg-btn-blue scobg-btn-sm" style="background:#d35400;">导出配置</button>
+                        <button id="scobg-save" class="scobg-btn-blue scobg-btn-sm" style="background:#2ecc71;">保存</button>
+                        <button id="scobg-apply" class="scobg-btn-blue scobg-btn-sm">刷新</button>
+                        <div id="scobg-close" style="padding:5px; cursor:pointer; font-size:22px; color:#777; line-height:1;">✕</div>
                     </div>
                 </div>
                 <div class="scobg-body">
                     <div class="scobg-sidebar"></div>
                     <div class="scobg-content">
-                        <div style="height:100%; display:flex; align-items:center; justify-content:center; color:#555; flex-direction:column; gap:10px;">
+                        <div class="scobg-content-empty">
                             <span style="font-size:40px;">🎨</span>
-                            <span>请在${window.innerWidth < 768 ? '上方' : '左侧'}选择分类</span>
+                            <span>请在${isSmallScreen ? '上方' : '左侧'}选择分类</span>
                         </div>
                     </div>
                 </div>
@@ -1710,8 +1867,11 @@
             const menu = document.createElement('div');
             menu.className = 'scobg-menu';
 
-            // 手机端居中策略
-            if (window.innerWidth <= 768) {
+            // 响应式定位：极小屏走 CSS bottom sheet，中等屏居中，大屏跟随鼠标
+            const vw = window.innerWidth;
+            if (vw <= 480) {
+                // 极小屏：让 CSS 的 bottom sheet 样式接管，不设 inline 定位
+            } else if (vw <= 768) {
                 menu.style.left = '50%';
                 menu.style.top = '50%';
                 menu.style.transform = 'translate(-50%, -50%)';
@@ -1731,7 +1891,8 @@
             }
 
             const foot = document.createElement('div');
-            foot.style.cssText = 'grid-column: span 2; display: flex; flex-direction: column; gap: 8px; margin-top: 5px; border-top: 1px solid #444; padding-top: 10px;';
+            foot.className = 'scobg-menu-foot';
+            foot.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin-top: 5px; border-top: 1px solid #444; padding-top: 10px;';
             foot.innerHTML = `
                 <div style="display:flex; gap:6px;">
                     <input type="text" placeholder="输入链接..." style="flex:1; width:0; background:#111; border:1px solid #555; color:#fff; padding:10px; border-radius:6px; font-size:13px; outline:none;">
@@ -1979,7 +2140,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    增加导入导出配置功能，追加春季道路，将基础信息改为远端存放
+            // @changelog    修改管理面板以适配不同屏幕尺寸
 
             fetch(scriptUrl)
                 .then(res => res.text())
