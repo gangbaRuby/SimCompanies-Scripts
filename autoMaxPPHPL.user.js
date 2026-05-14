@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.4
+// @version      1.32.5
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -6215,7 +6215,7 @@
         function injectMoreInfoButtons() {
             if (!isPageModuleEnabled('formerExecEnhance')) return;
             const headers = Array.from(document.querySelectorAll('h3'));
-            const targetHeader = headers.find(h => h.textContent.includes('前任公司高管'));
+            const targetHeader = headers.find(h => h.textContent.includes('前任高管'));
 
             if (!targetHeader || !targetHeader.parentElement) return;
 
@@ -6564,7 +6564,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    商店内增加假设单位成本，优化交易所页面的提示信息
+        // @changelog    修复前任高管按钮丢失问题
 
         fetch(scriptUrl)
             .then(res => res.text())
