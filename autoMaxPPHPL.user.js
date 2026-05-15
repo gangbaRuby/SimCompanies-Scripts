@@ -234,7 +234,7 @@
                 </div>
 
                 <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
-                    <tr style="color: ${isDark?'#aaa':'#888'};"><th align="left">职位</th><th>COO点数</th><th>CMO点数</th></tr>
+                    <tr style="color: ${isDark ? '#aaa' : '#888'};"><th align="left">职位</th><th>COO点数</th><th>CMO点数</th></tr>
                     <tr height="35"><td>COO</td><td><input id="sc-calc-o-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-o-cmo" type="number" style="${inputStyle}"></td></tr>
                     <tr height="35"><td style="color:#9c27b0">COO学徒</td><td><input id="sc-calc-v-coo" type="number" style="${inputStyle}"></td><td align="center">-</td></tr>
                     <tr height="35"><td>CFO</td><td><input id="sc-calc-f-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-f-cmo" type="number" style="${inputStyle}"></td></tr>
@@ -1426,7 +1426,7 @@
             document.querySelectorAll('.sc-info-link').forEach(a => { a.style.color = linkColor; });
             const infoDiv = panelElement?.querySelector('.SimcompaniesRetailCalculation-panel-content > div:last-child');
             if (infoDiv) {
-                infoDiv.style.cssText = `margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:${d?'#ccc':'#666'};border-top:1px solid ${d?'#555':'#ddd'};`;
+                infoDiv.style.cssText = `margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:${d ? '#ccc' : '#666'};border-top:1px solid ${d ? '#555' : '#ddd'};`;
             }
             panelThemeInited = true;
         };
@@ -1565,8 +1565,8 @@
                 top: 50px;
                 width: min(450px, 90vw);
                 max-height: 70vh;
-                background: ${dMp?'#222':'#fff'};
-                color: ${dMp?'#eee':'#333'};
+                background: ${dMp ? '#222' : '#fff'};
+                color: ${dMp ? '#eee' : '#333'};
                 padding: 12px;
                 border-radius: 6px;
                 box-shadow: 0 0 15px rgba(0,0,0,0.3);
@@ -1579,21 +1579,21 @@
                 user-select: none;
                 display: flex;
                 flex-direction: column;
-                border: 1px solid ${dMp?'#444':'#ddd'};
+                border: 1px solid ${dMp ? '#444' : '#ddd'};
               `;
                 // header
                 const header = document.createElement('div');
                 header.style.cssText = `
                 cursor: move;
                 padding: 6px 10px;
-                background: ${dMp?'#111':'#f0f0f0'};
+                background: ${dMp ? '#111' : '#f0f0f0'};
                 border-radius: 6px 6px 0 0;
                 font-weight: bold;
                 user-select: none;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                color: ${dMp?'#eee':'#333'};
+                color: ${dMp ? '#eee' : '#333'};
               `;
                 const title = document.createElement('div');
                 title.textContent = `MP-?% - 点合同时利润降序，点公司跳转私信`;
@@ -1605,23 +1605,23 @@
                 closeBtn.style.cssText = `
                 cursor: pointer;
                 font-weight: bold;
-                color: ${dMp?'#aaa':'#888'};
+                color: ${dMp ? '#aaa' : '#888'};
                 user-select: none;
                 margin-left: 10px;
               `;
-                closeBtn.onmouseenter = () => (closeBtn.style.color = dMp?'#fff':'#333');
-                closeBtn.onmouseleave = () => (closeBtn.style.color = dMp?'#aaa':'#888');
+                closeBtn.onmouseenter = () => (closeBtn.style.color = dMp ? '#fff' : '#333');
+                closeBtn.onmouseleave = () => (closeBtn.style.color = dMp ? '#aaa' : '#888');
                 closeBtn.onclick = () => (box.style.display = 'none');
                 header.appendChild(closeBtn);
                 box.appendChild(header);
 
                 // 输入区
                 const inputWrapper = document.createElement('div');
-                inputWrapper.style.cssText = `display: flex; align-items: center; gap: 8px; margin: 10px 0; color: ${dMp?'#eee':'#333'}; font-weight: bold;`;
+                inputWrapper.style.cssText = `display: flex; align-items: center; gap: 8px; margin: 10px 0; color: ${dMp ? '#eee' : '#333'}; font-weight: bold;`;
 
                 inputWrapper.innerHTML = `
                 <span style="flex: 0 0 auto;">MP-</span>
-                <input id="mp-percent-input" type="number" min="0" step="0.1" value="${inputPercent}" style="background: ${dMp?'#2c3e50':'#e8f0fe'}; color: ${dMp?'#fff':'#333'}; width: 40px; border: 1px solid ${dMp?'#555':'#bbb'};">
+                <input id="mp-percent-input" type="number" min="0" step="0.1" value="${inputPercent}" style="background: ${dMp ? '#2c3e50' : '#e8f0fe'}; color: ${dMp ? '#fff' : '#333'}; width: 40px; border: 1px solid ${dMp ? '#555' : '#bbb'};">
                 <span style="flex: 0 0 auto;">% 输入负数为直接减去</span>
                 <button id="mp-calc-btn" style="background: #2196F3; color: white; flex: 0 0 auto; margin-left: 12px; cursor: pointer;">计算</button>
               `;
@@ -1636,7 +1636,7 @@
                   line-height: 28px;
                   overflow: hidden;
                   margin-top: 8px;
-                  color: ${dMp?'#eee':'#333'};
+                  color: ${dMp ? '#eee' : '#333'};
                   white-space: nowrap;
                   text-overflow: ellipsis;
                 `;
@@ -1902,7 +1902,7 @@
         const DEFAULT_BUTTON_CLASS = 'btn btn-secondary';
 
         // --- 目标元素选择器 ---
-        const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center'; //前者生产，后者零售
+        const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center'; //前者生产，后者零售 如果自定义运行时长不显示，则需要检查css是否更改
         const PROCESSED_DATA_ATTRIBUTE = 'data-custom-amount-added';
 
         function isAutoAmountEnabled() {
@@ -2027,7 +2027,7 @@
                 element.addEventListener('mouseenter', () => element.style.backgroundColor = hoverColor);
                 element.addEventListener('mouseleave', () => element.style.backgroundColor = normalColor);
             };
-            applyHoverStyle(cancelButton, isDark?'#555':'#e0e0e0', isDark?'#444':'#ccc');
+            applyHoverStyle(cancelButton, isDark ? '#555' : '#e0e0e0', isDark ? '#444' : '#ccc');
             applyHoverStyle(saveButton, '#5cb85c', '#4cae4c');
         }
 
@@ -2325,14 +2325,14 @@
         const createTable = (list) => {
             const d = DM();
             const table = document.createElement("table");
-            table.style.cssText = `border-collapse:collapse;margin:10px 0;background:${d?'#333':'#f9f9f9'};color:${d?'white':'#333'};font-size:13px;width:100%;`;
+            table.style.cssText = `border-collapse:collapse;margin:10px 0;background:${d ? '#333' : '#f9f9f9'};color:${d ? 'white' : '#333'};font-size:13px;width:100%;`;
 
             const thead = document.createElement("thead");
             const headerRow = document.createElement("tr");
             ["物品", "质量", "饱和度"].forEach(text => {
                 const th = document.createElement("th");
                 th.textContent = text;
-                th.style.cssText = `border:1px solid ${d?'#666':'#ccc'};padding:4px 8px;`;
+                th.style.cssText = `border:1px solid ${d ? '#666' : '#ccc'};padding:4px 8px;`;
                 headerRow.appendChild(th);
             });
             thead.appendChild(headerRow);
@@ -2345,7 +2345,7 @@
                 [name, item.quality ?? "-", String(item.saturation)].forEach(text => {
                     const td = document.createElement("td");
                     td.textContent = text;
-                    td.style.cssText = `border:1px solid ${d?'#666':'#ccc'};padding:4px 8px;text-align:center;`;
+                    td.style.cssText = `border:1px solid ${d ? '#666' : '#ccc'};padding:4px 8px;text-align:center;`;
                     row.appendChild(td);
                 });
                 tbody.appendChild(row);
@@ -2370,7 +2370,7 @@
                 saturationTableElement = document.createElement("div");
                 saturationTableElement.style.cssText = `
                 position:fixed; left:10px; top:50px; z-index:9998;
-                background:${d?'#2c2c2c':'#fff'}; color:${d?'#fff':'#333'}; padding:12px;
+                background:${d ? '#2c2c2c' : '#fff'}; color:${d ? '#fff' : '#333'}; padding:12px;
                 border-radius:8px; max-height:400px; overflow:auto;
                 box-shadow:0 4px 15px rgba(0,0,0,0.5); font-family:Arial, sans-serif;
             `;
@@ -2378,8 +2378,8 @@
                 // 2. 创建头部信息
                 const headerInfo = document.createElement("div");
                 headerInfo.innerHTML = `
-                <div style="margin-bottom:6px; font-size:14px; font-weight:bold; color:${d?'#f1c40f':'#b8860b'};">天气速度加成: ${weatherMultiplier}</div>
-                <div style="margin-bottom:6px; font-size:13px; color:${d?'#ddd':'#666'};">查询历史饱和度: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">点击查看</a></div>
+                <div style="margin-bottom:6px; font-size:14px; font-weight:bold; color:${d ? '#f1c40f' : '#b8860b'};">天气速度加成: ${weatherMultiplier}</div>
+                <div style="margin-bottom:6px; font-size:13px; color:${d ? '#ddd' : '#666'};">查询历史饱和度: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">点击查看</a></div>
             `;
 
                 // 3. 关闭按钮
@@ -2770,7 +2770,7 @@
                     const profitDisplay = document.createElement('div');
                     profitDisplay.className = 'auto-profit-display';
                     profitDisplay.textContent = `等待计算...`;
-                    profitDisplay.style = `margin-top: 5px; font-size: 14px; color: ${d?'#fff':'#333'}; background: ${d?'#555':'#e0e0e0'}; padding: 4px 8px; text-align: center; border-radius: 4px;`;
+                    profitDisplay.style = `margin-top: 5px; font-size: 14px; color: ${d ? '#fff' : '#333'}; background: ${d ? '#555' : '#e0e0e0'}; padding: 4px 8px; text-align: center; border-radius: 4px;`;
 
                     // 自定义成本输入框
                     const customCostInput = document.createElement('input');
@@ -2779,7 +2779,7 @@
                     customCostInput.placeholder = '假设单位成本';
                     customCostInput.min = '0';
                     customCostInput.step = '0.01';
-                    customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid ${d?'#555':'#bbb'}; border-radius: 4px; background: ${d?'#333':'#fff'}; color: ${d?'#fff':'#333'}; font-size: 13px; box-sizing: border-box;`;
+                    customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid ${d ? '#555' : '#bbb'}; border-radius: 4px; background: ${d ? '#333' : '#fff'}; color: ${d ? '#fff' : '#333'}; font-size: 13px; box-sizing: border-box;`;
 
                     // --- 提取核心发送逻辑 ---
                     // 这样按钮点击能用，后续重试也能用
@@ -3111,7 +3111,7 @@
             // 如果连一行数据都没有，显示空状态
             if (rawRows.length === 0) {
                 const simContent = document.getElementById('sc-sim-content');
-                if (simContent) simContent.innerHTML = `<div style="color:${DM()?'#888':'#777'};font-size:12px;text-align:center;padding:8px;">暂无订单数据</div>`;
+                if (simContent) simContent.innerHTML = `<div style="color:${DM() ? '#888' : '#777'};font-size:12px;text-align:center;padding:8px;">暂无订单数据</div>`;
                 return;
             }
 
@@ -3269,8 +3269,8 @@
 
                 simContent.innerHTML = `
                     <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r?'#444':'#ddd'}; padding-bottom: 6px;">
-                            <span style="color: ${d7r?'#aaa':'#777'}; font-size: 12px;">${displayTitle}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: 6px;">
+                            <span style="color: ${d7r ? '#aaa' : '#777'}; font-size: 12px;">${displayTitle}</span>
                             <span style="font-size: 20px; font-weight: bold; color: ${borderColor};">$${avgStr}<span style="font-size:12px; font-weight:normal;">/h</span></span>
                         </div>
 
@@ -3281,11 +3281,11 @@
                                 ${statusText}
                             </div>
 
-                            <div style="background: ${d7r?'#333':'#e8e8e8'}; color: ${d7r?'#ccc':'#555'}; padding: 2px 6px; border-radius: 4px;">
+                            <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: 2px 6px; border-radius: 4px;">
                                 💰 总利: $${totalProfitK}k
                             </div>
 
-                            <div style="background: ${d7r?'#333':'#e8e8e8'}; color: ${d7r?'#ccc':'#555'}; padding: 2px 6px; border-radius: 4px;">
+                            <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: 2px 6px; border-radius: 4px;">
                                 ⏱️ 用时: ${durationStr}
                             </div>
                         </div>
@@ -3314,7 +3314,7 @@
                 td.classList.add('auto-profit-info');
                 const span = document.createElement('span');
                 const d7s = DM();
-                span.style.cssText = `display: inline-block; min-width: 60px; font-size: 14px; color: ${d7s?'white':'#333'}; background: ${d7s?'#555':'#e0e0e0'}; padding: 4px 8px; border-radius: 2px;`;
+                span.style.cssText = `display: inline-block; min-width: 60px; font-size: 14px; color: ${d7s ? 'white' : '#333'}; background: ${d7s ? '#555' : '#e0e0e0'}; padding: 4px 8px; border-radius: 2px;`;
 
                 // 存储显示文案到 dataset 方便切换按钮使用
                 span.dataset.p = `时利润：${profitStr}`;
@@ -3459,23 +3459,24 @@
                     // 3. 提取 Realm ID
                     extractRealmIdOnce(tbody);
 
-                    // 4. 插入 UI 元素 — 固定 CSS 类名 .css-rnlot4 是表单外层容器（大小屏幕均存在）
-                    const formContainer = form.closest('.css-rnlot4') || form.closest('.css-1b1lwg7');
+                    // 4. 插入 UI 元素 — 通过 DOM 层级向上查找容器，避免依赖固定 CSS 类名
+                    const formParent = form.parentElement;
+                    const container = formParent?.parentElement?.parentElement;
 
-                    if (formContainer && formContainer.parentNode && !formContainer.parentNode.querySelector('[data-custom-notice]')) {
+                    if (container && !container.querySelector('[data-custom-notice]')) {
                         // 扫货模拟面板：固定头部（提示+按钮）+ 动态结果区
                         const d7 = DM();
                         summaryDisplay = document.createElement('div');
-                        summaryDisplay.style.cssText = `background: ${d7?'#222':'#f9f9f9'}; padding: 12px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #4CAF50; min-height: 40px; color: ${d7?'#efefef':'#333'};`;
+                        summaryDisplay.style.cssText = `background: ${d7 ? '#222' : '#f9f9f9'}; padding: 12px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #4CAF50; min-height: 40px; color: ${d7 ? '#efefef' : '#333'};`;
                         summaryDisplay.dataset.customNotice = 'true';
 
                         // 固定头部行
                         const infoHeader = document.createElement('div');
-                        infoHeader.style.cssText = `display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid ${d7?'#444':'#ddd'};`;
+                        infoHeader.style.cssText = `display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid ${d7 ? '#444' : '#ddd'};`;
 
                         const infoText = document.createElement('span');
                         infoText.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。所有展示内容均为1级建筑。';
-                        infoText.style.cssText = `font-size: 11px; color: ${d7?'#888':'#777'}; flex: 1 1 auto; min-width: 150px;`;
+                        infoText.style.cssText = `font-size: 11px; color: ${d7 ? '#888' : '#777'}; flex: 1 1 auto; min-width: 150px;`;
 
                         const toggleBtn = document.createElement('button');
                         toggleBtn.type = 'button';
@@ -3518,10 +3519,10 @@
                         // 动态结果区（由 renderUI 填充）
                         const simContent = document.createElement('div');
                         simContent.id = 'sc-sim-content';
-                        simContent.innerHTML = `<div style="color:${d7?'#888':'#777'};font-size:12px;text-align:center;padding:8px;">等待数据加载…</div>`;
+                        simContent.innerHTML = `<div style="color:${d7 ? '#888' : '#777'};font-size:12px;text-align:center;padding:8px;">等待数据加载…</div>`;
                         summaryDisplay.appendChild(simContent);
 
-                        formContainer.after(summaryDisplay);
+                        container.appendChild(summaryDisplay);
 
                         // 标记已完成注入
                         form.setAttribute('data-market-calc-initialized', 'true');
@@ -4045,12 +4046,12 @@
                 displayText += `<span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
                 // 如有备注（如"参考Q1价"），追加在百分比后面
                 if (mpNotes) {
-                    displayText += `<span style="color:${dMpNote?'#aaa':'#777'};font-size:0.85em;">(${mpNotes})</span>`;
+                    displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
                 }
             } else if (mpNotes) {
                 // 仅有备注无计算结果（市场无对应品质）
                 if (displayText) displayText += ' |';
-                displayText += `<span style="color:${dMpNote?'#aaa':'#777'};">${mpNotes}</span>`;
+                displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};">${mpNotes}</span>`;
             }
 
             if (!displayText) {
@@ -4964,7 +4965,7 @@
 
             const header = document.createElement("div");
             header.textContent = (isOpen ? '▼ ' : '▶ ') + title;
-            header.style.cssText = `cursor:pointer;font-weight:bold;padding:6px;background:${d12t?'#444':'#e8e8e8'};border-radius:4px;user-select:none;color:${d12t?'white':'#333'};`;
+            header.style.cssText = `cursor:pointer;font-weight:bold;padding:6px;background:${d12t ? '#444' : '#e8e8e8'};border-radius:4px;user-select:none;color:${d12t ? 'white' : '#333'};`;
             header.addEventListener("click", () => {
                 const isHidden = contentElement.style.display === "none";
                 contentElement.style.display = isHidden ? "block" : "none";
@@ -5328,8 +5329,8 @@
                 height: ${isMobile ? '50vh' : '350px'};
                 max-height: 80%;
                 overflow: hidden;
-                background: ${d12?'#222':'#fff'};
-                color: ${d12?'white':'#333'};
+                background: ${d12 ? '#222' : '#fff'};
+                color: ${d12 ? 'white' : '#333'};
                 padding: 10px;
                 z-index: 9998;
                 border-radius: 6px;
@@ -5368,14 +5369,14 @@
                 headerTitle.textContent = isCollapsed ? '未来衰减量 ▸' : '未来衰减量 ▾';
             });
             header.style.cssText = `
-                background: ${d12?'#444':'#e0e0e0'};
+                background: ${d12 ? '#444' : '#e0e0e0'};
                 padding: 8px 10px;
                 font-weight: bold;
                 border-top-left-radius: 6px;
                 border-top-right-radius: 6px;
                 flex-shrink: 0;
                 position: relative;
-                color: ${d12?'white':'#333'};
+                color: ${d12 ? 'white' : '#333'};
                 ${isMobile ? '' : 'cursor: move;'}
             `;
 
@@ -5387,7 +5388,7 @@
                 margin-right: 6px;
                 background: transparent;
                 border: none;
-                color: ${d12?'white':'#333'};
+                color: ${d12 ? 'white' : '#333'};
                 font-size: 16px;
                 cursor: pointer;
                 user-select: none;
@@ -5416,7 +5417,7 @@
                 top: 6px;
                 background: transparent;
                 border: none;
-                color: ${d12?'white':'#333'};
+                color: ${d12 ? 'white' : '#333'};
                 font-size: 16px;
                 cursor: pointer;
                 user-select: none;
@@ -5888,8 +5889,8 @@
         const getCompanyLink = (realm, name) => `https://www.simcompanies.com/company/${realm}/${encodeURIComponent(name)}/`;
 
         function getValidTargetContainer() {
-            const TARGET_BUTTON_CLASS = 'css-1r3lxky';
-            const PARENT_CONTAINER_CLASS = 'css-1flj9lk';
+            const TARGET_BUTTON_CLASS = 'css-1r3lxky'; //调查雇主按钮
+            const PARENT_CONTAINER_CLASS = 'css-1flj9lk'; //包含调查雇主按钮的父级容器
             const btn = document.querySelector(`button.${TARGET_BUTTON_CLASS}`);
             if (btn && btn.parentElement && btn.parentElement.classList.contains(PARENT_CONTAINER_CLASS)) {
                 return btn.parentElement;
@@ -5905,7 +5906,7 @@
             const d14 = DM();
             const panel = document.createElement('div');
             panel.id = 'sc-plugin-panel';
-            const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14?'#2c2c2c':'#f2f2f2'}; border: 1px solid ${d14?'#555':'#d1d1d1'}; color: ${d14?'#efefef':'#333'};`;
+            const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14 ? '#2c2c2c' : '#f2f2f2'}; border: 1px solid ${d14 ? '#555' : '#d1d1d1'}; color: ${d14 ? '#efefef' : '#333'};`;
 
             let contentHtml = "";
             if (isError) {
@@ -5951,11 +5952,11 @@
 
                     return `
                     <div style="padding:4px 0; border-bottom:1px solid ${border1}; ${isCurrent ? 'background: ' + bg3 + ';' : ''}">
-                        <span style="color:${d14?'#ccc':'#444'}; font-size:14px;">
+                        <span style="color:${d14 ? '#ccc' : '#444'}; font-size:14px;">
                             ${isCurrent ? '⭐ ' : ''}在
                             <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a>
                             担任 <b>${w.daysActive}</b> 天的 <b>${posName}</b>
-                            ${isCurrent ? ` <span style="color:${d14?'#81c784':'#2e7d32'}; font-size:14px;">(当前所在职位)</span>` : ''}
+                            ${isCurrent ? ` <span style="color:${d14 ? '#81c784' : '#2e7d32'}; font-size:14px;">(当前所在职位)</span>` : ''}
                         </span>
                     </div>`;
                 }).join('') || '无从业记录';
@@ -5963,29 +5964,29 @@
                 // 3. 当前培训状态
                 const currentTrainingStatus = data.currentTraining
                     ? `<b style="color:${linkColor};">${trainingNameMap(data.currentTraining.training)}</b>`
-                    : `<span style="color:${d14?'#888':'#999'};">当前无培训</span>`;
+                    : `<span style="color:${d14 ? '#888' : '#999'};">当前无培训</span>`;
 
                 contentHtml = `
-                <div style="font-weight:bold; border-bottom:1px solid ${d14?'#555':'#ccc'}; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">高管解析 <span style="color:${d14?'#aaa':'#888'}; font-size:14px; font-weight:normal;">高管名字: ${data.name}  ID: ${data.id}</span></div>
+                <div style="font-weight:bold; border-bottom:1px solid ${d14 ? '#555' : '#ccc'}; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">高管解析 <span style="color:${d14 ? '#aaa' : '#888'}; font-size:14px; font-weight:normal;">高管名字: ${data.name}  ID: ${data.id}</span></div>
 
-                <div style="font-size:14px; font-weight:bold; color:${d14?'#bbb':'#666'}; margin-bottom:4px;">📊 目前培训技能总和 <span style="font-weight:normal; color:${d14?'#aaa':'#888'};">(已完成 ${trainings.length} 次)</span></div>
+                <div style="font-size:14px; font-weight:bold; color:${d14 ? '#bbb' : '#666'}; margin-bottom:4px;">📊 目前培训技能总和 <span style="font-weight:normal; color:${d14 ? '#aaa' : '#888'};">(已完成 ${trainings.length} 次)</span></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
-                    <div style="background:${d14?'#3a3a3a':'#e6e6e6'}; padding:4px 8px; border:1px solid ${d14?'#444':'#ddd'};">管理: <b style="color:${d14?'#ef5350':'#d32f2f'};">+${total.coo}</b></div>
-                    <div style="background:${d14?'#3a3a3a':'#e6e6e6'}; padding:4px 8px; border:1px solid ${d14?'#444':'#ddd'};">会计: <b style="color:${d14?'#ef5350':'#d32f2f'};">+${total.cfo}</b></div>
-                    <div style="background:${d14?'#3a3a3a':'#e6e6e6'}; padding:4px 8px; border:1px solid ${d14?'#444':'#ddd'};">沟通: <b style="color:${d14?'#ef5350':'#d32f2f'};">+${total.cmo}</b></div>
-                    <div style="background:${d14?'#3a3a3a':'#e6e6e6'}; padding:4px 8px; border:1px solid ${d14?'#444':'#ddd'};">科学: <b style="color:${d14?'#ef5350':'#d32f2f'};">+${total.cto}</b></div>
+                    <div style="background:${d14 ? '#3a3a3a' : '#e6e6e6'}; padding:4px 8px; border:1px solid ${d14 ? '#444' : '#ddd'};">管理: <b style="color:${d14 ? '#ef5350' : '#d32f2f'};">+${total.coo}</b></div>
+                    <div style="background:${d14 ? '#3a3a3a' : '#e6e6e6'}; padding:4px 8px; border:1px solid ${d14 ? '#444' : '#ddd'};">会计: <b style="color:${d14 ? '#ef5350' : '#d32f2f'};">+${total.cfo}</b></div>
+                    <div style="background:${d14 ? '#3a3a3a' : '#e6e6e6'}; padding:4px 8px; border:1px solid ${d14 ? '#444' : '#ddd'};">沟通: <b style="color:${d14 ? '#ef5350' : '#d32f2f'};">+${total.cmo}</b></div>
+                    <div style="background:${d14 ? '#3a3a3a' : '#e6e6e6'}; padding:4px 8px; border:1px solid ${d14 ? '#444' : '#ddd'};">科学: <b style="color:${d14 ? '#ef5350' : '#d32f2f'};">+${total.cto}</b></div>
                 </div>
                 <div style="font-size:14px; margin-bottom:10px; padding-left:2px;">
-                    <span style="color:${d14?'#bbb':'#666'};">进行中：</span>${currentTrainingStatus}
+                    <span style="color:${d14 ? '#bbb' : '#666'};">进行中：</span>${currentTrainingStatus}
                 </div>
 
-                <div style="font-size:14px; font-weight:bold; color:${d14?'#bbb':'#666'}; margin-bottom:4px;">💼 从业履历</div>
-                <div style="max-height:100px; overflow-y:auto; background:${d14?'#333':'#fff'}; border:1px solid ${d14?'#444':'#ddd'}; padding:4px; margin-bottom:10px; font-size:14px;">${workHistoryHtml}</div>
+                <div style="font-size:14px; font-weight:bold; color:${d14 ? '#bbb' : '#666'}; margin-bottom:4px;">💼 从业履历</div>
+                <div style="max-height:100px; overflow-y:auto; background:${d14 ? '#333' : '#fff'}; border:1px solid ${d14 ? '#444' : '#ddd'}; padding:4px; margin-bottom:10px; font-size:14px;">${workHistoryHtml}</div>
 
-                <div style="font-size:14px; font-weight:bold; color:${d14?'#bbb':'#666'}; margin-bottom:4px;">🎓 详细培训历史</div>
-                <div style="max-height:100px; overflow-y:auto; background:${d14?'#333':'#fff'}; border:1px solid ${d14?'#444':'#ddd'}; padding:4px; font-size:14px;">${historyHtml}</div>
+                <div style="font-size:14px; font-weight:bold; color:${d14 ? '#bbb' : '#666'}; margin-bottom:4px;">🎓 详细培训历史</div>
+                <div style="max-height:100px; overflow-y:auto; background:${d14 ? '#333' : '#fff'}; border:1px solid ${d14 ? '#444' : '#ddd'}; padding:4px; font-size:14px;">${historyHtml}</div>
 
-                <div style="margin-top:10px; padding:8px; background-color:${d14?'#3a2020':'#fff5f5'}; border:1px solid ${d14?'#5a3030':'#ffcccc'}; border-radius:4px; font-size:14px; color:${d14?'#ef5350':'#c62828'}; line-height:1.4;">
+                <div style="margin-top:10px; padding:8px; background-color:${d14 ? '#3a2020' : '#fff5f5'}; border:1px solid ${d14 ? '#5a3030' : '#ffcccc'}; border-radius:4px; font-size:14px; color:${d14 ? '#ef5350' : '#c62828'}; line-height:1.4;">
                     <b>⚠️请注意：</b><br>
                     1. 本功能为插件功能，<b>请勿在游戏内聊天室提及</b>。<br>
                     2. 若在发送通知前点开高管，则可能导致此次挖人数据不显示。<br>
@@ -6119,7 +6120,7 @@
             style.id = 'sc-module15-styles';
             style.textContent = `
             @keyframes sc-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-            .sc-spinner { border: 3px solid ${d15s?'#444':'#f3f3f3'}; border-top: 3px solid #2196f3; border-radius: 50%; width: 30px; height: 30px; animation: sc-spin 1s linear infinite; margin: 0 auto 10px auto; }
+            .sc-spinner { border: 3px solid ${d15s ? '#444' : '#f3f3f3'}; border-top: 3px solid #2196f3; border-radius: 50%; width: 30px; height: 30px; animation: sc-spin 1s linear infinite; margin: 0 auto 10px auto; }
             .sc-modal-btn { margin-left: auto; padding: 6px 12px; background-color: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: all 0.2s; }
             .sc-modal-btn:hover { background-color: #1976d2; transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
         `;
@@ -6177,19 +6178,19 @@
             const d15 = DM();
             const modal = document.createElement('div');
             modal.style.cssText = `
-            background: ${d15?'#1e1e1e':'#fff'}; border-radius: 8px; width: 450px; max-width: 90vw;
+            background: ${d15 ? '#1e1e1e' : '#fff'}; border-radius: 8px; width: 450px; max-width: 90vw;
             max-height: 85vh; overflow-y: auto; padding: 20px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.2); position: relative;
             font-family: sans-serif; transform: scale(0.95); transition: transform 0.2s ease-in-out;
-            color: ${d15?'#efefef':'#333'};
+            color: ${d15 ? '#efefef' : '#333'};
         `;
 
             // 初始显示加载状态
             modal.innerHTML = `
             <div style="display:flex; justify-content:flex-end;">
-                <button id="sc-modal-close-temp" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15?'#aaa':'#999'}; line-height:1;">&times;</button>
+                <button id="sc-modal-close-temp" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15 ? '#aaa' : '#999'}; line-height:1;">&times;</button>
             </div>
-            <div style="text-align:center; padding: 30px 20px; color:${d15?'#bbb':'#666'};">
+            <div style="text-align:center; padding: 30px 20px; color:${d15 ? '#bbb' : '#666'};">
                 <div class="sc-spinner"></div>
                 <div>正在调取高管档案...</div>
             </div>
@@ -6319,29 +6320,29 @@
                         if (t.skillCfo) details.push(`会计+${t.skillCfo}`);
                         if (t.skillCmo) details.push(`沟通+${t.skillCmo}`);
                         if (t.skillCto) details.push(`科学+${t.skillCto}`);
-                        const detailStr = details.length > 0 ? `<span style="color:${d15r?'#999':'#777'}; margin-left:4px;">(${details.join(' ')})</span>` : '';
+                        const detailStr = details.length > 0 ? `<span style="color:${d15r ? '#999' : '#777'}; margin-left:4px;">(${details.join(' ')})</span>` : '';
                         const cUrl = getCompanyLink(t.employer.realmId ?? currentRealm, t.employer.company);
                         return `<div style="padding:6px 0; border-bottom:1px dashed ${modalBorder1}; color:${modalFg2}; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
-                    }).join('') || `<div style="color:${d15r?'#888':'#999'}; text-align:center; padding:10px;">无历史培训记录</div>`;
+                    }).join('') || `<div style="color:${d15r ? '#888' : '#999'}; text-align:center; padding:10px;">无历史培训记录</div>`;
 
                     const workHistoryHtml = data.workHistory?.map(w => {
                         const isCurrent = !w.end;
                         const cUrl = getCompanyLink(w.employer.realmId ?? currentRealm, w.employer.company);
                         const posName = positionMap(w.position);
                         return `
-                    <div style="padding:8px 0; border-bottom:1px solid ${modalBorder1}; ${isCurrent ? 'background: ' + (d15r?'#1a1a2e':'#eef7ff') + '; padding-left:5px; border-left:3px solid #2196f3;' : ''}">
-                        <span style="color:${d15r?'#ccc':'#444'}; font-size:14px;">
+                    <div style="padding:8px 0; border-bottom:1px solid ${modalBorder1}; ${isCurrent ? 'background: ' + (d15r ? '#1a1a2e' : '#eef7ff') + '; padding-left:5px; border-left:3px solid #2196f3;' : ''}">
+                        <span style="color:${d15r ? '#ccc' : '#444'}; font-size:14px;">
                             ${isCurrent ? '⭐ ' : ''}在
                             <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a>
                             担任 <b>${w.daysActive}</b> 天的 <b>${posName}</b>
-                            ${isCurrent ? ` <span style="color:${d15r?'#81c784':'#2e7d32'}; font-size:13px;">(当前所在职位)</span>` : ''}
+                            ${isCurrent ? ` <span style="color:${d15r ? '#81c784' : '#2e7d32'}; font-size:13px;">(当前所在职位)</span>` : ''}
                         </span>
                     </div>`;
-                    }).join('') || `<div style="color:${d15r?'#888':'#999'}; text-align:center; padding:10px;">无从业记录</div>`;
+                    }).join('') || `<div style="color:${d15r ? '#888' : '#999'}; text-align:center; padding:10px;">无从业记录</div>`;
 
                     const currentTrainingStatus = data.currentTraining
                         ? `<b style="color:${linkColor};">${trainingNameMap(data.currentTraining.training)}</b>`
-                        : `<span style="color:${d15r?'#888':'#999'};">当前无培训</span>`;
+                        : `<span style="color:${d15r ? '#888' : '#999'};">当前无培训</span>`;
 
                     // 替换弹窗内容为真实数据
                     modal.innerHTML = `
@@ -6350,22 +6351,22 @@
                             <h3 style="margin:0 0 4px 0; font-size:18px; color:${modalFg};">${data.name}</h3>
                             <div style="color:${modalFg3}; font-size:12px;">高管ID: ${data.id}</div>
                         </div>
-                        <button id="sc-modal-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15r?'#aaa':'#999'}; line-height:1; padding:0 0 5px 10px;">&times;</button>
+                        <button id="sc-modal-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15r ? '#aaa' : '#999'}; line-height:1; padding:0 0 5px 10px;">&times;</button>
                     </div>
 
                     <div style="font-size:14px; font-weight:bold; color:${modalFg2}; margin-bottom:8px;">📊 培训技能总计 <span style="font-weight:normal; color:${modalFg3}; font-size:12px;">(完成 ${trainings.length} 次)</span></div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
                         <div style="background:${modalBg1}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBorder2}; display:flex; justify-content:space-between;">
-                            <span style="color:${modalFg4};">管理:</span> <b style="color:${d15r?'#ef5350':'#d32f2f'};">+${total.coo}</b>
+                            <span style="color:${modalFg4};">管理:</span> <b style="color:${d15r ? '#ef5350' : '#d32f2f'};">+${total.coo}</b>
                         </div>
                         <div style="background:${modalBg1}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBorder2}; display:flex; justify-content:space-between;">
-                            <span style="color:${modalFg4};">会计:</span> <b style="color:${d15r?'#ef5350':'#d32f2f'};">+${total.cfo}</b>
+                            <span style="color:${modalFg4};">会计:</span> <b style="color:${d15r ? '#ef5350' : '#d32f2f'};">+${total.cfo}</b>
                         </div>
                         <div style="background:${modalBg1}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBorder2}; display:flex; justify-content:space-between;">
-                            <span style="color:${modalFg4};">沟通:</span> <b style="color:${d15r?'#ef5350':'#d32f2f'};">+${total.cmo}</b>
+                            <span style="color:${modalFg4};">沟通:</span> <b style="color:${d15r ? '#ef5350' : '#d32f2f'};">+${total.cmo}</b>
                         </div>
                         <div style="background:${modalBg1}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBorder2}; display:flex; justify-content:space-between;">
-                            <span style="color:${modalFg4};">科学:</span> <b style="color:${d15r?'#ef5350':'#d32f2f'};">+${total.cto}</b>
+                            <span style="color:${modalFg4};">科学:</span> <b style="color:${d15r ? '#ef5350' : '#d32f2f'};">+${total.cto}</b>
                         </div>
                     </div>
                     <div style="font-size:14px; margin-bottom:20px; background:${modalBg2}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBg2border};">
@@ -6386,12 +6387,12 @@
                     const d15e = DM();
                     modal.innerHTML = `
                     <div style="display:flex; justify-content:flex-end;">
-                        <button id="sc-modal-close-err" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15e?'#aaa':'#999'}; line-height:1;">&times;</button>
+                        <button id="sc-modal-close-err" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15e ? '#aaa' : '#999'}; line-height:1;">&times;</button>
                     </div>
                     <div style="text-align:center; padding: 30px 20px;">
-                        <div style="color:${d15e?'#ef5350':'#d32f2f'}; font-size:40px; margin-bottom:10px;">⚠️</div>
-                        <div style="color:${d15e?'#ef5350':'#d32f2f'}; font-weight:bold; margin-bottom:15px;">档案调取失败</div>
-                        <div style="color:${d15e?'#bbb':'#666'}; font-size:14px;">网络可能开小差了，请稍后重试。</div>
+                        <div style="color:${d15e ? '#ef5350' : '#d32f2f'}; font-size:40px; margin-bottom:10px;">⚠️</div>
+                        <div style="color:${d15e ? '#ef5350' : '#d32f2f'}; font-weight:bold; margin-bottom:15px;">档案调取失败</div>
+                        <div style="color:${d15e ? '#bbb' : '#666'}; font-size:14px;">网络可能开小差了，请稍后重试。</div>
                     </div>
                 `;
                     document.getElementById('sc-modal-close-err').onclick = closeModal;
@@ -6401,13 +6402,10 @@
         // --- DOM 注入逻辑 ---
         function injectMoreInfoButtons() {
             if (!isPageModuleEnabled('formerExecEnhance')) return;
-            const headers = Array.from(document.querySelectorAll('h3'));
-            const targetHeader = headers.find(h => h.textContent.includes('前任高管'));
+            // 直接通过前任高管行CSS类名查找，避免依赖文字匹配（兼容多语言）
+            const rows = document.querySelectorAll('.css-19er0v9'); //前任高管行css
+            if (rows.length === 0) return;
 
-            if (!targetHeader || !targetHeader.parentElement) return;
-
-            const container = targetHeader.parentElement;
-            const rows = container.querySelectorAll('.css-19er0v9');
             const storedExecs = load("SC-former-executives");
 
             if (storedExecs.length === 0) return;
@@ -6559,7 +6557,7 @@
 
         // --- UI 注入逻辑 ---
         function injectSaveButton() {
-            const container = document.querySelector('.css-1wne25x');
+            const container = document.querySelector('.css-1wne25x'); //会议室css
             if (!container) return;
 
             const targetHeader = container.querySelector('h3');
@@ -6646,7 +6644,7 @@
             /* 展开后的卡片样式 */
             .sc-update-toast.expanded {
                 border-radius: 12px; padding: 20px; width: 400px;
-                background: ${dUp?'#1e1e1e':'#ffffff'}; color: ${dUp?'#efefef':'#333'}; cursor: default;
+                background: ${dUp ? '#1e1e1e' : '#ffffff'}; color: ${dUp ? '#efefef' : '#333'}; cursor: default;
                 border-top: 5px solid #2196F3;
             }
 
@@ -6661,11 +6659,11 @@
             /* 右上角关闭按钮 */
             .sc-update-close {
                 position: absolute; top: 10px; right: 12px;
-                display: none; cursor: pointer; font-size: 20px; color: ${dUp?'#aaa':'#999'};
+                display: none; cursor: pointer; font-size: 20px; color: ${dUp ? '#aaa' : '#999'};
                 line-height: 1; padding: 5px;
             }
             .sc-update-toast.expanded .sc-update-close { display: block; }
-            .sc-update-close:hover { color: ${dUp?'#ccc':'#333'}; }
+            .sc-update-close:hover { color: ${dUp ? '#ccc' : '#333'}; }
 
             /* 内容区域 */
             .sc-update-body {
@@ -6676,9 +6674,9 @@
             }
 
             .sc-changelog-box {
-                background: ${dUp?'#2a2a2a':'#f5f7f9'}; padding: 12px; border-radius: 6px;
-                margin: 10px 0; color: ${dUp?'#ccc':'#555'}; font-size: 13px;
-                border-left: 3px solid ${dUp?'#555':'#ddd'}; max-height: 150px; overflow-y: auto;
+                background: ${dUp ? '#2a2a2a' : '#f5f7f9'}; padding: 12px; border-radius: 6px;
+                margin: 10px 0; color: ${dUp ? '#ccc' : '#555'}; font-size: 13px;
+                border-left: 3px solid ${dUp ? '#555' : '#ddd'}; max-height: 150px; overflow-y: auto;
             }
 
             /* 底部按钮区域 */
@@ -6687,8 +6685,8 @@
             }
             .sc-btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: bold; }
             .sc-btn-primary { background: #2196F3; color: white; }
-            .sc-btn-link { background: transparent; color: ${dUp?'#aaa':'#999'}; text-decoration: underline; padding: 8px 0; }
-            .sc-btn-link:hover { color: ${dUp?'#ccc':'#666'}; }
+            .sc-btn-link { background: transparent; color: ${dUp ? '#aaa' : '#999'}; text-decoration: underline; padding: 8px 0; }
+            .sc-btn-link:hover { color: ${dUp ? '#ccc' : '#666'}; }
         `;
         document.head.appendChild(style);
 
@@ -6701,7 +6699,7 @@
             <div class="sc-update-body">
                 <p style="margin:0; font-weight:bold;">更新日志：</p>
                 <div class="sc-changelog-box">${changelog.replace(/\n/g, '<br>') || '修复已知问题，优化性能。'}</div>
-                <p style="font-size: 11px; color: ${dUp?'#aaa':'#999'}; margin: 10px 0;">
+                <p style="font-size: 11px; color: ${dUp ? '#aaa' : '#999'}; margin: 10px 0;">
                     提示：忽略后将不再提示此版本。
                 </p>
                 <div class="sc-update-actions">
@@ -6752,7 +6750,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    暂时修复交易所深浅模式匹配问题
+        // @changelog    自定义运行时长支持更多格式，为所有样式增加深色浅色模式
 
         fetch(scriptUrl)
             .then(res => res.text())
