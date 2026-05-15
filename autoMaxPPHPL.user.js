@@ -24,6 +24,37 @@
     };
 
     // ======================
+    // 全局深色/浅色模式检测
+    // ======================
+    const isDarkMode = () => {
+        const bg = window.getComputedStyle(document.body).backgroundColor;
+        const sum = (bg.match(/\d+/g) || []).map(Number).reduce((a, b) => a + b, 0);
+        return sum < 380;
+    };
+    // 深色/浅色主题预设色板
+    const DM = () => isDarkMode();
+    const theme = {
+        get bg() { return DM() ? '#1e1e1e' : '#ffffff'; },
+        get bg2() { return DM() ? '#2c2c2c' : '#f5f5f5'; },
+        get bg3() { return DM() ? '#333333' : '#e8e8e8'; },
+        get bg4() { return DM() ? '#444444' : '#dddddd'; },
+        get bg5() { return DM() ? '#222222' : '#fafafa'; },
+        get fg() { return DM() ? '#efefef' : '#333333'; },
+        get fg2() { return DM() ? '#cccccc' : '#555555'; },
+        get fg3() { return DM() ? '#aaaaaa' : '#777777'; },
+        get fg4() { return DM() ? '#aaaaaa' : '#666666'; },   // 提升浅色对比度 #999→#666
+        get border() { return DM() ? '#555555' : '#cccccc'; },
+        get border2() { return DM() ? '#444444' : '#dddddd'; },
+        get inputBg() { return DM() ? '#222222' : '#ffffff'; },
+        get inputFg() { return DM() ? '#efefef' : '#333333'; },
+        get toastBg() { return DM() ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)'; },
+        get toastFg() { return DM() ? '#efefef' : '#333333'; },
+        get dangerFg() { return '#d32f2f'; },                  // 统一使用较深红色，避免依赖颜色区分
+        get successFg() { return '#2e7d32'; },                 // 统一使用较深绿色
+        get accent() { return '#2196F3'; },
+    };
+
+    // ======================
     // 计算用到的函数
     // ======================
     let zn, lwe; //使用SimcompaniesConstantsData内数据
@@ -203,7 +234,7 @@
                 </div>
 
                 <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
-                    <tr style="color: #888;"><th align="left">职位</th><th>COO点数</th><th>CMO点数</th></tr>
+                    <tr style="color: ${isDark?'#aaa':'#888'};"><th align="left">职位</th><th>COO点数</th><th>CMO点数</th></tr>
                     <tr height="35"><td>COO</td><td><input id="sc-calc-o-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-o-cmo" type="number" style="${inputStyle}"></td></tr>
                     <tr height="35"><td style="color:#9c27b0">COO学徒</td><td><input id="sc-calc-v-coo" type="number" style="${inputStyle}"></td><td align="center">-</td></tr>
                     <tr height="35"><td>CFO</td><td><input id="sc-calc-f-coo" type="number" style="${inputStyle}"></td><td><input id="sc-calc-f-cmo" type="number" style="${inputStyle}"></td></tr>
@@ -986,9 +1017,10 @@
             constants: '基本'
         };
 
-        // 插入样式
+        // 插入样式（使用CSS变量，在面板首次打开时由refreshPanelTheme动态更新）
         const injectStyles = () => {
             const style = document.createElement('style');
+            style.id = 'sc-panel-dynamic-styles';
             style.textContent = `
             .SimcompaniesRetailCalculation-mini-panel {
                 position: fixed;
@@ -1016,11 +1048,12 @@
                 position: absolute;
                 bottom: 40px;
                 left: 0;
-                background: rgba(40,40,40,0.95);
+                background: var(--sc-panel-bg, rgba(40,40,40,0.95));
                 border-radius: 4px;
                 padding: 8px;
                 min-width: 260px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                color: var(--sc-panel-fg, #efefef);
             }
             .SimcompaniesRetailCalculation-data-row {
                 margin: 6px 0;
@@ -1030,7 +1063,7 @@
                 align-items: center;
             }
             .SimcompaniesRetailCalculation-region-label {
-                color: #BDBDBD;
+                color: var(--sc-panel-label, #BDBDBD);
                 min-width: 70px;
             }
             .SimcompaniesRetailCalculation-region-status {
@@ -1344,16 +1377,16 @@
             );
             secondaryMenu.appendChild(secBtnGroup);
 
-            // 插件信息区块
+            // 插件信息区块（初始用默认暗色，首次打开面板时refreshPanelTheme更新为正确主题色）
             const info = document.createElement('div');
-            info.style.cssText = 'margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:#ccc;border-top:1px solid #555;';
+            info.style.cssText = `margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:#ccc;border-top:1px solid #555;`;
 
             const version = GM_info?.script?.version || '未知版本';
 
             info.innerHTML = `
-                作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" style="color:#6cf;">Rabbit House</a> 反馈请说明问题<br>
+                作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" class="sc-info-link">Rabbit House</a> 反馈请说明问题<br>
                 反馈群：798670333 <br>
-                源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" style="color:#6cf;">GitHub</a> ⭐🙇<br>
+                源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" class="sc-info-link">GitHub</a> ⭐🙇<br>
                 版本：<span id="script-version">${version}</span>
             `;
 
@@ -1381,6 +1414,23 @@
         };
 
         // 切换面板可见性
+        let panelThemeInited = false;
+        const refreshPanelTheme = () => {
+            const d = DM();
+            const root = document.documentElement;
+            root.style.setProperty('--sc-panel-bg', d ? 'rgba(40,40,40,0.95)' : 'rgba(255,255,255,0.98)');
+            root.style.setProperty('--sc-panel-fg', d ? '#efefef' : '#333');
+            root.style.setProperty('--sc-panel-label', d ? '#BDBDBD' : '#666');
+            // 更新信息区和链接色（首次打开面板时DM()才准确）
+            const linkColor = d ? '#6cf' : '#2196F3';
+            document.querySelectorAll('.sc-info-link').forEach(a => { a.style.color = linkColor; });
+            const infoDiv = panelElement?.querySelector('.SimcompaniesRetailCalculation-panel-content > div:last-child');
+            if (infoDiv) {
+                infoDiv.style.cssText = `margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:${d?'#ccc':'#666'};border-top:1px solid ${d?'#555':'#ddd'};`;
+            }
+            panelThemeInited = true;
+        };
+
         const togglePanel = (e) => {
             e.stopPropagation();
             const content = panelElement.querySelector('.SimcompaniesRetailCalculation-panel-content');
@@ -1389,6 +1439,7 @@
             content.style.display = isCurrentlyVisible ? 'none' : 'block';
 
             if (!isCurrentlyVisible) {
+                if (!panelThemeInited) refreshPanelTheme();
                 content.classList.remove('show-settings');
                 // 如果面板是打开的，刷新状态
                 refreshStatus();
@@ -1505,6 +1556,7 @@
                     return;
                 }
 
+                const dMp = DM();
                 box = document.createElement('div');
                 box.id = 'mp-floating-box';
                 box.style.cssText = `
@@ -1513,11 +1565,11 @@
                 top: 50px;
                 width: min(450px, 90vw);
                 max-height: 70vh;
-                background: #222;
-                color: #eee;
+                background: ${dMp?'#222':'#fff'};
+                color: ${dMp?'#eee':'#333'};
                 padding: 12px;
                 border-radius: 6px;
-                box-shadow: 0 0 15px rgba(0,0,0,0.7);
+                box-shadow: 0 0 15px rgba(0,0,0,0.3);
                 z-index: 9998;
                 overflow: hidden;
                 font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -1527,19 +1579,21 @@
                 user-select: none;
                 display: flex;
                 flex-direction: column;
+                border: 1px solid ${dMp?'#444':'#ddd'};
               `;
                 // header
                 const header = document.createElement('div');
                 header.style.cssText = `
                 cursor: move;
                 padding: 6px 10px;
-                background: #111;
+                background: ${dMp?'#111':'#f0f0f0'};
                 border-radius: 6px 6px 0 0;
                 font-weight: bold;
                 user-select: none;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
+                color: ${dMp?'#eee':'#333'};
               `;
                 const title = document.createElement('div');
                 title.textContent = `MP-?% - 点合同时利润降序，点公司跳转私信`;
@@ -1551,23 +1605,23 @@
                 closeBtn.style.cssText = `
                 cursor: pointer;
                 font-weight: bold;
-                color: #aaa;
+                color: ${dMp?'#aaa':'#888'};
                 user-select: none;
                 margin-left: 10px;
               `;
-                closeBtn.onmouseenter = () => (closeBtn.style.color = '#fff');
-                closeBtn.onmouseleave = () => (closeBtn.style.color = '#aaa');
+                closeBtn.onmouseenter = () => (closeBtn.style.color = dMp?'#fff':'#333');
+                closeBtn.onmouseleave = () => (closeBtn.style.color = dMp?'#aaa':'#888');
                 closeBtn.onclick = () => (box.style.display = 'none');
                 header.appendChild(closeBtn);
                 box.appendChild(header);
 
                 // 输入区
                 const inputWrapper = document.createElement('div');
-                inputWrapper.style.cssText = 'display: flex; align-items: center; gap: 8px; margin: 10px 0; color: #eee; font-weight: bold;';
+                inputWrapper.style.cssText = `display: flex; align-items: center; gap: 8px; margin: 10px 0; color: ${dMp?'#eee':'#333'}; font-weight: bold;`;
 
                 inputWrapper.innerHTML = `
                 <span style="flex: 0 0 auto;">MP-</span>
-                <input id="mp-percent-input" type="number" min="0" step="0.1" value="${inputPercent}" style="background: #2c3e50; color: #fff; width: 40px;">
+                <input id="mp-percent-input" type="number" min="0" step="0.1" value="${inputPercent}" style="background: ${dMp?'#2c3e50':'#e8f0fe'}; color: ${dMp?'#fff':'#333'}; width: 40px; border: 1px solid ${dMp?'#555':'#bbb'};">
                 <span style="flex: 0 0 auto;">% 输入负数为直接减去</span>
                 <button id="mp-calc-btn" style="background: #2196F3; color: white; flex: 0 0 auto; margin-left: 12px; cursor: pointer;">计算</button>
               `;
@@ -1582,7 +1636,7 @@
                   line-height: 28px;
                   overflow: hidden;
                   margin-top: 8px;
-                  color: #eee;
+                  color: ${dMp?'#eee':'#333'};
                   white-space: nowrap;
                   text-overflow: ellipsis;
                 `;
@@ -1907,30 +1961,53 @@
 
             document.getElementById(modalId)?.remove();
 
-            const modalHtml = `
-                <div id="${modalId}" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;justify-content:center;align-items:flex-start;padding-top:5vh;box-sizing:border-box;">
-                    <div style="background:#333;color:#EEE;padding:0;border-radius:6px;box-shadow:0 5px 15px rgba(0,0,0,0.5);width:90%;max-width:450px;border:1px solid #555;">
-                        <div style="padding:15px;border-bottom:1px solid #555;">
-                            <h4 style="margin:0;font-size:18px;font-weight:600;">设置自定义数量/时长</h4>
-                        </div>
-                        <div style="padding:15px;">
-                            <p style="margin-top:0;margin-bottom:15px;font-size:14px;">
-                                请输入自定义数量或运行时长，使用<strong style="color:#FF8888;">逗号（, 或 ，）</strong>分隔，你可以在插件菜单中禁用此功能。你可以通过输入“am”，“pm”，“hr”和“m”来快捷决定生产数量。例如: 10pm, 2hr, 30m，11:4am,5:14,字母不区分大小写，半角全角均可。
-                            </p>
-                            <textarea id="autoamount-config-input"
-                                style="width:100%;height:80px;margin-bottom:20px;padding:8px;border:1px solid #666;border-radius:4px;box-sizing:border-box;font-size:14px;color:#EEE;background:#2C2C2C;resize:vertical;">
-                            </textarea>
-                            <div style="display:flex;justify-content:flex-end;gap:10px;">
-                                <button id="autoamount-config-cancel" style="background-color:#555;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;font-size:14px;transition:background-color 0.2s;">取消</button>
-                                <button id="autoamount-config-save" style="background-color:#5cb85c;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;font-size:14px;transition:background-color 0.2s;">保存</button>
-                            </div>
+            // 自适应深色/浅色模式
+            const bgSum = (window.getComputedStyle(document.body).backgroundColor.match(/\d+/g) || [])
+                .map(Number).reduce((a, b) => a + b, 0);
+            const isDark = bgSum < 380;
+            const bg = isDark ? '#333' : '#fff';
+            const fg = isDark ? '#EEE' : '#333';
+            const border = isDark ? '#555' : '#ccc';
+            const inputBg = isDark ? '#2C2C2C' : '#f5f5f5';
+            const inputFg = isDark ? '#EEE' : '#333';
+            const inputBorder = isDark ? '#666' : '#bbb';
+            const codeBg = isDark ? '#444' : '#e8e8e8';
+            const codeFg = isDark ? '#ffb74d' : '#c62828';
+            const overlayBg = 'rgba(0,0,0,0.7)';
+            const shadow = '0 5px 15px rgba(0,0,0,0.5)';
+            const btnCancelBg = isDark ? '#555' : '#e0e0e0';
+            const btnCancelFg = isDark ? 'white' : '#333';
+
+            const modal = document.createElement('div');
+            modal.id = modalId;
+            modal.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:${overlayBg};z-index:99999;display:flex;justify-content:center;align-items:flex-start;padding-top:5vh;box-sizing:border-box;`;
+
+            modal.innerHTML = `
+                <div style="background:${bg};color:${fg};padding:0;border-radius:6px;box-shadow:${shadow};width:90%;max-width:450px;border:1px solid ${border};">
+                    <div style="padding:15px;border-bottom:1px solid ${border};">
+                        <h4 style="margin:0;font-size:18px;font-weight:600;">设置自定义数量/时长</h4>
+                    </div>
+                    <div style="padding:15px;">
+                        <p style="margin-top:0;margin-bottom:15px;font-size:14px;line-height:1.6;">
+                            使用<strong style="color:#FF8888;">逗号（, 或 ，）</strong>分隔，可在插件菜单中禁用此功能。支持格式：<br>
+                            • 时间点：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">10pm</code>、<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">11:30</code> → 今晚/明天该时刻的分钟数<br>
+                            • 明天时刻：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">+14:13</code>、<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">+2pm</code> → 强制明天该时刻<br>
+                            • 明天时长：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">+11h11m</code> → 24小时 + 指定时长<br>
+                            • 持续时间：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">1d12h30m</code> → 累加为总分钟<br>
+                            字母不区分大小写，半角全角均可。
+                        </p>
+                        <textarea id="autoamount-config-input"
+                            style="width:100%;height:80px;margin-bottom:20px;padding:8px;border:1px solid ${inputBorder};border-radius:4px;box-sizing:border-box;font-size:14px;color:${inputFg};background:${inputBg};resize:vertical;"></textarea>
+                        <div style="display:flex;justify-content:flex-end;gap:10px;">
+                            <button id="autoamount-config-cancel" style="background-color:${btnCancelBg};color:${btnCancelFg};border:none;padding:8px 15px;border-radius:4px;cursor:pointer;font-size:14px;transition:background-color 0.2s;">取消</button>
+                            <button id="autoamount-config-save" style="background-color:#5cb85c;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;font-size:14px;transition:background-color 0.2s;">保存</button>
                         </div>
                     </div>
                 </div>
             `;
 
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = document.getElementById(modalId);
+            document.body.appendChild(modal);
+
             const inputElement = document.getElementById('autoamount-config-input');
             const saveButton = document.getElementById('autoamount-config-save');
             const cancelButton = document.getElementById('autoamount-config-cancel');
@@ -1942,7 +2019,6 @@
                 const newString = inputElement.value;
                 const normalizedString = newString.replace(/，/g, ',');
                 const newAmounts = normalizedString.split(',').map(s => s.trim()).filter(s => s.length > 0);
-
                 saveCustomAmounts(newAmounts);
                 modal.remove();
             });
@@ -1951,7 +2027,7 @@
                 element.addEventListener('mouseenter', () => element.style.backgroundColor = hoverColor);
                 element.addEventListener('mouseleave', () => element.style.backgroundColor = normalColor);
             };
-            applyHoverStyle(cancelButton, '#555555', '#444444');
+            applyHoverStyle(cancelButton, isDark?'#555':'#e0e0e0', isDark?'#444':'#ccc');
             applyHoverStyle(saveButton, '#5cb85c', '#4cae4c');
         }
 
@@ -2068,58 +2144,117 @@
         function getCalculatedAmount(amountString) {
             const today = new Date();
 
-            // --- 步骤 1: 预处理和归一化 ---
-            // 1.1 替换全角冒号为半角冒号，以处理 '22：12'
-            const normalizedString = amountString.replace(/：/g, ':');
+            // --- 步骤 1: 全角字符归一化 ---
+            let s = amountString
+                .replace(/：/g, ':')
+                .replace(/，/g, ',')
+                // 全角大写字母 → 半角
+                .replace(/[Ａ-Ｚ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+                // 全角小写字母 → 半角
+                .replace(/[ａ-ｚ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+                // 全角数字 → 半角
+                .replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+                .trim();
+            const lower = s.toLowerCase();
 
-            // 1.2 匹配模式:
-            // ^(\d{1,2})  - 匹配 1-2 位数字作为小时 (Group 1)
-            // :           - 匹配冒号
-            // (\d{2})     - 匹配 2 位数字作为分钟 (Group 2)
-            // \s* - 匹配零个或多个空格
-            // (a(m)|p(m))? - 可选地匹配 am/pm (不区分大小写，使用 i 标志，Group 3/4/5 捕获 am/pm)
-            // $           - 匹配行尾
-            const timeMatch = normalizedString.match(/^(\d{1,2}):(\d{1,2})\s*(am|pm)?$/i);
-            // 注意：这里使用了 i 标志（不区分大小写）
-
-            if (timeMatch) {
-                // timeMatch[1] = 小时 (e.g., '8', '22')
-                // timeMatch[2] = 分钟 (e.g., '30', '12')
-                // timeMatch[3] = am/pm 字符串 (e.g., 'am', 'PM', undefined)
-
-                let hours = parseInt(timeMatch[1], 10);
-                const minutes = parseInt(timeMatch[2], 10);
-                // 使用 timeMatch[3] 并转为小写，确保判断的一致性
-                const ampm = timeMatch[3] ? timeMatch[3].toLowerCase() : undefined;
-
-                // 1. 处理 AM/PM
-                if (ampm === 'pm' && hours !== 12) {
-                    hours += 12;
-                } else if (ampm === 'am' && hours === 12) {
-                    hours = 0; // 午夜 12am 是 0 小时
-                }
-
-                // 2. 构造目标时间 (今天的)
+            // --- 步骤 2: +HH:MM am/pm 格式 (强制明天时刻, 如 "+14:13", "+11:30pm") ---
+            const plusTimeMatch = lower.match(/^\+(\d{1,2}):(\d{1,2})\s*(am|pm)?$/);
+            if (plusTimeMatch) {
+                let hours = parseInt(plusTimeMatch[1], 10);
+                const minutes = parseInt(plusTimeMatch[2], 10);
+                const ampm = plusTimeMatch[3];
+                if (ampm === 'pm' && hours !== 12) hours += 12;
+                else if (ampm === 'am' && hours === 12) hours = 0;
+                // 以今天 HH:MM 为基准，强制 +24h 到明天
                 const targetTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
-
-                // 3. 计算时间差
-                let timeDifferenceMs = targetTime.getTime() - today.getTime();
-
-                // 如果目标时间在过去，则计算到明天的同一时间
-                if (timeDifferenceMs < 0) {
-                    // 加一天（24小时）
-                    timeDifferenceMs += 24 * 60 * 60 * 1000;
-                }
-
-                // 转换为分钟，并向下取整 (Floor)，确保不会超期
-                const minutesUntilTarget = Math.floor(timeDifferenceMs / (1000 * 60));
-
-                // 返回符合游戏格式的字符串
-                return `${minutesUntilTarget}m`;
+                const diffMs = targetTime.getTime() - today.getTime() + 24 * 60 * 60 * 1000;
+                return `${Math.floor(diffMs / 60000)}m`;
             }
 
-            // 如果不是特殊时间格式，则原样返回
-            return amountString;
+            // --- 步骤 2b: +HH am/pm (如 "+2pm") 或 +持续时间 (如 "+11h11m") ---
+            if (lower.startsWith('+')) {
+                const rest = lower.slice(1);
+                // 先尝试 +HH am/pm
+                const plusAmpmMatch = rest.match(/^(\d{1,2})\s*(am|pm)$/);
+                if (plusAmpmMatch) {
+                    let hours = parseInt(plusAmpmMatch[1], 10);
+                    const ampm = plusAmpmMatch[2];
+                    if (ampm === 'pm' && hours !== 12) hours += 12;
+                    else if (ampm === 'am' && hours === 12) hours = 0;
+                    const targetTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, 0, 0, 0);
+                    const diffMs = targetTime.getTime() - today.getTime() + 24 * 60 * 60 * 1000;
+                    return `${Math.floor(diffMs / 60000)}m`;
+                }
+                // 再尝试 +持续时间
+                const durPattern = /(\d+\.?\d*)\s*([dhm])/gi;
+                let totalMinutes = 0;
+                let durMatch;
+                let hasDuration = false;
+                while ((durMatch = durPattern.exec(rest)) !== null) {
+                    hasDuration = true;
+                    const val = parseFloat(durMatch[1]);
+                    const unit = durMatch[2].toLowerCase();
+                    if (unit === 'd') totalMinutes += val * 1440;
+                    else if (unit === 'h') totalMinutes += val * 60;
+                    else if (unit === 'm') totalMinutes += val;
+                }
+                if (hasDuration) {
+                    totalMinutes += 1440; // +24h
+                    return `${Math.floor(totalMinutes)}m`;
+                }
+            }
+
+            // --- 步骤 3: HH:MM am/pm 格式 (时间点) ---
+            const timeMatch = lower.match(/^(\d{1,2}):(\d{1,2})\s*(am|pm)?$/);
+            if (timeMatch) {
+                let hours = parseInt(timeMatch[1], 10);
+                const minutes = parseInt(timeMatch[2], 10);
+                const ampm = timeMatch[3];
+                if (ampm === 'pm' && hours !== 12) hours += 12;
+                else if (ampm === 'am' && hours === 12) hours = 0;
+                const targetTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
+                let diffMs = targetTime.getTime() - today.getTime();
+                if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000;
+                return `${Math.floor(diffMs / 60000)}m`;
+            }
+
+            // --- 步骤 4: 独立 HH am/pm (无冒号, 如 "10pm") ---
+            const standaloneAmpm = lower.match(/^(\d{1,2})\s*(am|pm)$/);
+            if (standaloneAmpm) {
+                let hours = parseInt(standaloneAmpm[1], 10);
+                const ampm = standaloneAmpm[2];
+                if (ampm === 'pm' && hours !== 12) hours += 12;
+                else if (ampm === 'am' && hours === 12) hours = 0;
+                const targetTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, 0, 0, 0);
+                let diffMs = targetTime.getTime() - today.getTime();
+                if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000;
+                return `${Math.floor(diffMs / 60000)}m`;
+            }
+
+            // --- 步骤 5: 持续时间格式 d/h/m (支持中英文, 如 "1d23.97h48m", "2天3小时30分") ---
+            // 匹配: 数字(可含小数点) + 可选空格 + 单位(d/h/m/天/时/分/钟)
+            const durPattern = /(\d+\.?\d*)\s*([dhm])/gi;
+            let totalMinutes = 0;
+            let durMatch;
+            let hasDuration = false;
+            while ((durMatch = durPattern.exec(lower)) !== null) {
+                hasDuration = true;
+                const val = parseFloat(durMatch[1]);
+                const unit = durMatch[2].toLowerCase();
+                if (unit === 'd') {
+                    totalMinutes += val * 1440;            // 天 → 分钟
+                } else if (unit === 'h') {
+                    totalMinutes += val * 60;              // 小时 → 分钟
+                } else if (unit === 'm') {
+                    totalMinutes += val;                   // 分钟
+                }
+            }
+            if (hasDuration) {
+                return `${Math.floor(totalMinutes)}m`;
+            }
+
+            // --- 步骤 6: 无法识别, 原样返回 (如纯数字当作数量) ---
+            return s;
         }
 
         function observeCardsForAutoAmount() {
@@ -2188,15 +2323,16 @@
 
         // 构建表格内容
         const createTable = (list) => {
+            const d = DM();
             const table = document.createElement("table");
-            table.style.cssText = "border-collapse:collapse;margin:10px 0;background:#333;color:white;font-size:13px;width:100%;";
+            table.style.cssText = `border-collapse:collapse;margin:10px 0;background:${d?'#333':'#f9f9f9'};color:${d?'white':'#333'};font-size:13px;width:100%;`;
 
             const thead = document.createElement("thead");
             const headerRow = document.createElement("tr");
             ["物品", "质量", "饱和度"].forEach(text => {
                 const th = document.createElement("th");
                 th.textContent = text;
-                th.style.cssText = "border:1px solid #666;padding:4px 8px;";
+                th.style.cssText = `border:1px solid ${d?'#666':'#ccc'};padding:4px 8px;`;
                 headerRow.appendChild(th);
             });
             thead.appendChild(headerRow);
@@ -2209,7 +2345,7 @@
                 [name, item.quality ?? "-", String(item.saturation)].forEach(text => {
                     const td = document.createElement("td");
                     td.textContent = text;
-                    td.style.cssText = "border:1px solid #666;padding:4px 8px;text-align:center;";
+                    td.style.cssText = `border:1px solid ${d?'#666':'#ccc'};padding:4px 8px;text-align:center;`;
                     row.appendChild(td);
                 });
                 tbody.appendChild(row);
@@ -2226,6 +2362,7 @@
                     return;
                 }
 
+                const d = DM();
                 const list = data.ResourcesRetailInfo;
                 const weatherMultiplier = data.sellingSpeedMultiplier.sellingSpeedMultiplier;
 
@@ -2233,7 +2370,7 @@
                 saturationTableElement = document.createElement("div");
                 saturationTableElement.style.cssText = `
                 position:fixed; left:10px; top:50px; z-index:9998;
-                background:#2c2c2c; color:#fff; padding:12px;
+                background:${d?'#2c2c2c':'#fff'}; color:${d?'#fff':'#333'}; padding:12px;
                 border-radius:8px; max-height:400px; overflow:auto;
                 box-shadow:0 4px 15px rgba(0,0,0,0.5); font-family:Arial, sans-serif;
             `;
@@ -2241,8 +2378,8 @@
                 // 2. 创建头部信息
                 const headerInfo = document.createElement("div");
                 headerInfo.innerHTML = `
-                <div style="margin-bottom:6px; font-size:14px; font-weight:bold; color:#f1c40f;">天气速度加成: ${weatherMultiplier}</div>
-                <div style="margin-bottom:6px; font-size:13px; color:#ddd;">查询历史饱和度: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">点击查看</a></div>
+                <div style="margin-bottom:6px; font-size:14px; font-weight:bold; color:${d?'#f1c40f':'#b8860b'};">天气速度加成: ${weatherMultiplier}</div>
+                <div style="margin-bottom:6px; font-size:13px; color:${d?'#ddd':'#666'};">查询历史饱和度: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">点击查看</a></div>
             `;
 
                 // 3. 关闭按钮
@@ -2337,6 +2474,7 @@
         function showToast(message, type = 'error') {
             let toast = document.getElementById('auto-pricing-toast');
             if (!toast) {
+                const d = DM();
                 toast = document.createElement('div');
                 toast.id = 'auto-pricing-toast';
                 toast.style = `
@@ -2344,8 +2482,8 @@
                     top: 20px;
                     left: 50%;
                     transform: translateX(-50%);
-                    background: rgba(0,0,0,0.9);
-                    color: white;
+                    background: ${d ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)'};
+                    color: ${d ? '#efefef' : '#333'};
                     padding: 12px 20px;
                     border-radius: 8px;
                     z-index: 10000;
@@ -2561,6 +2699,8 @@
                 每级时利润: ${hourlyProfit.toFixed(2)}
             `;
             profitDisplay.style.background = '#4CAF50'; // 绿色表示成功
+            profitDisplay.style.color = 'white';
+            profitDisplay.style.fontWeight = 'bold';
 
             btn.textContent = '最大时利润';
             btn.disabled = false;
@@ -2579,7 +2719,8 @@
                         // console.log(`[修正重试 ${retryCount + 1}/3] 数量已更新为: ${newQty}，重新发起计算...`);
 
                         profitDisplay.style.background = '#2196F3'; // 蓝色提示正在修正
-                        profitDisplay.textContent = '修正数量中...';
+                        profitDisplay.style.color = 'white';
+                        profitDisplay.innerHTML = '🔄 修正数量中...';
 
                         // ⚠️ 这里的 triggerCalculation 必须在 initAutoPricing 外层定义
                         // 或者通过 card.doAutoCalc(updatedComp, retryCount + 1) 调用
@@ -2590,6 +2731,8 @@
                         }
                     } else {
                         profitDisplay.style.background = '#f44336'; // 最终失败变红
+                        profitDisplay.style.color = 'white';
+                        profitDisplay.innerHTML = '⚠️ 计算偏差过大';
                         showToast("利润计算偏差：建议手动输入具体数量或更新基础数据,依然报错请联系Rabbit House", 'error');
                     }
                 }
@@ -2623,10 +2766,11 @@
                     btn.setAttribute('data-index', index);
                     btn.style = `margin-top: 5px; background: #2196F3; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; width: 100%;`;
 
+                    const d = DM();
                     const profitDisplay = document.createElement('div');
                     profitDisplay.className = 'auto-profit-display';
                     profitDisplay.textContent = `等待计算...`;
-                    profitDisplay.style = `margin-top: 5px; font-size: 14px; color: white; background: gray; padding: 4px 8px; text-align: center; border-radius: 4px;`;
+                    profitDisplay.style = `margin-top: 5px; font-size: 14px; color: ${d?'#fff':'#333'}; background: ${d?'#555':'#e0e0e0'}; padding: 4px 8px; text-align: center; border-radius: 4px;`;
 
                     // 自定义成本输入框
                     const customCostInput = document.createElement('input');
@@ -2635,7 +2779,7 @@
                     customCostInput.placeholder = '假设单位成本';
                     customCostInput.min = '0';
                     customCostInput.step = '0.01';
-                    customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: #fff; font-size: 13px; box-sizing: border-box;`;
+                    customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid ${d?'#555':'#bbb'}; border-radius: 4px; background: ${d?'#333':'#fff'}; color: ${d?'#fff':'#333'}; font-size: 13px; box-sizing: border-box;`;
 
                     // --- 提取核心发送逻辑 ---
                     // 这样按钮点击能用，后续重试也能用
@@ -2967,7 +3111,7 @@
             // 如果连一行数据都没有，显示空状态
             if (rawRows.length === 0) {
                 const simContent = document.getElementById('sc-sim-content');
-                if (simContent) simContent.innerHTML = '<div style="color:#888;font-size:12px;text-align:center;padding:8px;">暂无订单数据</div>';
+                if (simContent) simContent.innerHTML = `<div style="color:${DM()?'#888':'#777'};font-size:12px;text-align:center;padding:8px;">暂无订单数据</div>`;
                 return;
             }
 
@@ -3121,11 +3265,12 @@
                 const simContent = document.getElementById('sc-sim-content');
                 if (!simContent) return;
                 summaryDisplay.style.borderLeft = `4px solid ${borderColor}`;
+                const d7r = DM();
 
                 simContent.innerHTML = `
                     <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 6px;">
-                            <span style="color: #aaa; font-size: 12px;">${displayTitle}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r?'#444':'#ddd'}; padding-bottom: 6px;">
+                            <span style="color: ${d7r?'#aaa':'#777'}; font-size: 12px;">${displayTitle}</span>
                             <span style="font-size: 20px; font-weight: bold; color: ${borderColor};">$${avgStr}<span style="font-size:12px; font-weight:normal;">/h</span></span>
                         </div>
 
@@ -3136,11 +3281,11 @@
                                 ${statusText}
                             </div>
 
-                            <div style="background: #333; color: #ccc; padding: 2px 6px; border-radius: 4px;">
+                            <div style="background: ${d7r?'#333':'#e8e8e8'}; color: ${d7r?'#ccc':'#555'}; padding: 2px 6px; border-radius: 4px;">
                                 💰 总利: $${totalProfitK}k
                             </div>
 
-                            <div style="background: #333; color: #ccc; padding: 2px 6px; border-radius: 4px;">
+                            <div style="background: ${d7r?'#333':'#e8e8e8'}; color: ${d7r?'#ccc':'#555'}; padding: 2px 6px; border-radius: 4px;">
                                 ⏱️ 用时: ${durationStr}
                             </div>
                         </div>
@@ -3168,7 +3313,8 @@
                 const td = document.createElement('td');
                 td.classList.add('auto-profit-info');
                 const span = document.createElement('span');
-                span.style.cssText = `display: inline-block; min-width: 60px; font-size: 14px; color: white; background: #555; padding: 4px 8px; border-radius: 2px;`;
+                const d7s = DM();
+                span.style.cssText = `display: inline-block; min-width: 60px; font-size: 14px; color: ${d7s?'white':'#333'}; background: ${d7s?'#555':'#e0e0e0'}; padding: 4px 8px; border-radius: 2px;`;
 
                 // 存储显示文案到 dataset 方便切换按钮使用
                 span.dataset.p = `时利润：${profitStr}`;
@@ -3318,28 +3464,31 @@
 
                     if (formContainer && formContainer.parentNode && !formContainer.parentNode.querySelector('[data-custom-notice]')) {
                         // 扫货模拟面板：固定头部（提示+按钮）+ 动态结果区
+                        const d7 = DM();
                         summaryDisplay = document.createElement('div');
-                        summaryDisplay.style.cssText = "background: #222; padding: 12px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #4CAF50; min-height: 40px;";
+                        summaryDisplay.style.cssText = `background: ${d7?'#222':'#f9f9f9'}; padding: 12px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #4CAF50; min-height: 40px; color: ${d7?'#efefef':'#333'};`;
                         summaryDisplay.dataset.customNotice = 'true';
 
                         // 固定头部行
                         const infoHeader = document.createElement('div');
-                        infoHeader.style.cssText = "display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #444;";
+                        infoHeader.style.cssText = `display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid ${d7?'#444':'#ddd'};`;
 
                         const infoText = document.createElement('span');
                         infoText.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。所有展示内容均为1级建筑。';
-                        infoText.style.cssText = "font-size: 11px; color: #888; flex: 1 1 auto; min-width: 150px;";
+                        infoText.style.cssText = `font-size: 11px; color: ${d7?'#888':'#777'}; flex: 1 1 auto; min-width: 150px;`;
 
                         const toggleBtn = document.createElement('button');
                         toggleBtn.type = 'button';
                         toggleBtn.id = 'sc-custom-toggle-wrapper';
-                        toggleBtn.style.cssText = "font-size: 11px; color: #aaa; background: none; border: 1px solid #555; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;";
+                        const btnBorderColor = d7 ? '#555' : '#bbb';
+                        const btnFgColor = d7 ? '#aaa' : '#666';
+                        toggleBtn.style.cssText = `font-size: 11px; color: ${btnFgColor}; background: none; border: 1px solid ${btnBorderColor}; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;`;
                         const refreshToggleUI = () => {
                             const config = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
                             const isEnabled = config['executiveCustomToggle'] !== undefined ? config['executiveCustomToggle'] : false;
                             toggleBtn.textContent = `自定义：${isEnabled ? '开' : '关'}`;
-                            toggleBtn.style.color = isEnabled ? '#4CAF50' : '#aaa';
-                            toggleBtn.style.borderColor = isEnabled ? '#4CAF50' : '#555';
+                            toggleBtn.style.color = isEnabled ? '#4CAF50' : btnFgColor;
+                            toggleBtn.style.borderColor = isEnabled ? '#4CAF50' : btnBorderColor;
                         };
                         refreshToggleUI();
                         toggleBtn.onclick = (e) => {
@@ -3355,7 +3504,7 @@
                         const btnSettings = document.createElement('button');
                         btnSettings.type = 'button';
                         btnSettings.textContent = "自定义高管数据";
-                        btnSettings.style.cssText = "font-size: 11px; color: #aaa; background: none; border: 1px solid #673ab7; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;";
+                        btnSettings.style.cssText = `font-size: 11px; color: ${btnFgColor}; background: none; border: 1px solid #673ab7; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;`;
                         btnSettings.onclick = (e) => {
                             e.preventDefault();
                             if (typeof executiveCustomButton !== 'undefined') executiveCustomButton.show();
@@ -3369,7 +3518,7 @@
                         // 动态结果区（由 renderUI 填充）
                         const simContent = document.createElement('div');
                         simContent.id = 'sc-sim-content';
-                        simContent.innerHTML = '<div style="color:#888;font-size:12px;text-align:center;padding:8px;">等待数据加载…</div>';
+                        simContent.innerHTML = `<div style="color:${d7?'#888':'#777'};font-size:12px;text-align:center;padding:8px;">等待数据加载…</div>`;
                         summaryDisplay.appendChild(simContent);
 
                         formContainer.after(summaryDisplay);
@@ -3602,10 +3751,10 @@
                     const dataArray = Array.isArray(parsed) ? parsed : parsed.data;
                     // 检查时间戳是否在1分钟内有效
                     if (parsed.timestamp && (Date.now() - parsed.timestamp < 60000)) {
-                        console.log(`[合同-MP] ${key} 缓存命中，共${dataArray.length}条，${Math.floor((Date.now()-parsed.timestamp)/1000)}s前`);
+                        console.log(`[合同-MP] ${key} 缓存命中，共${dataArray.length}条，${Math.floor((Date.now() - parsed.timestamp) / 1000)}s前`);
                         return dataArray;
                     }
-                    console.log(`[合同-MP] ${key} 缓存已过期(${Math.floor((Date.now()-parsed.timestamp)/1000)}s)，重新请求`);
+                    console.log(`[合同-MP] ${key} 缓存已过期(${Math.floor((Date.now() - parsed.timestamp) / 1000)}s)，重新请求`);
                 } catch (e) {
                     console.warn(`[合同-MP] ${key} 缓存解析失败，重新请求`, e);
                 }
@@ -3635,7 +3784,7 @@
                     try {
                         const parsed = JSON.parse(raw);
                         const fallback = Array.isArray(parsed) ? parsed : parsed.data;
-                        console.log(`[合同-MP] ${key} 请求失败，使用${fallback?.length||0}条过期数据`);
+                        console.log(`[合同-MP] ${key} 请求失败，使用${fallback?.length || 0}条过期数据`);
                         return fallback;
                     } catch { }
                 }
@@ -3888,19 +4037,20 @@
 
             // 显示 MP-?% （所有非排除物品）
             const mpNotes = card.__mpNotes || null;
+            const dMpNote = DM();
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
                 if (displayText) displayText += ' |';
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
-                const mpColor = mpPercent < 0 ? 'color:#ff4444;' : '';
+                const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
                 displayText += `<span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
                 // 如有备注（如"参考Q1价"），追加在百分比后面
                 if (mpNotes) {
-                    displayText += `<span style="color:#999;font-size:0.85em;">(${mpNotes})</span>`;
+                    displayText += `<span style="color:${dMpNote?'#aaa':'#777'};font-size:0.85em;">(${mpNotes})</span>`;
                 }
             } else if (mpNotes) {
                 // 仅有备注无计算结果（市场无对应品质）
                 if (displayText) displayText += ' |';
-                displayText += `<span style="color:#999;">${mpNotes}</span>`;
+                displayText += `<span style="color:${dMpNote?'#aaa':'#777'};">${mpNotes}</span>`;
             }
 
             if (!displayText) {
@@ -3931,8 +4081,8 @@
 
                 const tip = document.createElement('div');
                 tip.style.cssText = `
-                    display: flex; 
-                    align-items: end; 
+                    display: flex;
+                    align-items: end;
                 `;
                 tip.dataset.warningText = 'true';
 
@@ -3960,7 +4110,7 @@
                 customBtn.type = 'button';
                 customBtn.textContent = '自定义高管数据';
                 customBtn.style.cssText = `
-                    margin-left: 10px; padding: 4px 12px; background: #2196f3; 
+                    margin-left: 10px; padding: 4px 12px; background: #2196f3;
                     color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
                     font-weight: bold; white-space: nowrap; flex-shrink: 0;
                 `;
@@ -4808,12 +4958,13 @@
         };
 
         const createToggleSection = (title, contentElement, isOpen = true) => {
+            const d12t = DM();
             const section = document.createElement("div");
             section.style.marginBottom = '8px';
 
             const header = document.createElement("div");
             header.textContent = (isOpen ? '▼ ' : '▶ ') + title;
-            header.style.cssText = "cursor:pointer;font-weight:bold;padding:6px;background:#444;border-radius:4px;user-select:none;";
+            header.style.cssText = `cursor:pointer;font-weight:bold;padding:6px;background:${d12t?'#444':'#e8e8e8'};border-radius:4px;user-select:none;color:${d12t?'white':'#333'};`;
             header.addEventListener("click", () => {
                 const isHidden = contentElement.style.display === "none";
                 contentElement.style.display = isHidden ? "block" : "none";
@@ -5165,6 +5316,7 @@
         const init = () => {
             const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
             let resizer;
+            const d12 = DM();
 
             container = document.createElement("div");
             container.id = 'decayDataPanel';
@@ -5176,13 +5328,13 @@
                 height: ${isMobile ? '50vh' : '350px'};
                 max-height: 80%;
                 overflow: hidden;
-                background: #222;
-                color: white;
+                background: ${d12?'#222':'#fff'};
+                color: ${d12?'white':'#333'};
                 padding: 10px;
                 z-index: 9998;
                 border-radius: 6px;
                 font-size: clamp(12px, 1.5vw, 16px);
-                box-shadow: 0 0 10px #000;
+                box-shadow: 0 0 10px rgba(0,0,0,0.5);
                 user-select: none;
                 display: flex;
                 flex-direction: column;
@@ -5216,13 +5368,14 @@
                 headerTitle.textContent = isCollapsed ? '未来衰减量 ▸' : '未来衰减量 ▾';
             });
             header.style.cssText = `
-                background: #444;
+                background: ${d12?'#444':'#e0e0e0'};
                 padding: 8px 10px;
                 font-weight: bold;
                 border-top-left-radius: 6px;
                 border-top-right-radius: 6px;
                 flex-shrink: 0;
                 position: relative;
+                color: ${d12?'white':'#333'};
                 ${isMobile ? '' : 'cursor: move;'}
             `;
 
@@ -5234,7 +5387,7 @@
                 margin-right: 6px;
                 background: transparent;
                 border: none;
-                color: white;
+                color: ${d12?'white':'#333'};
                 font-size: 16px;
                 cursor: pointer;
                 user-select: none;
@@ -5263,7 +5416,7 @@
                 top: 6px;
                 background: transparent;
                 border: none;
-                color: white;
+                color: ${d12?'white':'#333'};
                 font-size: 16px;
                 cursor: pointer;
                 user-select: none;
@@ -5445,7 +5598,7 @@
     (function () {
         let cachedRetailIds = null;
 
-        function getRetailIds() { 
+        function getRetailIds() {
             if (cachedRetailIds) return cachedRetailIds;
             const SCDStr = localStorage.getItem("SimcompaniesConstantsData");
             if (!SCDStr) return new Set();
@@ -5749,15 +5902,30 @@
             const targetContainer = getValidTargetContainer();
             if (!targetContainer || document.getElementById('sc-plugin-panel')) return;
 
+            const d14 = DM();
             const panel = document.createElement('div');
             panel.id = 'sc-plugin-panel';
-            const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: #f2f2f2; border: 1px solid #d1d1d1; color: #333;`;
+            const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14?'#2c2c2c':'#f2f2f2'}; border: 1px solid ${d14?'#555':'#d1d1d1'}; color: ${d14?'#efefef':'#333'};`;
 
             let contentHtml = "";
             if (isError) {
-                contentHtml = `<div style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; padding: 8px; border-radius: 4px; font-size: 14px;">⚠️ <b>匹配失败：</b> 未在通知中找到此次挖人信息。</div>`;
+                const errBg = d14 ? '#3a2e1a' : '#fff3cd';
+                const errFg = d14 ? '#f0c040' : '#856404';
+                const errBorder = d14 ? '#5a4a20' : '#ffeeba';
+                contentHtml = `<div style="color: ${errFg}; background-color: ${errBg}; border: 1px solid ${errBorder}; padding: 8px; border-radius: 4px; font-size: 14px;">` + String.fromCodePoint(9888, 65039) + ` <b>匹配失败：</b> 未在通知中找到此次挖人信息。</div>`;
             } else {
                 const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+                const fg2 = d14 ? '#bbb' : '#555';
+                const fg3 = d14 ? '#999' : '#777';
+                const fg4 = d14 ? '#aaa' : '#888';
+                const border1 = d14 ? '#555' : '#eee';
+                const border2 = d14 ? '#444' : '#ddd';
+                const border3 = d14 ? '#555' : '#ccc';
+                const bg1 = d14 ? '#3a3a3a' : '#e6e6e6';
+                const bg2 = d14 ? '#333' : '#fff';
+                const bg4 = d14 ? '#3a2020' : '#fff5f5';
+                const bg4border = d14 ? '#5a3030' : '#ffcccc';
+                const linkColor = '#2196f3';
 
                 // 1. 详细培训历史
                 let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
@@ -5770,9 +5938,9 @@
                     if (t.skillCfo) details.push(`会计+${t.skillCfo}`);
                     if (t.skillCmo) details.push(`沟通+${t.skillCmo}`);
                     if (t.skillCto) details.push(`科学+${t.skillCto}`);
-                    const detailStr = details.length > 0 ? `<span style="color:#777; margin-left:4px;">(${details.join(' ')})</span>` : '';
+                    const detailStr = details.length > 0 ? `<span style="color:${fg3}; margin-left:4px;">(${details.join(' ')})</span>` : '';
                     const cUrl = getCompanyLink(t.employer.realmId ?? currentRealm, t.employer.company);
-                    return `<div style="padding:2px 0; border-bottom:1px dashed #eee; color:#555; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
+                    return `<div style="padding:2px 0; border-bottom:1px dashed ${border1}; color:${fg2}; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
                 }).join('') || '无历史培训记录';
 
                 // 2. 从业履历
@@ -5782,42 +5950,42 @@
                     const posName = positionMap(w.position);
 
                     return `
-                    <div style="padding:4px 0; border-bottom:1px solid #eee; ${isCurrent ? 'background: #eef7ff;' : ''}">
-                        <span style="color:#444; font-size:14px;">
+                    <div style="padding:4px 0; border-bottom:1px solid ${border1}; ${isCurrent ? 'background: ' + bg3 + ';' : ''}">
+                        <span style="color:${d14?'#ccc':'#444'}; font-size:14px;">
                             ${isCurrent ? '⭐ ' : ''}在
-                            <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a>
+                            <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a>
                             担任 <b>${w.daysActive}</b> 天的 <b>${posName}</b>
-                            ${isCurrent ? ' <span style="color:#2e7d32; font-size:14px;">(当前所在职位)</span>' : ''}
+                            ${isCurrent ? ` <span style="color:${d14?'#81c784':'#2e7d32'}; font-size:14px;">(当前所在职位)</span>` : ''}
                         </span>
                     </div>`;
                 }).join('') || '无从业记录';
 
                 // 3. 当前培训状态
                 const currentTrainingStatus = data.currentTraining
-                    ? `<b style="color:#2196f3;">${trainingNameMap(data.currentTraining.training)}</b>`
-                    : `<span style="color:#999;">当前无培训</span>`;
+                    ? `<b style="color:${linkColor};">${trainingNameMap(data.currentTraining.training)}</b>`
+                    : `<span style="color:${d14?'#888':'#999'};">当前无培训</span>`;
 
                 contentHtml = `
-                <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">高管解析 <span style="color:#888; font-size:14px; font-weight:normal;">高管名字: ${data.name}  ID: ${data.id}</span></div>
+                <div style="font-weight:bold; border-bottom:1px solid ${d14?'#555':'#ccc'}; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">高管解析 <span style="color:${d14?'#aaa':'#888'}; font-size:14px; font-weight:normal;">高管名字: ${data.name}  ID: ${data.id}</span></div>
 
-                <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">📊 目前培训技能总和 <span style="font-weight:normal; color:#888;">(已完成 ${trainings.length} 次)</span></div>
+                <div style="font-size:14px; font-weight:bold; color:${d14?'#bbb':'#666'}; margin-bottom:4px;">📊 目前培训技能总和 <span style="font-weight:normal; color:${d14?'#aaa':'#888'};">(已完成 ${trainings.length} 次)</span></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
-                    <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">管理: <b style="color:#d32f2f;">+${total.coo}</b></div>
-                    <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">会计: <b style="color:#d32f2f;">+${total.cfo}</b></div>
-                    <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">沟通: <b style="color:#d32f2f;">+${total.cmo}</b></div>
-                    <div style="background:#e6e6e6; padding:4px 8px; border:1px solid #ddd;">科学: <b style="color:#d32f2f;">+${total.cto}</b></div>
+                    <div style="background:${d14?'#3a3a3a':'#e6e6e6'}; padding:4px 8px; border:1px solid ${d14?'#444':'#ddd'};">管理: <b style="color:${d14?'#ef5350':'#d32f2f'};">+${total.coo}</b></div>
+                    <div style="background:${d14?'#3a3a3a':'#e6e6e6'}; padding:4px 8px; border:1px solid ${d14?'#444':'#ddd'};">会计: <b style="color:${d14?'#ef5350':'#d32f2f'};">+${total.cfo}</b></div>
+                    <div style="background:${d14?'#3a3a3a':'#e6e6e6'}; padding:4px 8px; border:1px solid ${d14?'#444':'#ddd'};">沟通: <b style="color:${d14?'#ef5350':'#d32f2f'};">+${total.cmo}</b></div>
+                    <div style="background:${d14?'#3a3a3a':'#e6e6e6'}; padding:4px 8px; border:1px solid ${d14?'#444':'#ddd'};">科学: <b style="color:${d14?'#ef5350':'#d32f2f'};">+${total.cto}</b></div>
                 </div>
                 <div style="font-size:14px; margin-bottom:10px; padding-left:2px;">
-                    <span style="color:#666;">进行中：</span>${currentTrainingStatus}
+                    <span style="color:${d14?'#bbb':'#666'};">进行中：</span>${currentTrainingStatus}
                 </div>
 
-                <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">💼 从业履历</div>
-                <div style="max-height:100px; overflow-y:auto; background:#fff; border:1px solid #ddd; padding:4px; margin-bottom:10px; font-size:14px;">${workHistoryHtml}</div>
+                <div style="font-size:14px; font-weight:bold; color:${d14?'#bbb':'#666'}; margin-bottom:4px;">💼 从业履历</div>
+                <div style="max-height:100px; overflow-y:auto; background:${d14?'#333':'#fff'}; border:1px solid ${d14?'#444':'#ddd'}; padding:4px; margin-bottom:10px; font-size:14px;">${workHistoryHtml}</div>
 
-                <div style="font-size:14px; font-weight:bold; color:#666; margin-bottom:4px;">🎓 详细培训历史</div>
-                <div style="max-height:100px; overflow-y:auto; background:#fff; border:1px solid #ddd; padding:4px; font-size:14px;">${historyHtml}</div>
+                <div style="font-size:14px; font-weight:bold; color:${d14?'#bbb':'#666'}; margin-bottom:4px;">🎓 详细培训历史</div>
+                <div style="max-height:100px; overflow-y:auto; background:${d14?'#333':'#fff'}; border:1px solid ${d14?'#444':'#ddd'}; padding:4px; font-size:14px;">${historyHtml}</div>
 
-                <div style="margin-top:10px; padding:8px; background-color:#fff5f5; border:1px solid #ffcccc; border-radius:4px; font-size:14px; color:#c62828; line-height:1.4;">
+                <div style="margin-top:10px; padding:8px; background-color:${d14?'#3a2020':'#fff5f5'}; border:1px solid ${d14?'#5a3030':'#ffcccc'}; border-radius:4px; font-size:14px; color:${d14?'#ef5350':'#c62828'}; line-height:1.4;">
                     <b>⚠️请注意：</b><br>
                     1. 本功能为插件功能，<b>请勿在游戏内聊天室提及</b>。<br>
                     2. 若在发送通知前点开高管，则可能导致此次挖人数据不显示。<br>
@@ -5946,11 +6114,12 @@
         // --- 注入动态 CSS ---
         function injectStyles() {
             if (document.getElementById('sc-module15-styles')) return;
+            const d15s = DM();
             const style = document.createElement('style');
             style.id = 'sc-module15-styles';
             style.textContent = `
             @keyframes sc-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-            .sc-spinner { border: 3px solid #f3f3f3; border-top: 3px solid #2196f3; border-radius: 50%; width: 30px; height: 30px; animation: sc-spin 1s linear infinite; margin: 0 auto 10px auto; }
+            .sc-spinner { border: 3px solid ${d15s?'#444':'#f3f3f3'}; border-top: 3px solid #2196f3; border-radius: 50%; width: 30px; height: 30px; animation: sc-spin 1s linear infinite; margin: 0 auto 10px auto; }
             .sc-modal-btn { margin-left: auto; padding: 6px 12px; background-color: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: all 0.2s; }
             .sc-modal-btn:hover { background-color: #1976d2; transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
         `;
@@ -6005,20 +6174,22 @@
         `;
 
             // 3. 创建弹窗容器
+            const d15 = DM();
             const modal = document.createElement('div');
             modal.style.cssText = `
-            background: #fff; border-radius: 8px; width: 450px; max-width: 90vw;
+            background: ${d15?'#1e1e1e':'#fff'}; border-radius: 8px; width: 450px; max-width: 90vw;
             max-height: 85vh; overflow-y: auto; padding: 20px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.2); position: relative;
             font-family: sans-serif; transform: scale(0.95); transition: transform 0.2s ease-in-out;
+            color: ${d15?'#efefef':'#333'};
         `;
 
             // 初始显示加载状态
             modal.innerHTML = `
             <div style="display:flex; justify-content:flex-end;">
-                <button id="sc-modal-close-temp" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1;">&times;</button>
+                <button id="sc-modal-close-temp" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15?'#aaa':'#999'}; line-height:1;">&times;</button>
             </div>
-            <div style="text-align:center; padding: 30px 20px; color:#666;">
+            <div style="text-align:center; padding: 30px 20px; color:${d15?'#bbb':'#666'};">
                 <div class="sc-spinner"></div>
                 <div>正在调取高管档案...</div>
             </div>
@@ -6058,27 +6229,27 @@
                     // const workHistory = data.workHistory || [];
                     // let myDaysActiveSum = 0;
                     // let isSeveranceBroken = false;
-                    
+
                     // // 0. 获取当前 Realm（后续多处使用）
                     // const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
-                    
+
                     // // 1. 从本地缓存取出 savedExecInfo（含 salary, unemployed）
                     // const savedExecs = load("SC-former-executives");
                     // const savedExecInfo = savedExecs.find(e => e.id === executiveId) || null;
-                    
+
                     // // 2. 获取本公司名
                     // let myCompanyName = null;
                     // if (currentRealm !== null) {
                     //     const srcKey = `SimcompaniesRetailCalculation_${currentRealm}`;
                     //     const SRC = JSON.parse(localStorage.getItem(srcKey) || "{}");
-                    //     myCompanyName = SRC.company; 
+                    //     myCompanyName = SRC.company;
                     // }
-                    
+
                     // if (myCompanyName && workHistory.length > 0) {
                     //     // 3. 找到你在履历中最后一次出现的索引 (时间最近的一条)
                     //     //     workHistory 从 0(最新) 到 N(最旧) 排列
                     //     const myLastIndex = workHistory.findIndex(w => w.employer && w.employer.company === myCompanyName);
-                    
+
                     //     if (myLastIndex !== -1) {
                     //         // 4. 核心：检查从「当前职位(索引0)」到「你在该高管的最后职位(myLastIndex)」之间
                     //         //    是否所有相邻记录的 start 都等于上一条的 end（无缝衔接）
@@ -6086,14 +6257,14 @@
                     //         for (let i = 0; i < myLastIndex; i++) {
                     //             const newerJobStart = workHistory[i].start;
                     //             const olderJobEnd = workHistory[i+1].end;
-                    
+
                     //             // 如果旧职位的 end 缺失，或 不等于新职位的 start → 断层
                     //             if (!olderJobEnd || newerJobStart !== olderJobEnd) {
                     //                 isSeveranceBroken = true;
                     //                 break;
                     //             }
                     //         }
-                    
+
                     //         // 5. 若无断层，计算该高管在贵公司累计天数
                     //         if (!isSeveranceBroken) {
                     //             myDaysActiveSum = workHistory
@@ -6104,12 +6275,12 @@
                     //         isSeveranceBroken = true; // 没雇佣过，自然没补偿
                     //     }
                     // }
-                    
+
                     // // 6. 补偿金 HTML 渲染
                     // let severanceHtml = '';
                     // if (savedExecInfo) {
                     //     const { salary, unemployed } = savedExecInfo;
-                        
+
                     //     if (unemployed) {
                     //         severanceHtml = `<span style="color:#999;">高管当前不在职</span>`;
                     //     } else if (isSeveranceBroken) {
@@ -6125,6 +6296,21 @@
                     const trainings = data.trainings || [];
                     let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
 
+                    // 主题变量声明（必须在后续 HTML 模板使用前）
+                    const d15r = DM();
+                    const modalBg = d15r ? '#1e1e1e' : '#fff';
+                    const modalFg = d15r ? '#efefef' : '#333';
+                    const modalFg2 = d15r ? '#ccc' : '#555';
+                    const modalFg3 = d15r ? '#aaa' : '#888';
+                    const modalFg4 = d15r ? '#bbb' : '#666';
+                    const modalBorder1 = d15r ? '#444' : '#eee';
+                    const modalBorder2 = d15r ? '#3a3a3a' : '#e9ecef';
+                    const modalBg1 = d15r ? '#2a2a2a' : '#f8f9fa';
+                    const modalBg2 = d15r ? '#1a1a2e' : '#eef7ff';
+                    const modalBg2border = d15r ? '#2a3a5e' : '#cce5ff';
+                    const modalBg3 = d15r ? '#333' : '#fff';
+                    const linkColor = '#2196f3';
+
                     const historyHtml = trainings.map(t => {
                         total.coo += t.skillCoo || 0; total.cfo += t.skillCfo || 0;
                         total.cmo += t.skillCmo || 0; total.cto += t.skillCto || 0;
@@ -6133,78 +6319,79 @@
                         if (t.skillCfo) details.push(`会计+${t.skillCfo}`);
                         if (t.skillCmo) details.push(`沟通+${t.skillCmo}`);
                         if (t.skillCto) details.push(`科学+${t.skillCto}`);
-                        const detailStr = details.length > 0 ? `<span style="color:#777; margin-left:4px;">(${details.join(' ')})</span>` : '';
+                        const detailStr = details.length > 0 ? `<span style="color:${d15r?'#999':'#777'}; margin-left:4px;">(${details.join(' ')})</span>` : '';
                         const cUrl = getCompanyLink(t.employer.realmId ?? currentRealm, t.employer.company);
-                        return `<div style="padding:6px 0; border-bottom:1px dashed #eee; color:#555; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
-                    }).join('') || '<div style="color:#999; text-align:center; padding:10px;">无历史培训记录</div>';
+                        return `<div style="padding:6px 0; border-bottom:1px dashed ${modalBorder1}; color:${modalFg2}; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
+                    }).join('') || `<div style="color:${d15r?'#888':'#999'}; text-align:center; padding:10px;">无历史培训记录</div>`;
 
                     const workHistoryHtml = data.workHistory?.map(w => {
                         const isCurrent = !w.end;
                         const cUrl = getCompanyLink(w.employer.realmId ?? currentRealm, w.employer.company);
                         const posName = positionMap(w.position);
                         return `
-                    <div style="padding:8px 0; border-bottom:1px solid #eee; ${isCurrent ? 'background: #eef7ff; padding-left:5px; border-left:3px solid #2196f3;' : ''}">
-                        <span style="color:#444; font-size:14px;">
+                    <div style="padding:8px 0; border-bottom:1px solid ${modalBorder1}; ${isCurrent ? 'background: ' + (d15r?'#1a1a2e':'#eef7ff') + '; padding-left:5px; border-left:3px solid #2196f3;' : ''}">
+                        <span style="color:${d15r?'#ccc':'#444'}; font-size:14px;">
                             ${isCurrent ? '⭐ ' : ''}在
-                            <a href="${cUrl}" target="_blank" style="color:#2196f3; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a>
+                            <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none; font-weight:${isCurrent ? 'bold' : 'normal'};">${w.employer.company}</a>
                             担任 <b>${w.daysActive}</b> 天的 <b>${posName}</b>
-                            ${isCurrent ? ' <span style="color:#2e7d32; font-size:13px;">(当前所在职位)</span>' : ''}
+                            ${isCurrent ? ` <span style="color:${d15r?'#81c784':'#2e7d32'}; font-size:13px;">(当前所在职位)</span>` : ''}
                         </span>
                     </div>`;
-                    }).join('') || '<div style="color:#999; text-align:center; padding:10px;">无从业记录</div>';
+                    }).join('') || `<div style="color:${d15r?'#888':'#999'}; text-align:center; padding:10px;">无从业记录</div>`;
 
                     const currentTrainingStatus = data.currentTraining
-                        ? `<b style="color:#2196f3;">${trainingNameMap(data.currentTraining.training)}</b>`
-                        : `<span style="color:#999;">当前无培训</span>`;
+                        ? `<b style="color:${linkColor};">${trainingNameMap(data.currentTraining.training)}</b>`
+                        : `<span style="color:${d15r?'#888':'#999'};">当前无培训</span>`;
 
                     // 替换弹窗内容为真实数据
                     modal.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #eee; padding-bottom:10px; margin-bottom:15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid ${modalBorder1}; padding-bottom:10px; margin-bottom:15px;">
                         <div>
-                            <h3 style="margin:0 0 4px 0; font-size:18px; color:#333;">${data.name}</h3>
-                            <div style="color:#888; font-size:12px;">高管ID: ${data.id}</div>
+                            <h3 style="margin:0 0 4px 0; font-size:18px; color:${modalFg};">${data.name}</h3>
+                            <div style="color:${modalFg3}; font-size:12px;">高管ID: ${data.id}</div>
                         </div>
-                        <button id="sc-modal-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1; padding:0 0 5px 10px;">&times;</button>
+                        <button id="sc-modal-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15r?'#aaa':'#999'}; line-height:1; padding:0 0 5px 10px;">&times;</button>
                     </div>
 
-                    <div style="font-size:14px; font-weight:bold; color:#555; margin-bottom:8px;">📊 培训技能总计 <span style="font-weight:normal; color:#888; font-size:12px;">(完成 ${trainings.length} 次)</span></div>
+                    <div style="font-size:14px; font-weight:bold; color:${modalFg2}; margin-bottom:8px;">📊 培训技能总计 <span style="font-weight:normal; color:${modalFg3}; font-size:12px;">(完成 ${trainings.length} 次)</span></div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
-                        <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
-                            <span style="color:#666;">管理:</span> <b style="color:#d32f2f;">+${total.coo}</b>
+                        <div style="background:${modalBg1}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBorder2}; display:flex; justify-content:space-between;">
+                            <span style="color:${modalFg4};">管理:</span> <b style="color:${d15r?'#ef5350':'#d32f2f'};">+${total.coo}</b>
                         </div>
-                        <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
-                            <span style="color:#666;">会计:</span> <b style="color:#d32f2f;">+${total.cfo}</b>
+                        <div style="background:${modalBg1}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBorder2}; display:flex; justify-content:space-between;">
+                            <span style="color:${modalFg4};">会计:</span> <b style="color:${d15r?'#ef5350':'#d32f2f'};">+${total.cfo}</b>
                         </div>
-                        <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
-                            <span style="color:#666;">沟通:</span> <b style="color:#d32f2f;">+${total.cmo}</b>
+                        <div style="background:${modalBg1}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBorder2}; display:flex; justify-content:space-between;">
+                            <span style="color:${modalFg4};">沟通:</span> <b style="color:${d15r?'#ef5350':'#d32f2f'};">+${total.cmo}</b>
                         </div>
-                        <div style="background:#f8f9fa; padding:8px 12px; border-radius:6px; border:1px solid #e9ecef; display:flex; justify-content:space-between;">
-                            <span style="color:#666;">科学:</span> <b style="color:#d32f2f;">+${total.cto}</b>
+                        <div style="background:${modalBg1}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBorder2}; display:flex; justify-content:space-between;">
+                            <span style="color:${modalFg4};">科学:</span> <b style="color:${d15r?'#ef5350':'#d32f2f'};">+${total.cto}</b>
                         </div>
                     </div>
-                    <div style="font-size:14px; margin-bottom:20px; background:#eef7ff; padding:8px 12px; border-radius:6px; border:1px solid #cce5ff;">
-                        <span style="color:#666;">进行中：</span>${currentTrainingStatus}
+                    <div style="font-size:14px; margin-bottom:20px; background:${modalBg2}; padding:8px 12px; border-radius:6px; border:1px solid ${modalBg2border};">
+                        <span style="color:${modalFg4};">进行中：</span>${currentTrainingStatus}
                     </div>
 
-                    <div style="font-size:14px; font-weight:bold; color:#555; margin-bottom:8px;">💼 从业履历</div>
-                    <div style="max-height:160px; overflow-y:auto; background:#fff; border:1px solid #eee; border-radius:6px; padding:0 12px; margin-bottom:20px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">${workHistoryHtml}</div>
+                    <div style="font-size:14px; font-weight:bold; color:${modalFg2}; margin-bottom:8px;">💼 从业履历</div>
+                    <div style="max-height:160px; overflow-y:auto; background:${modalBg3}; border:1px solid ${modalBorder1}; border-radius:6px; padding:0 12px; margin-bottom:20px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">${workHistoryHtml}</div>
 
-                    <div style="font-size:14px; font-weight:bold; color:#555; margin-bottom:8px;">🎓 详细培训历史</div>
-                    <div style="max-height:160px; overflow-y:auto; background:#fff; border:1px solid #eee; border-radius:6px; padding:0 12px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">${historyHtml}</div>
+                    <div style="font-size:14px; font-weight:bold; color:${modalFg2}; margin-bottom:8px;">🎓 详细培训历史</div>
+                    <div style="max-height:160px; overflow-y:auto; background:${modalBg3}; border:1px solid ${modalBorder1}; border-radius:6px; padding:0 12px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">${historyHtml}</div>
                 `;
 
                     // 重新绑定真实数据的关闭按钮
                     document.getElementById('sc-modal-close').onclick = closeModal;
                 })
                 .catch(() => {
+                    const d15e = DM();
                     modal.innerHTML = `
                     <div style="display:flex; justify-content:flex-end;">
-                        <button id="sc-modal-close-err" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1;">&times;</button>
+                        <button id="sc-modal-close-err" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d15e?'#aaa':'#999'}; line-height:1;">&times;</button>
                     </div>
                     <div style="text-align:center; padding: 30px 20px;">
-                        <div style="color:#d32f2f; font-size:40px; margin-bottom:10px;">⚠️</div>
-                        <div style="color:#d32f2f; font-weight:bold; margin-bottom:15px;">档案调取失败</div>
-                        <div style="color:#666; font-size:14px;">网络可能开小差了，请稍后重试。</div>
+                        <div style="color:${d15e?'#ef5350':'#d32f2f'}; font-size:40px; margin-bottom:10px;">⚠️</div>
+                        <div style="color:${d15e?'#ef5350':'#d32f2f'}; font-weight:bold; margin-bottom:15px;">档案调取失败</div>
+                        <div style="color:${d15e?'#bbb':'#666'}; font-size:14px;">网络可能开小差了，请稍后重试。</div>
                     </div>
                 `;
                     document.getElementById('sc-modal-close-err').onclick = closeModal;
@@ -6441,6 +6628,7 @@
     }
 
     function showUpdateToast(version, changelog, downloadUrl) {
+        const dUp = DM();
         // 1. 注入样式
         const style = document.createElement('style');
         style.textContent = `
@@ -6458,7 +6646,7 @@
             /* 展开后的卡片样式 */
             .sc-update-toast.expanded {
                 border-radius: 12px; padding: 20px; width: 400px;
-                background: #ffffff; color: #333; cursor: default;
+                background: ${dUp?'#1e1e1e':'#ffffff'}; color: ${dUp?'#efefef':'#333'}; cursor: default;
                 border-top: 5px solid #2196F3;
             }
 
@@ -6473,11 +6661,11 @@
             /* 右上角关闭按钮 */
             .sc-update-close {
                 position: absolute; top: 10px; right: 12px;
-                display: none; cursor: pointer; font-size: 20px; color: #999;
+                display: none; cursor: pointer; font-size: 20px; color: ${dUp?'#aaa':'#999'};
                 line-height: 1; padding: 5px;
             }
             .sc-update-toast.expanded .sc-update-close { display: block; }
-            .sc-update-close:hover { color: #333; }
+            .sc-update-close:hover { color: ${dUp?'#ccc':'#333'}; }
 
             /* 内容区域 */
             .sc-update-body {
@@ -6488,9 +6676,9 @@
             }
 
             .sc-changelog-box {
-                background: #f5f7f9; padding: 12px; border-radius: 6px;
-                margin: 10px 0; color: #555; font-size: 13px;
-                border-left: 3px solid #ddd; max-height: 150px; overflow-y: auto;
+                background: ${dUp?'#2a2a2a':'#f5f7f9'}; padding: 12px; border-radius: 6px;
+                margin: 10px 0; color: ${dUp?'#ccc':'#555'}; font-size: 13px;
+                border-left: 3px solid ${dUp?'#555':'#ddd'}; max-height: 150px; overflow-y: auto;
             }
 
             /* 底部按钮区域 */
@@ -6499,8 +6687,8 @@
             }
             .sc-btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: bold; }
             .sc-btn-primary { background: #2196F3; color: white; }
-            .sc-btn-link { background: transparent; color: #999; text-decoration: underline; padding: 8px 0; }
-            .sc-btn-link:hover { color: #666; }
+            .sc-btn-link { background: transparent; color: ${dUp?'#aaa':'#999'}; text-decoration: underline; padding: 8px 0; }
+            .sc-btn-link:hover { color: ${dUp?'#ccc':'#666'}; }
         `;
         document.head.appendChild(style);
 
@@ -6513,7 +6701,7 @@
             <div class="sc-update-body">
                 <p style="margin:0; font-weight:bold;">更新日志：</p>
                 <div class="sc-changelog-box">${changelog.replace(/\n/g, '<br>') || '修复已知问题，优化性能。'}</div>
-                <p style="font-size: 11px; color: #999; margin: 10px 0;">
+                <p style="font-size: 11px; color: ${dUp?'#aaa':'#999'}; margin: 10px 0;">
                     提示：忽略后将不再提示此版本。
                 </p>
                 <div class="sc-update-actions">
