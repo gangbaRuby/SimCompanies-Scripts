@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.7
+// @version      1.32.8
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3190,14 +3190,14 @@
                 // 状态判定
                 isFull = remainingQty <= 0.01;
 
-                displayTitle = `购买 ${userWantedQty.toLocaleString()} 个 - 扫货模拟`;
-                borderColor = "#FFD700";
+                displayTitle = `购买${userWantedQty.toLocaleString()}个 - 扫货模拟`;
+                borderColor = DM() ? "#FFC107" : "#B8860B";
 
                 if (isFull) {
-                    statusText = "✅ 数量满足";
+                    // statusText = "✅ 数量满足";
                 } else {
                     const bought = userWantedQty - remainingQty;
-                    statusText = `⚠️ 缺货 (仅买到 ${Math.floor(bought).toLocaleString()})`;
+                    statusText = `⚠️缺货(仅买到${Math.floor(bought).toLocaleString()})`;
                 }
 
                 // 清除所有行的高亮（因为这是模拟模式，不需要像 B 模式那样高亮单行）
@@ -3231,10 +3231,11 @@
                 // 再高亮最佳
                 const best = profitableRows[0];
                 if (best) {
-                    best.row.style.outline = "2px dashed #FFD700";
+                    const dG = DM();
+                    best.row.style.outline = `2px dashed ${dG ? '#FFC107' : '#B8860B'}`;
                     best.row.style.outlineOffset = "-2px";
-                    best.row.style.boxShadow = "inset 0 0 8px rgba(255, 215, 0, 0.3)";
-                    best.row.style.backgroundColor = "rgba(255, 215, 0, 0.05)";
+                    best.row.style.boxShadow = `inset 0 0 8px ${dG ? 'rgba(255, 193, 7, 0.35)' : 'rgba(184, 134, 11, 0.25)'}`;
+                    best.row.style.backgroundColor = dG ? 'rgba(255, 193, 7, 0.07)' : 'rgba(184, 134, 11, 0.05)';
                 }
 
                 // 4. 填满 2400h
@@ -3257,12 +3258,12 @@
                 avgProfitPerHour = totalHours > 0 ? (totalProfitVal / totalHours) : 0;
                 isFull = totalHours >= 2399.9;
 
-                displayTitle = "100级建筑运行24H理论最优 (仅计算正利润)";
+                displayTitle = "100级建筑运行24H正时利";
                 borderColor = isFull ? "#4CAF50" : "#ff9800"; // 绿或橙
 
                 // 格式化时间字符串
                 const timeStr = formatDuration(totalHours);
-                statusText = isFull ? "✅ 货源充足" : `⚠️ 仅覆盖 ${timeStr}`;
+                statusText = isFull ? "货源充足" : `仅覆盖 ${timeStr}`;
             }
 
             // 5. 渲染 UI
@@ -3277,34 +3278,33 @@
             const renderUI = () => {
                 const simContent = document.getElementById('sc-sim-content');
                 if (!simContent) return;
-                summaryDisplay.style.borderLeft = `4px solid ${borderColor}`;
+                // summaryDisplay.style.borderLeft = `4px solid ${borderColor}`;
                 const d7r = DM();
+                const isNarrowR = window.innerWidth <= 576;
 
                 // MP 标记文本
                 let mpBadgeHtml = '';
                 if (curMp !== 0) {
                     const mpLabel = curMp > 0 ? `MP-${curMp}%` : `MP-${Math.abs(curMp)}`;
-                    mpBadgeHtml = `<div style="background: ${d7r ? '#3a2a5e' : '#ede7f6'}; color: ${d7r ? '#b39ddb' : '#5e35b1'}; padding: 2px 6px; border-radius: 4px;">📋 ${mpLabel} 模拟</div>`;
+                    mpBadgeHtml = `<div style="background: ${d7r ? '#3a2a5e' : '#ede7f6'}; color: ${d7r ? '#b39ddb' : '#5e35b1'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">${mpLabel} </div>`;
                 }
 
                 simContent.innerHTML = `
-                    <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: 6px;">
-                            <span style="color: ${d7r ? '#aaa' : '#777'}; font-size: 12px;">${displayTitle}</span>
-                            <span style="font-size: 20px; font-weight: bold; color: ${borderColor};">$${avgStr}<span style="font-size:12px; font-weight:normal;">/h</span></span>
+                    <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: ${isNarrowR ? '2px' : '8px'}; font-size: ${isNarrowR ? '11px' : ''};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: ${isNarrowR ? '2px' : '6px'};">
+                            <span style="color: ${d7r ? '#aaa' : '#777'};">${displayTitle}</span>
+                            <span style="font-weight: bold; color: ${borderColor};">$${avgStr}<span style="font-weight:normal;">/h</span></span>
                         </div>
 
-                        <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px;">
-                            <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: 2px 6px; border-radius: 4px;">
-                                ${statusText}
+                        <div style="display: flex; flex-wrap: wrap; gap: ${isNarrowR ? '2px' : '6px'};">
+                            ${statusText ? `<div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">${statusText}</div>` : ''}
+
+                            <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">
+                                总利: $${totalProfitK}k
                             </div>
 
-                            <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: 2px 6px; border-radius: 4px;">
-                                💰 总利: $${totalProfitK}k
-                            </div>
-
-                            <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: 2px 6px; border-radius: 4px;">
-                                ⏱️ 用时: ${durationStr}
+                            <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">
+                                用时: ${durationStr}
                             </div>
                             ${mpBadgeHtml}
                         </div>
@@ -3333,15 +3333,31 @@
                 td.classList.add('auto-profit-info');
                 const span = document.createElement('span');
                 const d7s = DM();
-                span.style.cssText = `display: inline-block; min-width: 60px; font-size: 14px; color: ${d7s ? 'white' : '#333'}; background: ${d7s ? '#555' : '#e0e0e0'}; padding: 4px 8px; border-radius: 2px;`;
+                span.style.cssText = `display: inline-block; min-width: 30px; color: ${d7s ? 'white' : '#333'}; background: ${d7s ? '#555' : '#e0e0e0'}; border-radius: 2px; white-space: nowrap;`;
 
+                // 构建显示文案：窄屏(≤425px)用紧凑图标，-Infinity 显示"卖不了"
+                const isNarrow = window.innerWidth <= 576;
+                const isInfinity = !isFinite(maxProfit * 3600);
+                const profitLabel = isInfinity ? '卖不了'
+                    : isNarrow ? (maxProfit >= 0 ? `💰${profitStr}` : `⚠️${profitStr}`)
+                    : `时利润:${profitStr}`;
                 // 存储显示文案到 dataset 方便切换按钮使用
-                span.dataset.p = `时利润：${profitStr}`;
-                span.dataset.t = `用时：${timeStr}`;
+                span.dataset.p = profitLabel;
+                span.dataset.t = `用时:${timeStr}`;
                 span.textContent = isShowingProfit ? span.dataset.p : span.dataset.t;
 
                 td.appendChild(span);
                 row.appendChild(td);
+
+                // 窄屏时收缩价格列宽度（通过注入列的前一个兄弟定位价格div）
+                if (window.innerWidth <= 576) {
+                    const priceTd = td.previousElementSibling;
+                    if (priceTd) {
+                        const priceDiv = priceTd.querySelector('div');
+                        if (priceDiv) priceDiv.style.minWidth = '10px';
+                    }
+                }
+
                 allProfitSpans.add(span);
             }
 
@@ -3489,13 +3505,15 @@
                     if (container && !container.querySelector('[data-custom-notice]')) {
                         // 扫货模拟面板：固定头部（提示+按钮）+ 动态结果区
                         const d7 = DM();
+                        const isNarrow7 = window.innerWidth <= 576;
                         summaryDisplay = document.createElement('div');
-                        summaryDisplay.style.cssText = `background: ${d7 ? '#222' : '#f9f9f9'}; padding: 12px; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid #4CAF50; min-height: 40px; color: ${d7 ? '#efefef' : '#333'};`;
+                        // padding-left: 面板内容与左边框的间距；margin-bottom: 与下方表格的间距；border-left: 绿色标识线
+                        summaryDisplay.style.cssText = `background: ${d7 ? '#222' : '#f9f9f9'}; padding: 0 0 0 ${isNarrow7 ? '6px' : '12px'}; border-radius: 4px; margin-bottom: ${isNarrow7 ? '0px' : '10px'}; border-left: ${isNarrow7 ? '3px' : '4px'} solid #4CAF50; min-height: ${isNarrow7 ? '0' : '40px'}; color: ${d7 ? '#efefef' : '#333'};`;
                         summaryDisplay.dataset.customNotice = 'true';
 
                         // 固定头部行
                         const infoHeader = document.createElement('div');
-                        infoHeader.style.cssText = `display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid ${d7 ? '#444' : '#ddd'};`;
+                        infoHeader.style.cssText = `display: flex; flex-wrap: wrap; align-items: center; gap: ${isNarrow7 ? '2px' : '8px'}; margin-bottom: ${isNarrow7 ? '0px' : '8px'}; border-bottom: 1px solid ${d7 ? '#444' : '#ddd'};`;
 
                         const toggleBtn = document.createElement('button');
                         toggleBtn.type = 'button';
@@ -3523,7 +3541,7 @@
 
                         const btnSettings = document.createElement('button');
                         btnSettings.type = 'button';
-                        btnSettings.textContent = "自定义高管数据";
+                        btnSettings.textContent = "自定义数据";
                         btnSettings.style.cssText = `font-size: 11px; color: ${btnFgColor}; background: none; border: 1px solid #673ab7; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;`;
                         btnSettings.onclick = (e) => {
                             e.preventDefault();
@@ -3606,8 +3624,8 @@
 
                         // 简短提示（放最底部）
                         const infoFooter = document.createElement('div');
-                        infoFooter.style.cssText = `margin-top: 8px; padding-top: 6px; border-top: 1px solid ${d7 ? '#444' : '#ddd'}; font-size: 12px; color: ${d7 ? '#777' : '#999'}; text-align: center;`;
-                        infoFooter.textContent = '自动更新数据有延迟，左下菜单可手动更新 | 展示结果均为1级建筑';
+                        infoFooter.style.cssText = `margin-top: ${isNarrow7 ? '0px' : '8px'}; padding-top: ${isNarrow7 ? '0px' : '6px'}; border-top: 1px solid ${d7 ? '#444' : '#ddd'}; font-size: ${isNarrow7 ? '10px' : ''}; color: ${d7 ? '#777' : '#999'}; text-align: center;`;
+                        infoFooter.textContent = '自动更新数据有延迟，左下可手动更新|显示均为1级建筑';
                         summaryDisplay.appendChild(infoFooter);
 
                         container.appendChild(summaryDisplay);
@@ -4133,7 +4151,7 @@
 
             // 显示时利润（仅零售物品有有效值）
             if (profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
-                displayText = ` 时利润：${profitValue.toFixed(2)}`;
+                displayText = `时利润:${profitValue.toFixed(2)}`;
             }
 
             // 显示 MP-?% （所有非排除物品）
@@ -6850,7 +6868,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    自定义运行时长支持更多格式，为所有样式增加深色浅色模式，交易所页面不再使用固定css名称插入内容，交易所页面增加MP-?%功能，尝试解决交易所订单显示不全的问题，前任高管信息适配繁中、英文
+        // @changelog    修改交易所小屏幕占用问题
 
         fetch(scriptUrl)
             .then(res => res.text())
@@ -6860,6 +6878,7 @@
                 if (!matchVersion) return;
 
                 latestVersion = matchVersion[1]; // 确保全局变量被更新
+                
                 const changeLog = matchChange ? matchChange[1] : '';
 
                 // 1. 首先进行版本比较
