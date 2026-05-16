@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.8
+// @version      1.32.9
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -211,7 +211,7 @@
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: ${bgColor}; backdrop-filter: blur(10px); border: 1px solid ${borderColor};
             border-radius: 12px; z-index: 21000; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            width: 360px; color: ${textColor}; font-family: sans-serif; overflow: hidden;
+            width: min(360px, 90vw); color: ${textColor}; font-family: sans-serif; overflow: hidden;
         `;
 
             const inputStyle = `width: 75px; padding: 5px; border: 1px solid ${borderColor}; border-radius: 4px; background: ${inputBg}; color: ${isDark ? '#fff' : '#000'}; outline: none;`;
@@ -1051,7 +1051,7 @@
                 background: var(--sc-panel-bg, rgba(40,40,40,0.95));
                 border-radius: 4px;
                 padding: 8px;
-                min-width: 260px;
+                min-width: min(260px, calc(100vw - 26px));
                 box-shadow: 0 2px 8px rgba(0,0,0,0.3);
                 color: var(--sc-panel-fg, #efefef);
             }
@@ -1561,7 +1561,7 @@
                 box.id = 'mp-floating-box';
                 box.style.cssText = `
                 position: fixed;
-                left: 25px;
+                left: min(25px, 5vw);
                 top: 50px;
                 width: min(450px, 90vw);
                 max-height: 70vh;
@@ -1665,7 +1665,8 @@
                     }
                     #mp-table-container table th:first-child,
                     #mp-table-container table td:first-child {
-                        width: 50px;
+                        width: auto;
+                        min-width: 50px;
                         text-align: center;
                     }
                     #mp-floating-box div {
@@ -2372,6 +2373,7 @@
                 position:fixed; left:10px; top:50px; z-index:9998;
                 background:${d ? '#2c2c2c' : '#fff'}; color:${d ? '#fff' : '#333'}; padding:12px;
                 border-radius:8px; max-height:400px; overflow:auto;
+                max-width: calc(100vw - 20px);
                 box-shadow:0 4px 15px rgba(0,0,0,0.5); font-family:Arial, sans-serif;
             `;
 
@@ -3291,7 +3293,7 @@
 
                 simContent.innerHTML = `
                     <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: ${isNarrowR ? '2px' : '8px'}; font-size: ${isNarrowR ? '11px' : ''};">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: ${isNarrowR ? '2px' : '6px'};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: ${isNarrowR ? '0px' : '6px'}; font-size: 14px;">
                             <span style="color: ${d7r ? '#aaa' : '#777'};">${displayTitle}</span>
                             <span style="font-weight: bold; color: ${borderColor};">$${avgStr}<span style="font-weight:normal;">/h</span></span>
                         </div>
@@ -3630,11 +3632,8 @@
 
                         container.appendChild(summaryDisplay);
 
-                        // 小屏幕：通过表格行CSS类名判断（小屏行.css-i3r4lg，大屏行.css-6ayvgo），找不到则跳过
-                        const smallRow = tbody.querySelector('tr.css-i3r4lg');
-                        const largeRow = tbody.querySelector('tr.css-6ayvgo');
-                        const isSmallScreen = smallRow && !largeRow;
-                        if (isSmallScreen) {
+                        // 小屏幕：通过窗口宽度判断，≤991px 为小屏，需要滚动到表格底部
+                        if (window.innerWidth <= 991) {
                             setTimeout(() => {
                                 const rows = tbody.querySelectorAll('tr');
                                 const lastRow = rows[rows.length - 1];
@@ -5142,7 +5141,7 @@
                     headerRow.style.display = 'flex';
                     headerRow.style.gap = '16px';
                     headerRow.style.padding = '2px 0';
-                    headerRow.innerHTML = `<div style="width:100px">剩余量</div><div style="width:130px">达成时间</div><div style="width:80px">单位成本</div>`;
+                    headerRow.innerHTML = `<div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">剩余量</div><div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">达成时间</div><div style="flex:0.8; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">单位成本</div>`;
                     qualityContent.appendChild(headerRow);
 
                     const allDecayArrays = groupedByQuality[quality].flatMap(i => i.futureDecayArray || i.result || []);
@@ -5153,9 +5152,9 @@
                         row.style.gap = "16px";
                         row.style.padding = "1px 0";
                         row.innerHTML = `
-                            <div style="width:100px">已全部衰减</div>
-                            <div style="width:130px">-</div>
-                            <div style="width:80px">∞</div>
+                            <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">已全部衰减</div>
+                            <div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">-</div>
+                            <div style="flex:0.8; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">∞</div>
                         `;
                         qualityContent.appendChild(row);
                     } else {
@@ -5165,9 +5164,9 @@
                             row.style.gap = "16px";
                             row.style.padding = "1px 0";
                             row.innerHTML = `
-                                <div style="width:100px">${amount}</div>
-                                <div style="width:130px">${time}</div>
-                                <div style="width:80px">${unitCost === Infinity
+                                <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${amount}</div>
+                                <div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${time}</div>
+                                <div style="flex:0.8; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${unitCost === Infinity
                                     ? '∞'
                                     : (typeof unitCost === 'number' ? unitCost.toFixed(3) : '∞')
                                 }</div>
@@ -5220,8 +5219,8 @@
                         headerRow.style.gap = '12px';
                         headerRow.style.padding = '2px 0';
                         headerRow.innerHTML = `
-                            <div style="width:100px">剩余量</div>
-                            <div style="width:150px">达成时间</div>
+                            <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">剩余量</div>
+                            <div style="flex:1.5; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">达成时间</div>
                         `;
                         contractContent.appendChild(headerRow);
 
@@ -5237,8 +5236,8 @@
                                 row.style.gap = "12px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:150px">${time}</div>
+                                    <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${amount}</div>
+                                    <div style="flex:1.5; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${time}</div>
                                 `;
                                 contractContent.appendChild(row);
                             });
@@ -5300,8 +5299,8 @@
                         headerRow.style.gap = '12px';
                         headerRow.style.padding = '2px 0';
                         headerRow.innerHTML = `
-                            <div style="width:100px">剩余量</div>
-                            <div style="width:150px">达成时间</div>
+                            <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">剩余量</div>
+                            <div style="flex:1.5; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">达成时间</div>
                         `;
                         contractContent.appendChild(headerRow);
 
@@ -5317,8 +5316,8 @@
                                 row.style.gap = "12px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:150px">${time}</div>
+                                    <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${amount}</div>
+                                    <div style="flex:1.5; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${time}</div>
                                 `;
                                 contractContent.appendChild(row);
                             });
@@ -5391,7 +5390,7 @@
                         headerRow.style.display = 'flex';
                         headerRow.style.gap = '16px';
                         headerRow.style.padding = '2px 0';
-                        headerRow.innerHTML = `<div style="width:100px">剩余量</div><div style="width:130px">达成时间</div>`;
+                        headerRow.innerHTML = `<div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">剩余量</div><div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">达成时间</div>`;
                         priceContent.appendChild(headerRow);
 
                         const allDecayArrays = groupedByPrice[price].flatMap(i => i.result || []);
@@ -5402,8 +5401,8 @@
                             row.style.gap = "16px";
                             row.style.padding = "1px 0";
                             row.innerHTML = `
-                                <div style="width:100px">已全部衰减</div>
-                                <div style="width:130px">-</div>
+                                <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">已全部衰减</div>
+                                <div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">-</div>
                             `;
                             priceContent.appendChild(row);
                         } else {
@@ -5413,8 +5412,8 @@
                                 row.style.gap = "16px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:130px">${time}</div>
+                                    <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${amount}</div>
+                                    <div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${time}</div>
                                 `;
                                 priceContent.appendChild(row);
                             });
@@ -6042,6 +6041,7 @@
                 const border3 = d14 ? '#555' : '#ccc';
                 const bg1 = d14 ? '#3a3a3a' : '#e6e6e6';
                 const bg2 = d14 ? '#333' : '#fff';
+                const bg3 = d14 ? '#333333' : '#e8e8e8';
                 const bg4 = d14 ? '#3a2020' : '#fff5f5';
                 const bg4border = d14 ? '#5a3030' : '#ffcccc';
                 const linkColor = '#2196f3';
@@ -6868,7 +6868,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修改交易所小屏幕占用问题
+        // @changelog    修复不显示在职高管信息的问题，修改样式适配小屏幕
 
         fetch(scriptUrl)
             .then(res => res.text())
