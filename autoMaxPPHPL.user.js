@@ -3342,7 +3342,7 @@
                 const isInfinity = !isFinite(maxProfit * 3600);
                 const profitLabel = isInfinity ? '卖不了'
                     : isNarrow ? (maxProfit >= 0 ? `💰${profitStr}` : `⚠️${profitStr}`)
-                    : `时利润:${profitStr}`;
+                        : `时利润:${profitStr}`;
                 // 存储显示文案到 dataset 方便切换按钮使用
                 span.dataset.p = profitLabel;
                 span.dataset.t = `用时:${timeStr}`;
@@ -4197,20 +4197,38 @@
                 const insertTarget = grandParent.firstElementChild;
                 if (!insertTarget || insertTarget === parent) return;
 
+                const isNarrow8 = window.innerWidth <= 576;
+                const d8 = DM();
                 const tip = document.createElement('div');
                 tip.style.cssText = `
                     display: flex;
+                    flex-wrap: wrap;
                     align-items: end;
+                    gap: ${isNarrow8 ? '4px' : '8px'};
+                    color: ${d8 ? '#aaa' : '#777'};
+                    font-size: ${isNarrow8 ? '11px' : '13px'};
                 `;
                 tip.dataset.warningText = 'true';
 
                 // 1. 插入文本提示
                 const textSpan = document.createElement('span');
-                textSpan.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。';
+                textSpan.textContent = '自动更新数据有延迟，左下可手动更新';
+                textSpan.style.cssText = `
+                    white-space: ${isNarrow8 ? 'normal' : 'nowrap'};
+                    flex: ${isNarrow8 ? '1 1 100%' : '0 0 auto'};
+                `;
                 tip.appendChild(textSpan);
 
-                // 2. 插入“开关”按钮
-                // 这里的 nativeStyles 尝试抓取卡片里按钮的类名，或者直接传空对象使用函数默认样式
+                // 2. 按钮组容器（两个按钮为一组）
+                const btnGroup = document.createElement('span');
+                btnGroup.style.cssText = `
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    flex-shrink: 0;
+                `;
+
+                // 2a. 开关按钮
                 const toggle = createGlobalCustomToggle(
                     'executiveCustomToggle',
                     '自定义',
@@ -4220,20 +4238,22 @@
                         refreshAllContractProfits();
                     }
                 );
-                toggle.wrapper.style.marginLeft = "15px";
-                tip.appendChild(toggle.wrapper);
+                toggle.wrapper.style.marginLeft = "0";
+                btnGroup.appendChild(toggle.wrapper);
 
-                // 3. 插入“自定义数据”功能按钮
+                // 2b. 自定义数据功能按钮
                 const customBtn = document.createElement('button');
                 customBtn.type = 'button';
                 customBtn.textContent = '自定义高管数据';
                 customBtn.style.cssText = `
-                    margin-left: 10px; padding: 4px 12px; background: #2196f3;
+                    padding: 4px 10px; background: #2196f3;
                     color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
                     font-weight: bold; white-space: nowrap; flex-shrink: 0;
                 `;
                 customBtn.onclick = () => executiveCustomButton.show();
-                tip.appendChild(customBtn)
+                btnGroup.appendChild(customBtn);
+
+                tip.appendChild(btnGroup);
 
                 insertTarget.appendChild(tip);
             });
@@ -6868,7 +6888,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修复不显示在职高管信息的问题，修改样式适配小屏幕
+        // @changelog    修改入库合同页面的提示文本
 
         fetch(scriptUrl)
             .then(res => res.text())
@@ -6878,7 +6898,7 @@
                 if (!matchVersion) return;
 
                 latestVersion = matchVersion[1]; // 确保全局变量被更新
-                
+
                 const changeLog = matchChange ? matchChange[1] : '';
 
                 // 1. 首先进行版本比较
