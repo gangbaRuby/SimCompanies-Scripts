@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      9.99.999
+// @version      1.32.7
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3294,10 +3294,8 @@
                             <span style="font-size: 20px; font-weight: bold; color: ${borderColor};">$${avgStr}<span style="font-size:12px; font-weight:normal;">/h</span></span>
                         </div>
 
-                        <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px;">
-                            <div style="background: ${isFull ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 152, 0, 0.2)'};
-                                        color: ${isFull ? '#81c784' : '#ffb74d'};
-                                        padding: 2px 6px; border-radius: 4px;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px;">
+                            <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: 2px 6px; border-radius: 4px;">
                                 ${statusText}
                             </div>
 
@@ -3542,7 +3540,7 @@
 
                         const mpLabel = document.createElement('span');
                         mpLabel.textContent = 'MP-';
-                        mpLabel.style.cssText = `font-size: 11px; color: ${d7 ? '#aaa' : '#666'};`;
+                        mpLabel.style.cssText = `font-size: 12px; font-weight: bold; color: ${d7 ? '#ffb74d' : '#e65100'};`;
 
                         const mpInput = document.createElement('input');
                         mpInput.id = 'sc-mp-input';
@@ -3570,11 +3568,22 @@
                         mpQuickBtn.type = 'button';
                         mpQuickBtn.textContent = '4%';
                         mpQuickBtn.title = '快捷填入 MP-4%';
-                        mpQuickBtn.style.cssText = `font-size: 10px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#444' : '#e0e0e0'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 5px; cursor: pointer;`;
+                        mpQuickBtn.style.cssText = `font-size: 12px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#444' : '#e0e0e0'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 5px; cursor: pointer;`;
                         mpQuickBtn.addEventListener('click', (e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             mpInput.value = '4';
+                            mpInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        });
+                        const mpClearBtn = document.createElement('button');
+                        mpClearBtn.type = 'button';
+                        mpClearBtn.textContent = '清空';
+                        mpClearBtn.title = '清空 MP 值';
+                        mpClearBtn.style.cssText = `font-size: 12px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#444' : '#e0e0e0'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 5px; cursor: pointer;`;
+                        mpClearBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            mpInput.value = '0';
                             mpInput.dispatchEvent(new Event('input', { bubbles: true }));
                         });
 
@@ -3582,6 +3591,7 @@
                         mpGroup.appendChild(mpInput);
                         mpGroup.appendChild(mpPct);
                         mpGroup.appendChild(mpQuickBtn);
+                        mpGroup.appendChild(mpClearBtn);
 
                         infoHeader.appendChild(toggleBtn);
                         infoHeader.appendChild(btnSettings);
@@ -3596,11 +3606,23 @@
 
                         // 简短提示（放最底部）
                         const infoFooter = document.createElement('div');
-                        infoFooter.style.cssText = `margin-top: 8px; padding-top: 6px; border-top: 1px solid ${d7 ? '#444' : '#ddd'}; font-size: 10px; color: ${d7 ? '#777' : '#999'}; text-align: center;`;
+                        infoFooter.style.cssText = `margin-top: 8px; padding-top: 6px; border-top: 1px solid ${d7 ? '#444' : '#ddd'}; font-size: 12px; color: ${d7 ? '#777' : '#999'}; text-align: center;`;
                         infoFooter.textContent = '自动更新数据有延迟，左下菜单可手动更新 | 展示结果均为1级建筑';
                         summaryDisplay.appendChild(infoFooter);
 
                         container.appendChild(summaryDisplay);
+
+                        // 小屏幕：通过表格行CSS类名判断（小屏行.css-i3r4lg，大屏行.css-6ayvgo），找不到则跳过
+                        const smallRow = tbody.querySelector('tr.css-i3r4lg');
+                        const largeRow = tbody.querySelector('tr.css-6ayvgo');
+                        const isSmallScreen = smallRow && !largeRow;
+                        if (isSmallScreen) {
+                            setTimeout(() => {
+                                const rows = tbody.querySelectorAll('tr');
+                                const lastRow = rows[rows.length - 1];
+                                if (lastRow) lastRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }, 200);
+                        }
 
                         // 标记已完成注入
                         form.setAttribute('data-market-calc-initialized', 'true');
@@ -6828,7 +6850,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    自定义运行时长支持更多格式，为所有样式增加深色浅色模式，交易所页面不再使用固定css名称插入内容
+        // @changelog    自定义运行时长支持更多格式，为所有样式增加深色浅色模式，交易所页面不再使用固定css名称插入内容，交易所页面增加MP-?%功能，尝试解决交易所订单显示不全的问题，前任高管信息适配繁中、英文
 
         fetch(scriptUrl)
             .then(res => res.text())
