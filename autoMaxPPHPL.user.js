@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.9
+// @version      1.32.10
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -2916,7 +2916,7 @@
         // Worker 代码保持完全不变
         const workerCode = `
         self.onmessage = function(e) {
-        const { rowId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB, mpPercent} = e.data;
+        const { rowId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB, mpPercent, economyOverride} = e.data;
         const { price, quantity, quality, resourceId: resource } = order;
         // 根据 MP-?% 调整进货成本价
         let costPrice = price;
@@ -2970,7 +2970,7 @@
             maxProfit = -Infinity,
             size = 1,
             acceleration = SRC.acceleration,
-            economyState = SRC.economyState,
+            economyState = (economyOverride != null) ? economyOverride : SRC.economyState,
             salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
             skillCMO = (isCustomEnabled && SSB) ? SSB.saleBonus : SRC.saleBonus;
             skillCOO = (isCustomEnabled && SSB) ? SSB.adminBonus : SRC.adminBonus;
@@ -3240,8 +3240,13 @@
                     best.row.style.backgroundColor = dG ? 'rgba(255, 193, 7, 0.07)' : 'rgba(184, 134, 11, 0.05)';
                 }
 
-                // 4. 填满 2400h
-                let remainingTime = 2400 * 3600; // 秒
+                // 4. 读取建筑等级和运行时长设置（等级整数≥1，时长可小数）
+                const storedLevel = localStorage.getItem('sc_building_level');
+                const bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
+                const storedHours = localStorage.getItem('sc_building_hours');
+                const bldHours = storedHours !== null ? Math.max(0, parseFloat(storedHours) || 0) : 24;
+                const targetSeconds = bldLevel * bldHours * 3600;
+                let remainingTime = targetSeconds; // 秒
                 let usedTime = 0;
 
                 for (const order of profitableRows) {
@@ -3258,9 +3263,9 @@
                 const totalHours = totalTimeSeconds / 3600;
 
                 avgProfitPerHour = totalHours > 0 ? (totalProfitVal / totalHours) : 0;
-                isFull = totalHours >= 2399.9;
+                isFull = totalHours >= (bldLevel * bldHours - 0.1);
 
-                displayTitle = "100级建筑运行24H正时利";
+                displayTitle = `${bldLevel}级建筑运行${bldHours}H正时利`;
                 borderColor = isFull ? "#4CAF50" : "#ff9800"; // 绿或橙
 
                 // 格式化时间字符串
@@ -3291,6 +3296,16 @@
                     mpBadgeHtml = `<div style="background: ${d7r ? '#3a2a5e' : '#ede7f6'}; color: ${d7r ? '#b39ddb' : '#5e35b1'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">${mpLabel} </div>`;
                 }
 
+                // 经济周期标记文本
+                let periodBadgeHtml = '';
+                const economySelectEl2 = document.getElementById('sc-economy-select');
+                const economyVal = economySelectEl2 ? economySelectEl2.value : '';
+                if (economyVal !== '') {
+                    const periodNames = { '0': '萧条', '1': '平缓', '2': '景气' };
+                    const periodName = periodNames[economyVal] || economyVal;
+                    periodBadgeHtml = `<div style="background: ${d7r ? '#3a2a1e' : '#fff3cd'}; color: ${d7r ? '#f0c040' : '#856404'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">周期:${periodName}</div>`;
+                }
+
                 simContent.innerHTML = `
                     <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: ${isNarrowR ? '2px' : '8px'}; font-size: ${isNarrowR ? '11px' : ''};">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: ${isNarrowR ? '0px' : '6px'}; font-size: 14px;">
@@ -3308,7 +3323,7 @@
                             <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">
                                 用时: ${durationStr}
                             </div>
-                            ${mpBadgeHtml}
+                            ${mpBadgeHtml}${periodBadgeHtml}
                         </div>
                     </div>`;
             };
@@ -3459,7 +3474,9 @@
                 const rowId = rowIdCounter++;
                 pendingRows.set(rowId, row);
                 row.setAttribute('data-profit-calculated', '1');
-                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB, mpPercent });
+                const economySelectEl = document.getElementById('sc-economy-select');
+                const economyOverride = economySelectEl && economySelectEl.value !== '' ? parseInt(economySelectEl.value) : null;
+                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB, mpPercent, economyOverride });
             });
 
             // 即使没有新行增加，也要重算模拟结果
@@ -3613,9 +3630,133 @@
                         mpGroup.appendChild(mpQuickBtn);
                         mpGroup.appendChild(mpClearBtn);
 
-                        infoHeader.appendChild(toggleBtn);
-                        infoHeader.appendChild(btnSettings);
-                        infoHeader.appendChild(mpGroup);
+                        // --- 新增：高级设置容器（经济周期 + 建筑等级/时长）---
+                        const extraControls = document.createElement('span');
+                        extraControls.id = 'sc-extra-controls';
+                        extraControls.style.cssText = `display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;`;
+
+                        // 周期下拉框
+                        const economyLabel = document.createElement('span');
+                        economyLabel.textContent = '周期:';
+                        economyLabel.style.cssText = `font-size: 11px; color: ${d7 ? '#aaa' : '#666'};`;
+                        extraControls.appendChild(economyLabel);
+
+                        const economySelect = document.createElement('select');
+                        economySelect.id = 'sc-economy-select';
+                        economySelect.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 2px;`;
+                        economySelect.innerHTML = `
+                            <option value="">当前</option>
+                            <option value="0">萧条</option>
+                            <option value="1">平缓</option>
+                            <option value="2">景气</option>
+                        `;
+                        economySelect.addEventListener('change', () => {
+                            const currentTbody2 = findValidTbody();
+                            if (currentTbody2) {
+                                requestAnimationFrame(() => processNewRows(currentTbody2, true));
+                            }
+                        });
+                        extraControls.appendChild(economySelect);
+
+                        // 建筑等级输入框
+                        const buildingLevelInput = document.createElement('input');
+                        buildingLevelInput.id = 'sc-building-level';
+                        buildingLevelInput.type = 'number';
+                        buildingLevelInput.min = '1';
+                        buildingLevelInput.step = '1';
+                        buildingLevelInput.value = localStorage.getItem('sc_building_level') || '100';
+                        buildingLevelInput.title = '建筑等级';
+                        buildingLevelInput.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 2px; width: 36px; text-align: center;`;
+                        buildingLevelInput.addEventListener('input', () => {
+                            const raw = parseInt(buildingLevelInput.value);
+                            const v = (raw >= 1 && Number.isFinite(raw)) ? raw : 1;
+                            localStorage.setItem('sc_building_level', v);
+                            updateGlobalSimulation();
+                        });
+                        buildingLevelInput.addEventListener('change', () => {
+                            const raw = parseInt(buildingLevelInput.value);
+                            const v = (raw >= 1 && Number.isFinite(raw)) ? raw : 1;
+                            localStorage.setItem('sc_building_level', v);
+                            updateGlobalSimulation();
+                        });
+                        extraControls.appendChild(buildingLevelInput);
+
+                        const bldLabel1 = document.createElement('span');
+                        bldLabel1.textContent = '级建筑运行';
+                        bldLabel1.style.cssText = `font-size: 11px; color: ${d7 ? '#aaa' : '#666'}; white-space: nowrap;`;
+                        extraControls.appendChild(bldLabel1);
+
+                        // 建筑运行时长输入框
+                        const buildingHoursInput = document.createElement('input');
+                        buildingHoursInput.id = 'sc-building-hours';
+                        buildingHoursInput.type = 'number';
+                        buildingHoursInput.min = '0';
+                        buildingHoursInput.step = '0.01';
+                        buildingHoursInput.value = localStorage.getItem('sc_building_hours') || '24';
+                        buildingHoursInput.title = '运行时长（小时）';
+                        buildingHoursInput.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 2px; width: 36px; text-align: center;`;
+                        buildingHoursInput.addEventListener('input', () => {
+                            const raw = parseFloat(buildingHoursInput.value);
+                            const v = (raw > 0 && Number.isFinite(raw)) ? Math.round(raw * 100) / 100 : 0;
+                            localStorage.setItem('sc_building_hours', v);
+                            updateGlobalSimulation();
+                        });
+                        buildingHoursInput.addEventListener('change', () => {
+                            const raw = parseFloat(buildingHoursInput.value);
+                            const v = (raw > 0 && Number.isFinite(raw)) ? Math.round(raw * 100) / 100 : 0;
+                            localStorage.setItem('sc_building_hours', v);
+                            updateGlobalSimulation();
+                        });
+                        extraControls.appendChild(buildingHoursInput);
+
+                        const bldLabel2 = document.createElement('span');
+                        bldLabel2.textContent = 'H';
+                        bldLabel2.style.cssText = `font-size: 11px; color: ${d7 ? '#aaa' : '#666'};`;
+                        extraControls.appendChild(bldLabel2);
+
+                        // --- 小屏视图切换：把基本控件包一层，与 extraControls 互斥显示 ---
+                        const basicGroup = document.createElement('span');
+                        basicGroup.id = 'sc-basic-group';
+                        basicGroup.style.cssText = `display: inline-flex; align-items: center; gap: ${isNarrow7 ? '2px' : '8px'}; flex-wrap: wrap;`;
+                        basicGroup.appendChild(toggleBtn);
+                        basicGroup.appendChild(btnSettings);
+                        basicGroup.appendChild(mpGroup);
+
+                        // --- 切换按钮（仅小屏可见）---
+                        const toggleExtraBtn = document.createElement('button');
+                        toggleExtraBtn.type = 'button';
+                        toggleExtraBtn.textContent = '⇆';
+                        toggleExtraBtn.title = '切换高级设置（经济周期/建筑等级）';
+                        toggleExtraBtn.style.cssText = `font-size: 12px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#444' : '#e0e0e0'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 5px; cursor: pointer; display: ${isNarrow7 ? 'inline-block' : 'none'}; flex-shrink: 0;`;
+
+                        // 小屏默认：基本可见，高级隐藏
+                        if (isNarrow7) {
+                            extraControls.style.display = 'none';
+                        }
+
+                        toggleExtraBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const bg = document.getElementById('sc-basic-group');
+                            const ec = document.getElementById('sc-extra-controls');
+                            if (!bg || !ec) return;
+                            const showingBasic = bg.style.display !== 'none';
+                            if (showingBasic) {
+                                bg.style.display = 'none';
+                                ec.style.display = 'inline-flex';
+                                toggleExtraBtn.textContent = '↩';
+                                toggleExtraBtn.title = '返回基本设置';
+                            } else {
+                                bg.style.display = 'inline-flex';
+                                ec.style.display = 'none';
+                                toggleExtraBtn.textContent = '⇆';
+                                toggleExtraBtn.title = '切换高级设置（经济周期/建筑等级）';
+                            }
+                        });
+
+                        infoHeader.appendChild(basicGroup);
+                        infoHeader.appendChild(extraControls);
+                        infoHeader.appendChild(toggleExtraBtn);
                         summaryDisplay.appendChild(infoHeader);
 
                         // 动态结果区（由 renderUI 填充）
@@ -6888,7 +7029,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修改入库合同页面的提示文本
+        // @changelog    修改入库合同页面的提示文本，交易所页面增加自定义周期，自定义建筑运行时间
 
         fetch(scriptUrl)
             .then(res => res.text())
