@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.10
+// @version      1.32.11
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -2260,6 +2260,7 @@
 
         function observeCardsForAutoAmount() {
             let debounceTimer;
+            let lateCheckTimer; // 延迟二次检查，捕获 React 异步渲染的卡片
             const targetNode = document.body;
 
             const CHECK_SELECTORS = [
@@ -2269,6 +2270,7 @@
 
             const observer = new MutationObserver((mutationsList) => {
                 clearTimeout(debounceTimer);
+                clearTimeout(lateCheckTimer);
                 debounceTimer = setTimeout(() => {
 
                     const hasRelevantChanges = mutationsList.some(mutation => {
@@ -2284,6 +2286,11 @@
 
                     if (hasRelevantChanges) {
                         initAutoAmountButtons(false);
+                        // 追加延迟二次检查：React 组件可能分批次渲染，
+                        // 首次检查时部分卡片可能尚未挂载到 DOM
+                        lateCheckTimer = setTimeout(() => {
+                            initAutoAmountButtons(false);
+                        }, 500);
                     }
                 }, 100);
             });
@@ -2845,6 +2852,7 @@
         function observeCardsForAutoPricing() {
             // 防抖计时器
             let debounceTimer;
+            let lateCheckTimer; // 延迟二次检查，捕获 React 异步渲染的卡片
 
             // 目标容器 - 改为更具体的容器选择器（如果能确定的话）
             const targetNode = document.body; // 或者更具体的容器如 '#shop-container'
@@ -2853,6 +2861,7 @@
             const observer = new MutationObserver((mutationsList) => {
                 // 使用防抖避免频繁触发
                 clearTimeout(debounceTimer);
+                clearTimeout(lateCheckTimer);
                 debounceTimer = setTimeout(() => {
                     // 检查是否有新增的卡片节点
                     const hasNewCards = mutationsList.some(mutation => {
@@ -2867,6 +2876,11 @@
 
                     if (hasNewCards) {
                         initAutoPricing();
+                        // 追加延迟二次检查：React 组件可能分批次渲染，
+                        // 首次检查时部分卡片可能尚未挂载到 DOM
+                        lateCheckTimer = setTimeout(() => {
+                            initAutoPricing();
+                        }, 500);
                     }
                 }, 100); // 100ms防抖延迟
             });
@@ -4466,15 +4480,30 @@
             buildingPage: { //建筑页面
                 pattern: /\/b\/\d+\/?$/,
                 action: () => {
-                    setTimeout(() => {
-                        // 检查全局函数是否存在，避免报错
-                        if (typeof window.initAutoAmountButtons === 'function') {
-                            window.initAutoAmountButtons();
-                        }
-                        if (typeof window.initAutoPricing === 'function') {
-                            window.initAutoPricing();
-                        }
-                    }, 300);
+                    // 多级重试：确保在 SPA 页面切换后 DOM 完全渲染时能注入按钮
+                    // 单次 300ms 延迟有时不足以等待 React 渲染完成
+                    const tryInit = (delay, retriesLeft) => {
+                        setTimeout(() => {
+                            if (!/\/b\/\d+\/?$/.test(location.href)) return;
+                            if (typeof window.initAutoAmountButtons === 'function') {
+                                window.initAutoAmountButtons();
+                            }
+                            if (typeof window.initAutoPricing === 'function') {
+                                window.initAutoPricing();
+                            }
+                            // 检查是否成功注入了按钮，如果没有则继续重试
+                            if (retriesLeft > 0) {
+                                setTimeout(() => {
+                                    const hasAutoAmount = document.querySelector('[data-custom-amount-added]');
+                                    const hasAutoPricing = document.querySelector('[data-auto-pricing-added]');
+                                    if (!hasAutoAmount && !hasAutoPricing) {
+                                        tryInit(delay * 2, retriesLeft - 1);
+                                    }
+                                }, 200);
+                            }
+                        }, delay);
+                    };
+                    tryInit(300, 3); // 300ms → 600ms → 1200ms → 2400ms
                 }
             },
         };
@@ -6191,7 +6220,13 @@
                 const errBg = d14 ? '#3a2e1a' : '#fff3cd';
                 const errFg = d14 ? '#f0c040' : '#856404';
                 const errBorder = d14 ? '#5a4a20' : '#ffeeba';
-                contentHtml = `<div style="color: ${errFg}; background-color: ${errBg}; border: 1px solid ${errBorder}; padding: 8px; border-radius: 4px; font-size: 14px;">` + String.fromCodePoint(9888, 65039) + ` <b>匹配失败：</b> 未在通知中找到此次挖人信息。</div>`;
+                contentHtml = `<div style="color: ${errFg}; background-color: ${errBg}; border: 1px solid ${errBorder}; padding: 8px; border-radius: 4px; font-size: 14px;">` + String.fromCodePoint(9888, 65039) + ` <b>匹配失败：</b> 未在通知中找到此次挖人信息。</div>
+                <div style="margin-top:10px; padding:8px; background-color:${d14 ? '#3a2020' : '#fff5f5'}; border:1px solid ${d14 ? '#5a3030' : '#ffcccc'}; border-radius:4px; font-size:14px; color:${d14 ? '#ef5350' : '#c62828'}; line-height:1.4;">
+                    <b>⚠️请注意：</b><br>
+                    1. 本功能为插件功能，<b>禁止在游戏内聊天室提及</b>。<br>
+                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不再显示。<br>
+                    3. 若通知内高管被他人抢先招募，<b>在点击"寻找其他候选人"后显示的数据无效</b>。
+                </div>`;
             } else {
                 const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
                 const fg2 = d14 ? '#bbb' : '#555';
@@ -6267,8 +6302,8 @@
 
                 <div style="margin-top:10px; padding:8px; background-color:${d14 ? '#3a2020' : '#fff5f5'}; border:1px solid ${d14 ? '#5a3030' : '#ffcccc'}; border-radius:4px; font-size:14px; color:${d14 ? '#ef5350' : '#c62828'}; line-height:1.4;">
                     <b>⚠️请注意：</b><br>
-                    1. 本功能为插件功能，<b>请勿在游戏内聊天室提及</b>。<br>
-                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不显示。<br>
+                    1. 本功能为插件功能，<b>禁止在游戏内聊天室提及</b>。<br>
+                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不再显示。<br>
                     3. 若通知内高管被他人抢先招募，<b>在点击“寻找其他候选人”后显示的数据无效</b>。
                 </div>`;
             }
@@ -7029,7 +7064,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修改入库合同页面的提示文本，交易所页面增加自定义周期，自定义建筑运行时间
+        // @changelog    增加必要提示，尝试解决最大时利润按钮丢失问题
 
         fetch(scriptUrl)
             .then(res => res.text())
