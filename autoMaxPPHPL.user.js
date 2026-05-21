@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.11
+// @version      1.32.12
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -4305,7 +4305,11 @@
 
             // 显示时利润（仅零售物品有有效值）
             if (profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
-                displayText = `时利润:${profitValue.toFixed(2)}`;
+                if (profitValue < 0) {
+                    displayText = `<span style="color:#ff1744;font-weight:bold;">⚠️时利润:${profitValue.toFixed(2)}</span>`;
+                } else {
+                    displayText = `时利润:${profitValue.toFixed(2)}`;
+                }
             }
 
             // 显示 MP-?% （所有非排除物品）
@@ -7064,7 +7068,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加必要提示，尝试解决最大时利润按钮丢失问题
+        // @changelog    合同页面突出负时利润
 
         fetch(scriptUrl)
             .then(res => res.text())
