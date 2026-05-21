@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.7
+// @version      1.32.12
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -211,7 +211,7 @@
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: ${bgColor}; backdrop-filter: blur(10px); border: 1px solid ${borderColor};
             border-radius: 12px; z-index: 21000; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            width: 360px; color: ${textColor}; font-family: sans-serif; overflow: hidden;
+            width: min(360px, 90vw); color: ${textColor}; font-family: sans-serif; overflow: hidden;
         `;
 
             const inputStyle = `width: 75px; padding: 5px; border: 1px solid ${borderColor}; border-radius: 4px; background: ${inputBg}; color: ${isDark ? '#fff' : '#000'}; outline: none;`;
@@ -1051,7 +1051,7 @@
                 background: var(--sc-panel-bg, rgba(40,40,40,0.95));
                 border-radius: 4px;
                 padding: 8px;
-                min-width: 260px;
+                min-width: min(260px, calc(100vw - 26px));
                 box-shadow: 0 2px 8px rgba(0,0,0,0.3);
                 color: var(--sc-panel-fg, #efefef);
             }
@@ -1561,7 +1561,7 @@
                 box.id = 'mp-floating-box';
                 box.style.cssText = `
                 position: fixed;
-                left: 25px;
+                left: min(25px, 5vw);
                 top: 50px;
                 width: min(450px, 90vw);
                 max-height: 70vh;
@@ -1665,7 +1665,8 @@
                     }
                     #mp-table-container table th:first-child,
                     #mp-table-container table td:first-child {
-                        width: 50px;
+                        width: auto;
+                        min-width: 50px;
                         text-align: center;
                     }
                     #mp-floating-box div {
@@ -2259,6 +2260,7 @@
 
         function observeCardsForAutoAmount() {
             let debounceTimer;
+            let lateCheckTimer; // 延迟二次检查，捕获 React 异步渲染的卡片
             const targetNode = document.body;
 
             const CHECK_SELECTORS = [
@@ -2268,6 +2270,7 @@
 
             const observer = new MutationObserver((mutationsList) => {
                 clearTimeout(debounceTimer);
+                clearTimeout(lateCheckTimer);
                 debounceTimer = setTimeout(() => {
 
                     const hasRelevantChanges = mutationsList.some(mutation => {
@@ -2283,6 +2286,11 @@
 
                     if (hasRelevantChanges) {
                         initAutoAmountButtons(false);
+                        // 追加延迟二次检查：React 组件可能分批次渲染，
+                        // 首次检查时部分卡片可能尚未挂载到 DOM
+                        lateCheckTimer = setTimeout(() => {
+                            initAutoAmountButtons(false);
+                        }, 500);
                     }
                 }, 100);
             });
@@ -2372,6 +2380,7 @@
                 position:fixed; left:10px; top:50px; z-index:9998;
                 background:${d ? '#2c2c2c' : '#fff'}; color:${d ? '#fff' : '#333'}; padding:12px;
                 border-radius:8px; max-height:400px; overflow:auto;
+                max-width: calc(100vw - 20px);
                 box-shadow:0 4px 15px rgba(0,0,0,0.5); font-family:Arial, sans-serif;
             `;
 
@@ -2843,6 +2852,7 @@
         function observeCardsForAutoPricing() {
             // 防抖计时器
             let debounceTimer;
+            let lateCheckTimer; // 延迟二次检查，捕获 React 异步渲染的卡片
 
             // 目标容器 - 改为更具体的容器选择器（如果能确定的话）
             const targetNode = document.body; // 或者更具体的容器如 '#shop-container'
@@ -2851,6 +2861,7 @@
             const observer = new MutationObserver((mutationsList) => {
                 // 使用防抖避免频繁触发
                 clearTimeout(debounceTimer);
+                clearTimeout(lateCheckTimer);
                 debounceTimer = setTimeout(() => {
                     // 检查是否有新增的卡片节点
                     const hasNewCards = mutationsList.some(mutation => {
@@ -2865,6 +2876,11 @@
 
                     if (hasNewCards) {
                         initAutoPricing();
+                        // 追加延迟二次检查：React 组件可能分批次渲染，
+                        // 首次检查时部分卡片可能尚未挂载到 DOM
+                        lateCheckTimer = setTimeout(() => {
+                            initAutoPricing();
+                        }, 500);
                     }
                 }, 100); // 100ms防抖延迟
             });
@@ -2911,20 +2927,12 @@
         let summaryDisplay = null; // 用于展示2400h模拟结果的绿色面板
         let calcTimer = null; // 用于限流
 
-        // Worker 代码保持完全不变
+        // Worker 代码 —— 批量处理版本：一次接收所有行，共享数据只传一次
         const workerCode = `
         self.onmessage = function(e) {
-        const { rowId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB, mpPercent} = e.data;
-        const { price, quantity, quality, resourceId: resource } = order;
-        // 根据 MP-?% 调整进货成本价
-        let costPrice = price;
-        if (mpPercent != null && mpPercent !== 0 && isFinite(mpPercent)) {
-            if (mpPercent >= 0) {
-                costPrice = price * (1 - mpPercent / 100);
-            } else {
-                costPrice = price + mpPercent;
-            }
-        }
+        const { orders, shared, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
+        if (!orders || !orders.length) { self.postMessage([]); return; }
+
         const lwe = SCD.retailInfo;
         const zn = SCD.data;
 
@@ -2964,76 +2972,86 @@
             return weather && (p /= weather.sellingSpeedMultiplier), p
         };
 
-        let currentPrice = price,
-            maxProfit = -Infinity,
-            size = 1,
-            acceleration = SRC.acceleration,
-            economyState = SRC.economyState,
-            salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
-            skillCMO = (isCustomEnabled && SSB) ? SSB.saleBonus : SRC.saleBonus;
-            skillCOO = (isCustomEnabled && SSB) ? SSB.adminBonus : SRC.adminBonus;
+        // 预计算共享值（主线程已算好传入）
+        const acceleration = SRC.acceleration;
+        const economyState = shared.economyState;
+        const v = shared.v;
+        const b = shared.b;
+        const wages = shared.wages;
+        const buildingKind = shared.buildingKind;
+        const weather = shared.weather;
+        const size = 1;
 
-        const saturation = (() => {
-            const list = SRC.ResourcesRetailInfo;
-            const m = list.find(item =>
-                item.dbLetter === parseInt(resource) &&
-                (parseInt(resource) !== 150 || item.quality === quality)
-            );
-            return m?.saturation;
-        })();
+        const results = [];
 
-        const administrationOverhead = SRC.administration;
-        const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
-            ids.includes(parseInt(resource))
-        )?.[0];
-        const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
-        const averageSalary = zn.AVERAGE_SALARY;
-        const wages = averageSalary * salaryModifier;
-        const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
-        const resourceDetail = SCD.constantsResources[parseInt(resource)]
+        for (const order of orders) {
+            const { rowId, price, quantity, quality, resourceId } = order;
 
-        const v = salesModifierWithRecreationBonus + skillCMO;
-        const b = Ul(administrationOverhead, skillCOO);
-        let selltime;
-
-        while (currentPrice > 0) {
-            const modeledData = wv(economyState, resource, forceQuality ?? null);
-            const w = zL(
-                buildingKind,
-                modeledData,
-                quantity,
-                v,
-                currentPrice,
-                forceQuality === void 0 ? quality : 0,
-                saturation,
-                acceleration,
-                size,
-                resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
-            );
-            const revenue = currentPrice * quantity;
-            const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
-            const secondsToFinish = w;
-            const profit = (!secondsToFinish || secondsToFinish <= 0)
-                ? NaN
-                : (revenue - costPrice * quantity - wagesTotal) / secondsToFinish;
-
-            if (!secondsToFinish || secondsToFinish <= 0) break;
-            if (profit > maxProfit) {
-                maxProfit = profit;
-                selltime = secondsToFinish;
-            } else if (maxProfit > 0 && profit < 0) {
-                break;
+            // 根据 MP-?% 调整进货成本价
+            let costPrice = price;
+            if (shared.mpPercent != null && shared.mpPercent !== 0 && isFinite(shared.mpPercent)) {
+                if (shared.mpPercent >= 0) {
+                    costPrice = price * (1 - shared.mpPercent / 100);
+                } else {
+                    costPrice = price + shared.mpPercent;
+                }
             }
-            if (currentPrice < 8) {
-                currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-            } else if (currentPrice < 2001) {
-                currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+
+            // 饱和度：资源150（树）按品质区分，其余统一
+            let saturation;
+            if (parseInt(resourceId) === 150 && quality !== undefined) {
+                saturation = shared.saturationByQuality ? shared.saturationByQuality[quality] : shared.saturation;
             } else {
-                currentPrice = Math.round(currentPrice + 1);
+                saturation = shared.saturation;
             }
+
+            const forceQuality = (parseInt(resourceId) === 150) ? quality : undefined;
+
+            let currentPrice = price,
+                maxProfit = -Infinity,
+                selltime;
+
+            while (currentPrice > 0) {
+                const modeledData = wv(economyState, resourceId, forceQuality ?? null);
+                const w = zL(
+                    buildingKind,
+                    modeledData,
+                    quantity,
+                    v,
+                    currentPrice,
+                    forceQuality === void 0 ? quality : 0,
+                    saturation,
+                    acceleration,
+                    size,
+                    weather
+                );
+                const revenue = currentPrice * quantity;
+                const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
+                const secondsToFinish = w;
+                const profit = (!secondsToFinish || secondsToFinish <= 0)
+                    ? NaN
+                    : (revenue - costPrice * quantity - wagesTotal) / secondsToFinish;
+
+                if (!secondsToFinish || secondsToFinish <= 0) break;
+                if (profit > maxProfit) {
+                    maxProfit = profit;
+                    selltime = secondsToFinish;
+                } else if (maxProfit > 0 && profit < 0) {
+                    break;
+                }
+                if (currentPrice < 8) {
+                    currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                } else if (currentPrice < 2001) {
+                    currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                } else {
+                    currentPrice = Math.round(currentPrice + 1);
+                }
+            }
+
+            results.push({ rowId, maxProfit, selltime });
         }
 
-        self.postMessage({ rowId, maxProfit, selltime});
+        self.postMessage(results);
         };
         `;
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
@@ -3238,8 +3256,13 @@
                     best.row.style.backgroundColor = dG ? 'rgba(255, 193, 7, 0.07)' : 'rgba(184, 134, 11, 0.05)';
                 }
 
-                // 4. 填满 2400h
-                let remainingTime = 2400 * 3600; // 秒
+                // 4. 读取建筑等级和运行时长设置（等级整数≥1，时长可小数）
+                const storedLevel = localStorage.getItem('sc_building_level');
+                const bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
+                const storedHours = localStorage.getItem('sc_building_hours');
+                const bldHours = storedHours !== null ? Math.max(0, parseFloat(storedHours) || 0) : 24;
+                const targetSeconds = bldLevel * bldHours * 3600;
+                let remainingTime = targetSeconds; // 秒
                 let usedTime = 0;
 
                 for (const order of profitableRows) {
@@ -3256,9 +3279,9 @@
                 const totalHours = totalTimeSeconds / 3600;
 
                 avgProfitPerHour = totalHours > 0 ? (totalProfitVal / totalHours) : 0;
-                isFull = totalHours >= 2399.9;
+                isFull = totalHours >= (bldLevel * bldHours - 0.1);
 
-                displayTitle = "100级建筑运行24H正时利";
+                displayTitle = `${bldLevel}级建筑运行${bldHours}H正时利`;
                 borderColor = isFull ? "#4CAF50" : "#ff9800"; // 绿或橙
 
                 // 格式化时间字符串
@@ -3289,9 +3312,19 @@
                     mpBadgeHtml = `<div style="background: ${d7r ? '#3a2a5e' : '#ede7f6'}; color: ${d7r ? '#b39ddb' : '#5e35b1'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">${mpLabel} </div>`;
                 }
 
+                // 经济周期标记文本
+                let periodBadgeHtml = '';
+                const economySelectEl2 = document.getElementById('sc-economy-select');
+                const economyVal = economySelectEl2 ? economySelectEl2.value : '';
+                if (economyVal !== '') {
+                    const periodNames = { '0': '萧条', '1': '平缓', '2': '景气' };
+                    const periodName = periodNames[economyVal] || economyVal;
+                    periodBadgeHtml = `<div style="background: ${d7r ? '#3a2a1e' : '#fff3cd'}; color: ${d7r ? '#f0c040' : '#856404'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">周期:${periodName}</div>`;
+                }
+
                 simContent.innerHTML = `
                     <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: ${isNarrowR ? '2px' : '8px'}; font-size: ${isNarrowR ? '11px' : ''};">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: ${isNarrowR ? '2px' : '6px'};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: ${isNarrowR ? '0px' : '6px'}; font-size: 14px;">
                             <span style="color: ${d7r ? '#aaa' : '#777'};">${displayTitle}</span>
                             <span style="font-weight: bold; color: ${borderColor};">$${avgStr}<span style="font-weight:normal;">/h</span></span>
                         </div>
@@ -3306,64 +3339,77 @@
                             <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">
                                 用时: ${durationStr}
                             </div>
-                            ${mpBadgeHtml}
+                            ${mpBadgeHtml}${periodBadgeHtml}
                         </div>
                     </div>`;
             };
             renderUI();
         }
 
-        // 主回调处理
+        // 主回调处理 —— 批量结果 + debounce 模拟更新
+        let _simDebounceTimer = null;
+        const scheduleSimUpdate = () => {
+            if (_simDebounceTimer) clearTimeout(_simDebounceTimer);
+            _simDebounceTimer = setTimeout(() => {
+                _simDebounceTimer = null;
+                updateGlobalSimulation();
+            }, 80);
+        };
+
         profitWorker.onmessage = function (e) {
-            const { rowId, maxProfit, selltime } = e.data;
-            const row = pendingRows.get(rowId);
-            if (!row) return;
-            pendingRows.delete(rowId);
+            const results = e.data;
+            if (!Array.isArray(results)) return;
 
-            // --- 核心改动：把数值作为对象属性直接挂载到 DOM 元素上 ---
-            row.__profitData = { profit: maxProfit, time: selltime };
+            for (const item of results) {
+                const { rowId, maxProfit, selltime } = item;
+                const row = pendingRows.get(rowId);
+                if (!row) continue;
+                pendingRows.delete(rowId);
 
-            const hours = Math.floor(selltime / 3600);
-            const minutes = Math.ceil((selltime % 3600) / 60);
-            const timeStr = `${hours > 0 ? `${hours}h ` : ''}${minutes}m`;
-            const profitStr = (maxProfit * 3600).toFixed(2);
+                // --- 核心改动：把数值作为对象属性直接挂载到 DOM 元素上 ---
+                row.__profitData = { profit: maxProfit, time: selltime };
 
-            if (!row.querySelector('td.auto-profit-info')) {
-                const td = document.createElement('td');
-                td.classList.add('auto-profit-info');
-                const span = document.createElement('span');
-                const d7s = DM();
-                span.style.cssText = `display: inline-block; min-width: 30px; color: ${d7s ? 'white' : '#333'}; background: ${d7s ? '#555' : '#e0e0e0'}; border-radius: 2px; white-space: nowrap;`;
+                const hours = Math.floor(selltime / 3600);
+                const minutes = Math.ceil((selltime % 3600) / 60);
+                const timeStr = `${hours > 0 ? `${hours}h ` : ''}${minutes}m`;
+                const profitStr = (maxProfit * 3600).toFixed(2);
 
-                // 构建显示文案：窄屏(≤425px)用紧凑图标，-Infinity 显示"卖不了"
-                const isNarrow = window.innerWidth <= 576;
-                const isInfinity = !isFinite(maxProfit * 3600);
-                const profitLabel = isInfinity ? '卖不了'
-                    : isNarrow ? (maxProfit >= 0 ? `💰${profitStr}` : `⚠️${profitStr}`)
-                    : `时利润:${profitStr}`;
-                // 存储显示文案到 dataset 方便切换按钮使用
-                span.dataset.p = profitLabel;
-                span.dataset.t = `用时:${timeStr}`;
-                span.textContent = isShowingProfit ? span.dataset.p : span.dataset.t;
+                if (!row.querySelector('td.auto-profit-info')) {
+                    const td = document.createElement('td');
+                    td.classList.add('auto-profit-info');
+                    const span = document.createElement('span');
+                    const d7s = DM();
+                    span.style.cssText = `display: inline-block; min-width: 30px; color: ${d7s ? 'white' : '#333'}; background: ${d7s ? '#555' : '#e0e0e0'}; border-radius: 2px; white-space: nowrap;`;
 
-                td.appendChild(span);
-                row.appendChild(td);
+                    // 构建显示文案：窄屏用紧凑图标，-Infinity 显示"卖不了"
+                    const isNarrow = window.innerWidth <= 576;
+                    const isInfinity = !isFinite(maxProfit * 3600);
+                    const profitLabel = isInfinity ? '卖不了'
+                        : isNarrow ? (maxProfit >= 0 ? `💰${profitStr}` : `⚠️${profitStr}`)
+                            : `时利润:${profitStr}`;
+                    span.dataset.p = profitLabel;
+                    span.dataset.t = `用时:${timeStr}`;
+                    span.textContent = isShowingProfit ? span.dataset.p : span.dataset.t;
 
-                // 窄屏时收缩价格列宽度（通过注入列的前一个兄弟定位价格div）
-                if (window.innerWidth <= 576) {
-                    const priceTd = td.previousElementSibling;
-                    if (priceTd) {
-                        const priceDiv = priceTd.querySelector('div');
-                        if (priceDiv) priceDiv.style.minWidth = '10px';
+                    td.appendChild(span);
+                    row.appendChild(td);
+
+                    // 窄屏时收缩价格列宽度
+                    if (window.innerWidth <= 576) {
+                        const priceTd = td.previousElementSibling;
+                        if (priceTd) {
+                            const priceDiv = priceTd.querySelector('div');
+                            if (priceDiv) priceDiv.style.minWidth = '10px';
+                        }
                     }
-                }
 
-                allProfitSpans.add(span);
+                    allProfitSpans.add(span);
+                }
             }
 
             attachInputListener();
-            // 每次新数据回来，立刻重算 2400h 模拟
-            updateGlobalSimulation();
+            // 批量结果回来后，debounce 一次模拟更新
+            scheduleSimUpdate();
         };
 
         function findValidTbody() {
@@ -3402,65 +3448,133 @@
             }
         }
 
+        // 预计算共享值（同一资源页所有行共用），避免 Worker 内重复计算
+        function buildSharedContext(SCD, SRC, currentResourceId) {
+            const resource = parseInt(currentResourceId);
+            const zn = SCD.data;
+            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
+
+            // 经济周期覆盖
+            const economySelectEl = document.getElementById('sc-economy-select');
+            const economyState = (economySelectEl && economySelectEl.value !== '')
+                ? parseInt(economySelectEl.value)
+                : SRC.economyState;
+
+            // 高管加成（支持自定义覆盖）
+            let skillCMO, skillCOO;
+            if (isCustomEnabled) {
+                const bonusKey = `R${currentRealmId}-SC-Saved-Bonuses`;
+                try {
+                    const SSB = JSON.parse(localStorage.getItem(bonusKey));
+                    if (SSB) {
+                        skillCMO = SSB.saleBonus;
+                        skillCOO = SSB.adminBonus;
+                    } else {
+                        skillCMO = SRC.saleBonus;
+                        skillCOO = SRC.adminBonus;
+                    }
+                } catch { skillCMO = SRC.saleBonus; skillCOO = SRC.adminBonus; }
+            } else {
+                skillCMO = SRC.saleBonus;
+                skillCOO = SRC.adminBonus;
+            }
+
+            const salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus;
+
+            // 建筑类型 & 工资
+            const buildingKind = Object.entries(zn.SALES).find(([, ids]) =>
+                ids.includes(resource)
+            )?.[0];
+            const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+            const wages = (zn.AVERAGE_SALARY || 0) * (salaryModifier || 1);
+
+            // 饱和度和按品质区分的饱和度（仅资源150=树需要）
+            const list = SRC.ResourcesRetailInfo || [];
+            let saturation, saturationByQuality;
+            if (resource === 150) {
+                saturationByQuality = {};
+                for (const item of list) {
+                    if (item.dbLetter === 150 && item.quality != null) {
+                        saturationByQuality[item.quality] = item.saturation;
+                    }
+                }
+                // 默认取 Q0
+                saturation = saturationByQuality[0];
+            } else {
+                const m = list.find(item => item.dbLetter === resource);
+                saturation = m?.saturation;
+            }
+
+            // 天气（仅夏季物品）
+            const resourceDetail = SCD.constantsResources?.[resource];
+            const weather = (resourceDetail && resourceDetail.retailSeason === 'Summer')
+                ? SRC.sellingSpeedMultiplier : undefined;
+
+            const v = salesModifierWithRecreationBonus + skillCMO;
+            const b = (() => {
+                const r = SRC.administration || 1;
+                return r - (r - 1) * skillCOO / 100;
+            })();
+
+            // MP-?% 输入框的值
+            const mpInputEl = document.getElementById('sc-mp-input');
+            const mpPercent = mpInputEl ? (parseFloat(mpInputEl.value) || 0) : 0;
+
+            return {
+                economyState, buildingKind, wages,
+                saturation, saturationByQuality, weather,
+                v, b, mpPercent
+            };
+        }
+
         async function processNewRows(tbody, forceReset = false) {
             if (forceReset) {
                 tbody.querySelectorAll('tr[data-profit-calculated]').forEach(row => {
                     row.removeAttribute('data-profit-calculated');
-                    row.__profitData = null; // 清除缓存的数值数据
+                    row.__profitData = null;
                     const oldTd = row.querySelector('td.auto-profit-info');
-                    if (oldTd) oldTd.remove(); // 移除旧的 UI 单元格
+                    if (oldTd) oldTd.remove();
                 });
                 allProfitSpans.clear();
             }
-            // 此时已确定 currentIsRetail 为 true，直接获取数据即可
+
             const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
             if (!SCD_raw) return;
             const SCD = JSON.parse(SCD_raw);
             const SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${currentRealmId}`));
             if (!SRC) return;
-            // 1. 获取开关状态 (复用你的存储键名)
-            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
 
-            // 2. 初始化 SSB 变量
-            let SSB = null;
-
-            // 3. 只有当开关打开时，才尝试读取 Bonus 数据
-            if (isCustomEnabled) {
-                const bonusKey = `R${currentRealmId}-SC-Saved-Bonuses`;
-                const savedData = localStorage.getItem(bonusKey);
-
-                if (savedData) {
-                    try {
-                        SSB = JSON.parse(savedData);
-                    } catch (e) {
-                        console.error("解析 SSB 数据失败:", e);
-                        SSB = null; // 解析失败则置空
-                    }
-                } else {
-                    SSB = null; // 键不存在
-                }
-            }
-
-            // 读取 MP-?% 输入框的值
-            const mpInputEl = document.getElementById('sc-mp-input');
-            const mpPercent = mpInputEl ? (parseFloat(mpInputEl.value) || 0) : 0;
-
-            // 扫描还未处理过的行
+            // 扫描还未处理过的行，收集为订单数组
             const rows = Array.from(tbody.querySelectorAll('tr'))
                 .filter(r => !r.hasAttribute('data-profit-calculated'));
 
-            rows.forEach(row => {
+            const orders = [];
+            for (const row of rows) {
                 const data = extractNumbersFromAriaLabel(row.getAttribute('aria-label'));
-                if (!data) return;
+                if (!data) continue;
 
                 const rowId = rowIdCounter++;
                 pendingRows.set(rowId, row);
                 row.setAttribute('data-profit-calculated', '1');
-                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB, mpPercent });
-            });
+                orders.push({ rowId, price: data.price, quantity: data.quantity, quality: data.quality, resourceId: currentResourceId });
+            }
 
-            // 即使没有新行增加，也要重算模拟结果
+            // 有订单才发送，避免空消息开销
+            if (orders.length > 0) {
+                const shared = buildSharedContext(SCD, SRC, currentResourceId);
+                profitWorker.postMessage({
+                    orders,
+                    shared,
+                    SCD,
+                    SRC,
+                    SCXXCS,
+                    PROFIT_PER_BUILDING_LEVEL,
+                    RETAIL_ADJUSTMENT
+                });
+            }
+
+            // 重算模拟结果
             updateGlobalSimulation();
         }
 
@@ -3611,9 +3725,133 @@
                         mpGroup.appendChild(mpQuickBtn);
                         mpGroup.appendChild(mpClearBtn);
 
-                        infoHeader.appendChild(toggleBtn);
-                        infoHeader.appendChild(btnSettings);
-                        infoHeader.appendChild(mpGroup);
+                        // --- 新增：高级设置容器（经济周期 + 建筑等级/时长）---
+                        const extraControls = document.createElement('span');
+                        extraControls.id = 'sc-extra-controls';
+                        extraControls.style.cssText = `display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;`;
+
+                        // 周期下拉框
+                        const economyLabel = document.createElement('span');
+                        economyLabel.textContent = '周期:';
+                        economyLabel.style.cssText = `font-size: 11px; color: ${d7 ? '#aaa' : '#666'};`;
+                        extraControls.appendChild(economyLabel);
+
+                        const economySelect = document.createElement('select');
+                        economySelect.id = 'sc-economy-select';
+                        economySelect.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 2px;`;
+                        economySelect.innerHTML = `
+                            <option value="">当前</option>
+                            <option value="0">萧条</option>
+                            <option value="1">平缓</option>
+                            <option value="2">景气</option>
+                        `;
+                        economySelect.addEventListener('change', () => {
+                            const currentTbody2 = findValidTbody();
+                            if (currentTbody2) {
+                                requestAnimationFrame(() => processNewRows(currentTbody2, true));
+                            }
+                        });
+                        extraControls.appendChild(economySelect);
+
+                        // 建筑等级输入框
+                        const buildingLevelInput = document.createElement('input');
+                        buildingLevelInput.id = 'sc-building-level';
+                        buildingLevelInput.type = 'number';
+                        buildingLevelInput.min = '1';
+                        buildingLevelInput.step = '1';
+                        buildingLevelInput.value = localStorage.getItem('sc_building_level') || '100';
+                        buildingLevelInput.title = '建筑等级';
+                        buildingLevelInput.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 2px; width: 36px; text-align: center;`;
+                        buildingLevelInput.addEventListener('input', () => {
+                            const raw = parseInt(buildingLevelInput.value);
+                            const v = (raw >= 1 && Number.isFinite(raw)) ? raw : 1;
+                            localStorage.setItem('sc_building_level', v);
+                            updateGlobalSimulation();
+                        });
+                        buildingLevelInput.addEventListener('change', () => {
+                            const raw = parseInt(buildingLevelInput.value);
+                            const v = (raw >= 1 && Number.isFinite(raw)) ? raw : 1;
+                            localStorage.setItem('sc_building_level', v);
+                            updateGlobalSimulation();
+                        });
+                        extraControls.appendChild(buildingLevelInput);
+
+                        const bldLabel1 = document.createElement('span');
+                        bldLabel1.textContent = '级建筑运行';
+                        bldLabel1.style.cssText = `font-size: 11px; color: ${d7 ? '#aaa' : '#666'}; white-space: nowrap;`;
+                        extraControls.appendChild(bldLabel1);
+
+                        // 建筑运行时长输入框
+                        const buildingHoursInput = document.createElement('input');
+                        buildingHoursInput.id = 'sc-building-hours';
+                        buildingHoursInput.type = 'number';
+                        buildingHoursInput.min = '0';
+                        buildingHoursInput.step = '0.01';
+                        buildingHoursInput.value = localStorage.getItem('sc_building_hours') || '24';
+                        buildingHoursInput.title = '运行时长（小时）';
+                        buildingHoursInput.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 2px; width: 36px; text-align: center;`;
+                        buildingHoursInput.addEventListener('input', () => {
+                            const raw = parseFloat(buildingHoursInput.value);
+                            const v = (raw > 0 && Number.isFinite(raw)) ? Math.round(raw * 100) / 100 : 0;
+                            localStorage.setItem('sc_building_hours', v);
+                            updateGlobalSimulation();
+                        });
+                        buildingHoursInput.addEventListener('change', () => {
+                            const raw = parseFloat(buildingHoursInput.value);
+                            const v = (raw > 0 && Number.isFinite(raw)) ? Math.round(raw * 100) / 100 : 0;
+                            localStorage.setItem('sc_building_hours', v);
+                            updateGlobalSimulation();
+                        });
+                        extraControls.appendChild(buildingHoursInput);
+
+                        const bldLabel2 = document.createElement('span');
+                        bldLabel2.textContent = 'H';
+                        bldLabel2.style.cssText = `font-size: 11px; color: ${d7 ? '#aaa' : '#666'};`;
+                        extraControls.appendChild(bldLabel2);
+
+                        // --- 小屏视图切换：把基本控件包一层，与 extraControls 互斥显示 ---
+                        const basicGroup = document.createElement('span');
+                        basicGroup.id = 'sc-basic-group';
+                        basicGroup.style.cssText = `display: inline-flex; align-items: center; gap: ${isNarrow7 ? '2px' : '8px'}; flex-wrap: wrap;`;
+                        basicGroup.appendChild(toggleBtn);
+                        basicGroup.appendChild(btnSettings);
+                        basicGroup.appendChild(mpGroup);
+
+                        // --- 切换按钮（仅小屏可见）---
+                        const toggleExtraBtn = document.createElement('button');
+                        toggleExtraBtn.type = 'button';
+                        toggleExtraBtn.textContent = '⇆';
+                        toggleExtraBtn.title = '切换高级设置（经济周期/建筑等级）';
+                        toggleExtraBtn.style.cssText = `font-size: 12px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#444' : '#e0e0e0'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 5px; cursor: pointer; display: ${isNarrow7 ? 'inline-block' : 'none'}; flex-shrink: 0;`;
+
+                        // 小屏默认：基本可见，高级隐藏
+                        if (isNarrow7) {
+                            extraControls.style.display = 'none';
+                        }
+
+                        toggleExtraBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const bg = document.getElementById('sc-basic-group');
+                            const ec = document.getElementById('sc-extra-controls');
+                            if (!bg || !ec) return;
+                            const showingBasic = bg.style.display !== 'none';
+                            if (showingBasic) {
+                                bg.style.display = 'none';
+                                ec.style.display = 'inline-flex';
+                                toggleExtraBtn.textContent = '↩';
+                                toggleExtraBtn.title = '返回基本设置';
+                            } else {
+                                bg.style.display = 'inline-flex';
+                                ec.style.display = 'none';
+                                toggleExtraBtn.textContent = '⇆';
+                                toggleExtraBtn.title = '切换高级设置（经济周期/建筑等级）';
+                            }
+                        });
+
+                        infoHeader.appendChild(basicGroup);
+                        infoHeader.appendChild(extraControls);
+                        infoHeader.appendChild(toggleExtraBtn);
                         summaryDisplay.appendChild(infoHeader);
 
                         // 动态结果区（由 renderUI 填充）
@@ -3630,11 +3868,8 @@
 
                         container.appendChild(summaryDisplay);
 
-                        // 小屏幕：通过表格行CSS类名判断（小屏行.css-i3r4lg，大屏行.css-6ayvgo），找不到则跳过
-                        const smallRow = tbody.querySelector('tr.css-i3r4lg');
-                        const largeRow = tbody.querySelector('tr.css-6ayvgo');
-                        const isSmallScreen = smallRow && !largeRow;
-                        if (isSmallScreen) {
+                        // 小屏幕：通过窗口宽度判断，≤991px 为小屏，需要滚动到表格底部
+                        if (window.innerWidth <= 991) {
                             setTimeout(() => {
                                 const rows = tbody.querySelectorAll('tr');
                                 const lastRow = rows[rows.length - 1];
@@ -4151,7 +4386,11 @@
 
             // 显示时利润（仅零售物品有有效值）
             if (profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
-                displayText = `时利润:${profitValue.toFixed(2)}`;
+                if (profitValue < 0) {
+                    displayText = `<span style="color:#ff1744;font-weight:bold;">⚠️时利润:${profitValue.toFixed(2)}</span>`;
+                } else {
+                    displayText = `时利润:${profitValue.toFixed(2)}`;
+                }
             }
 
             // 显示 MP-?% （所有非排除物品）
@@ -4198,20 +4437,38 @@
                 const insertTarget = grandParent.firstElementChild;
                 if (!insertTarget || insertTarget === parent) return;
 
+                const isNarrow8 = window.innerWidth <= 576;
+                const d8 = DM();
                 const tip = document.createElement('div');
                 tip.style.cssText = `
                     display: flex;
+                    flex-wrap: wrap;
                     align-items: end;
+                    gap: ${isNarrow8 ? '4px' : '8px'};
+                    color: ${d8 ? '#aaa' : '#777'};
+                    font-size: ${isNarrow8 ? '11px' : '13px'};
                 `;
                 tip.dataset.warningText = 'true';
 
                 // 1. 插入文本提示
                 const textSpan = document.createElement('span');
-                textSpan.textContent = '高管，学院，周期的不及时更新可能导致计算误差，左下菜单可手动更新。';
+                textSpan.textContent = '自动更新数据有延迟，左下可手动更新';
+                textSpan.style.cssText = `
+                    white-space: ${isNarrow8 ? 'normal' : 'nowrap'};
+                    flex: ${isNarrow8 ? '1 1 100%' : '0 0 auto'};
+                `;
                 tip.appendChild(textSpan);
 
-                // 2. 插入“开关”按钮
-                // 这里的 nativeStyles 尝试抓取卡片里按钮的类名，或者直接传空对象使用函数默认样式
+                // 2. 按钮组容器（两个按钮为一组）
+                const btnGroup = document.createElement('span');
+                btnGroup.style.cssText = `
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    flex-shrink: 0;
+                `;
+
+                // 2a. 开关按钮
                 const toggle = createGlobalCustomToggle(
                     'executiveCustomToggle',
                     '自定义',
@@ -4221,20 +4478,22 @@
                         refreshAllContractProfits();
                     }
                 );
-                toggle.wrapper.style.marginLeft = "15px";
-                tip.appendChild(toggle.wrapper);
+                toggle.wrapper.style.marginLeft = "0";
+                btnGroup.appendChild(toggle.wrapper);
 
-                // 3. 插入“自定义数据”功能按钮
+                // 2b. 自定义数据功能按钮
                 const customBtn = document.createElement('button');
                 customBtn.type = 'button';
                 customBtn.textContent = '自定义高管数据';
                 customBtn.style.cssText = `
-                    margin-left: 10px; padding: 4px 12px; background: #2196f3;
+                    padding: 4px 10px; background: #2196f3;
                     color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
                     font-weight: bold; white-space: nowrap; flex-shrink: 0;
                 `;
                 customBtn.onclick = () => executiveCustomButton.show();
-                tip.appendChild(customBtn)
+                btnGroup.appendChild(customBtn);
+
+                tip.appendChild(btnGroup);
 
                 insertTarget.appendChild(tip);
             });
@@ -4306,15 +4565,30 @@
             buildingPage: { //建筑页面
                 pattern: /\/b\/\d+\/?$/,
                 action: () => {
-                    setTimeout(() => {
-                        // 检查全局函数是否存在，避免报错
-                        if (typeof window.initAutoAmountButtons === 'function') {
-                            window.initAutoAmountButtons();
-                        }
-                        if (typeof window.initAutoPricing === 'function') {
-                            window.initAutoPricing();
-                        }
-                    }, 300);
+                    // 多级重试：确保在 SPA 页面切换后 DOM 完全渲染时能注入按钮
+                    // 单次 300ms 延迟有时不足以等待 React 渲染完成
+                    const tryInit = (delay, retriesLeft) => {
+                        setTimeout(() => {
+                            if (!/\/b\/\d+\/?$/.test(location.href)) return;
+                            if (typeof window.initAutoAmountButtons === 'function') {
+                                window.initAutoAmountButtons();
+                            }
+                            if (typeof window.initAutoPricing === 'function') {
+                                window.initAutoPricing();
+                            }
+                            // 检查是否成功注入了按钮，如果没有则继续重试
+                            if (retriesLeft > 0) {
+                                setTimeout(() => {
+                                    const hasAutoAmount = document.querySelector('[data-custom-amount-added]');
+                                    const hasAutoPricing = document.querySelector('[data-auto-pricing-added]');
+                                    if (!hasAutoAmount && !hasAutoPricing) {
+                                        tryInit(delay * 2, retriesLeft - 1);
+                                    }
+                                }, 200);
+                            }
+                        }, delay);
+                    };
+                    tryInit(300, 3); // 300ms → 600ms → 1200ms → 2400ms
                 }
             },
         };
@@ -5142,7 +5416,7 @@
                     headerRow.style.display = 'flex';
                     headerRow.style.gap = '16px';
                     headerRow.style.padding = '2px 0';
-                    headerRow.innerHTML = `<div style="width:100px">剩余量</div><div style="width:130px">达成时间</div><div style="width:80px">单位成本</div>`;
+                    headerRow.innerHTML = `<div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">剩余量</div><div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">达成时间</div><div style="flex:0.8; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">单位成本</div>`;
                     qualityContent.appendChild(headerRow);
 
                     const allDecayArrays = groupedByQuality[quality].flatMap(i => i.futureDecayArray || i.result || []);
@@ -5153,9 +5427,9 @@
                         row.style.gap = "16px";
                         row.style.padding = "1px 0";
                         row.innerHTML = `
-                            <div style="width:100px">已全部衰减</div>
-                            <div style="width:130px">-</div>
-                            <div style="width:80px">∞</div>
+                            <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">已全部衰减</div>
+                            <div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">-</div>
+                            <div style="flex:0.8; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">∞</div>
                         `;
                         qualityContent.appendChild(row);
                     } else {
@@ -5165,9 +5439,9 @@
                             row.style.gap = "16px";
                             row.style.padding = "1px 0";
                             row.innerHTML = `
-                                <div style="width:100px">${amount}</div>
-                                <div style="width:130px">${time}</div>
-                                <div style="width:80px">${unitCost === Infinity
+                                <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${amount}</div>
+                                <div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${time}</div>
+                                <div style="flex:0.8; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${unitCost === Infinity
                                     ? '∞'
                                     : (typeof unitCost === 'number' ? unitCost.toFixed(3) : '∞')
                                 }</div>
@@ -5220,8 +5494,8 @@
                         headerRow.style.gap = '12px';
                         headerRow.style.padding = '2px 0';
                         headerRow.innerHTML = `
-                            <div style="width:100px">剩余量</div>
-                            <div style="width:150px">达成时间</div>
+                            <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">剩余量</div>
+                            <div style="flex:1.5; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">达成时间</div>
                         `;
                         contractContent.appendChild(headerRow);
 
@@ -5237,8 +5511,8 @@
                                 row.style.gap = "12px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:150px">${time}</div>
+                                    <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${amount}</div>
+                                    <div style="flex:1.5; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${time}</div>
                                 `;
                                 contractContent.appendChild(row);
                             });
@@ -5300,8 +5574,8 @@
                         headerRow.style.gap = '12px';
                         headerRow.style.padding = '2px 0';
                         headerRow.innerHTML = `
-                            <div style="width:100px">剩余量</div>
-                            <div style="width:150px">达成时间</div>
+                            <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">剩余量</div>
+                            <div style="flex:1.5; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">达成时间</div>
                         `;
                         contractContent.appendChild(headerRow);
 
@@ -5317,8 +5591,8 @@
                                 row.style.gap = "12px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:150px">${time}</div>
+                                    <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${amount}</div>
+                                    <div style="flex:1.5; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${time}</div>
                                 `;
                                 contractContent.appendChild(row);
                             });
@@ -5391,7 +5665,7 @@
                         headerRow.style.display = 'flex';
                         headerRow.style.gap = '16px';
                         headerRow.style.padding = '2px 0';
-                        headerRow.innerHTML = `<div style="width:100px">剩余量</div><div style="width:130px">达成时间</div>`;
+                        headerRow.innerHTML = `<div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">剩余量</div><div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">达成时间</div>`;
                         priceContent.appendChild(headerRow);
 
                         const allDecayArrays = groupedByPrice[price].flatMap(i => i.result || []);
@@ -5402,8 +5676,8 @@
                             row.style.gap = "16px";
                             row.style.padding = "1px 0";
                             row.innerHTML = `
-                                <div style="width:100px">已全部衰减</div>
-                                <div style="width:130px">-</div>
+                                <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">已全部衰减</div>
+                                <div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">-</div>
                             `;
                             priceContent.appendChild(row);
                         } else {
@@ -5413,8 +5687,8 @@
                                 row.style.gap = "16px";
                                 row.style.padding = "1px 0";
                                 row.innerHTML = `
-                                    <div style="width:100px">${amount}</div>
-                                    <div style="width:130px">${time}</div>
+                                    <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${amount}</div>
+                                    <div style="flex:1.3; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${time}</div>
                                 `;
                                 priceContent.appendChild(row);
                             });
@@ -6031,7 +6305,13 @@
                 const errBg = d14 ? '#3a2e1a' : '#fff3cd';
                 const errFg = d14 ? '#f0c040' : '#856404';
                 const errBorder = d14 ? '#5a4a20' : '#ffeeba';
-                contentHtml = `<div style="color: ${errFg}; background-color: ${errBg}; border: 1px solid ${errBorder}; padding: 8px; border-radius: 4px; font-size: 14px;">` + String.fromCodePoint(9888, 65039) + ` <b>匹配失败：</b> 未在通知中找到此次挖人信息。</div>`;
+                contentHtml = `<div style="color: ${errFg}; background-color: ${errBg}; border: 1px solid ${errBorder}; padding: 8px; border-radius: 4px; font-size: 14px;">` + String.fromCodePoint(9888, 65039) + ` <b>匹配失败：</b> 未在通知中找到此次挖人信息。</div>
+                <div style="margin-top:10px; padding:8px; background-color:${d14 ? '#3a2020' : '#fff5f5'}; border:1px solid ${d14 ? '#5a3030' : '#ffcccc'}; border-radius:4px; font-size:14px; color:${d14 ? '#ef5350' : '#c62828'}; line-height:1.4;">
+                    <b>⚠️请注意：</b><br>
+                    1. 本功能为插件功能，<b>禁止在游戏内聊天室提及</b>。<br>
+                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不再显示。<br>
+                    3. 若通知内高管被他人抢先招募，<b>在点击"寻找其他候选人"后显示的数据无效</b>。
+                </div>`;
             } else {
                 const currentRealm = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
                 const fg2 = d14 ? '#bbb' : '#555';
@@ -6042,6 +6322,7 @@
                 const border3 = d14 ? '#555' : '#ccc';
                 const bg1 = d14 ? '#3a3a3a' : '#e6e6e6';
                 const bg2 = d14 ? '#333' : '#fff';
+                const bg3 = d14 ? '#333333' : '#e8e8e8';
                 const bg4 = d14 ? '#3a2020' : '#fff5f5';
                 const bg4border = d14 ? '#5a3030' : '#ffcccc';
                 const linkColor = '#2196f3';
@@ -6106,8 +6387,8 @@
 
                 <div style="margin-top:10px; padding:8px; background-color:${d14 ? '#3a2020' : '#fff5f5'}; border:1px solid ${d14 ? '#5a3030' : '#ffcccc'}; border-radius:4px; font-size:14px; color:${d14 ? '#ef5350' : '#c62828'}; line-height:1.4;">
                     <b>⚠️请注意：</b><br>
-                    1. 本功能为插件功能，<b>请勿在游戏内聊天室提及</b>。<br>
-                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不显示。<br>
+                    1. 本功能为插件功能，<b>禁止在游戏内聊天室提及</b>。<br>
+                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不再显示。<br>
                     3. 若通知内高管被他人抢先招募，<b>在点击“寻找其他候选人”后显示的数据无效</b>。
                 </div>`;
             }
@@ -6868,7 +7149,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修改交易所小屏幕占用问题
+        // @changelog    合同页面突出负时利润
 
         fetch(scriptUrl)
             .then(res => res.text())
@@ -6878,7 +7159,7 @@
                 if (!matchVersion) return;
 
                 latestVersion = matchVersion[1]; // 确保全局变量被更新
-                
+
                 const changeLog = matchChange ? matchChange[1] : '';
 
                 // 1. 首先进行版本比较
