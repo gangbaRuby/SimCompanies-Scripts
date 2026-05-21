@@ -3920,16 +3920,25 @@
     const incomingContractsHandler = (function () {
         let cardIdCounter = 0;
         const pendingCards = new Map(); // cardId -> DOM element
+        let processDebounceTimer = null; // 防抖计时器
 
-        // Worker 代码
+        // Worker 代码 —— 批量处理版本：一次接收所有卡片，共享数据只传一次
         const workerCode = `
         self.onmessage = function(e) {
-            const { cardId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB} = e.data;
-            const { price, quantity, quality, resourceId: resource } = order;
-            const lwe = SCD.retailInfo;
-            const zn = SCD.data;
-            const Ul = (overhead, skillCOO) => overhead - (overhead - 1) * skillCOO / 100;
-            const wv = (e, t, r) => r === null ? lwe[e][t] : lwe[e][t].quality[r];
+            const { orders, shared, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
+            if (!orders || !orders.length) { self.postMessage([]); return; }
+
+            const lwe = shared.SCD.retailInfo;
+            const zn = shared.SCD.data;
+            const SRC = shared.SRC;
+
+            const Ul = (overhead, skillCOO) => {
+                const r = overhead || 1;
+                return r - (r - 1) * skillCOO / 100;
+            };
+            const wv = (e, t, r) => {
+                return r === null ? lwe[e][t] : lwe[e][t].quality[r];
+            };
             const Upt = (e, t, r, n) => t + (e + n) / r;
             const Hpt = (e, t, r, n, a) => {
                 const o = (n + e) / ((t - a) * (t - a));
@@ -3959,109 +3968,301 @@
                 return weather && (p /= weather.sellingSpeedMultiplier), p
             };
 
-            let currentPrice = price,
-                maxProfit = -Infinity,
-                size = 1,
-                acceleration = SRC.acceleration,
-                economyState = SRC.economyState,
-                salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
-                skillCMO = (isCustomEnabled && SSB) ? SSB.saleBonus : SRC.saleBonus;
-                skillCOO = (isCustomEnabled && SSB) ? SSB.adminBonus : SRC.adminBonus;
+            const results = [];
+            const size = 1;
 
-            const saturation = (() => {
-                const list = SRC.ResourcesRetailInfo;
-                const m = list.find(item =>
-                    item.dbLetter === parseInt(resource) &&
-                    (parseInt(resource) !== 150 || item.quality === quality)
-                );
-                return m?.saturation;
-            })();
+            for (const order of orders) {
+                const { cardId, price, quantity, quality, resourceId, ctx } = order;
 
-            const administrationOverhead = SRC.administration;
-            const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
-                ids.includes(parseInt(resource))
-            )?.[0];
-            const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
-            const averageSalary = zn.AVERAGE_SALARY;
-            const wages = averageSalary * salaryModifier;
-            const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
-            const resourceDetail = SCD.constantsResources[parseInt(resource)]
+                let currentPrice = price,
+                    maxProfit = -Infinity;
 
-            const v = salesModifierWithRecreationBonus + skillCMO;
-            const b = Ul(administrationOverhead, skillCOO);
+                while (currentPrice > 0) {
+                    const modeledData = wv(ctx.economyState, resourceId, ctx.forceQuality ?? null);
+                    const w = zL(
+                        ctx.buildingKind,
+                        modeledData,
+                        quantity,
+                        ctx.v,
+                        currentPrice,
+                        ctx.forceQuality === void 0 ? quality : 0,
+                        ctx.saturation,
+                        SRC.acceleration,
+                        size,
+                        ctx.weather
+                    );
+                    const revenue = currentPrice * quantity;
+                    const wagesTotal = Math.ceil(w * ctx.wages * SRC.acceleration * ctx.b / 3600);
+                    const secondsToFinish = w;
+                    const profit = (!secondsToFinish || secondsToFinish <= 0)
+                        ? NaN
+                        : (revenue - price * quantity - wagesTotal) / secondsToFinish;
 
-            while (currentPrice > 0) {
-                const modeledData = wv(economyState, resource, forceQuality ?? null);
-                const w = zL(
-                    buildingKind,
-                    modeledData,
-                    quantity,
-                    v,
-                    currentPrice,
-                    forceQuality === void 0 ? quality : 0,
-                    saturation,
-                    acceleration,
-                    size,
-                    resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
-                );
-                const revenue = currentPrice * quantity;
-                const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
-                const secondsToFinish = w;
-                const profit = (!secondsToFinish || secondsToFinish <= 0)
-                    ? NaN
-                    : (revenue - price * quantity - wagesTotal) / secondsToFinish;
+                    if (!secondsToFinish || secondsToFinish <= 0) break;
+                    if (profit > maxProfit) {
+                        maxProfit = profit;
+                    } else if (maxProfit > 0 && profit < 0) {
+                        break;
+                    }
 
-                if (!secondsToFinish || secondsToFinish <= 0) break;
-                if (profit > maxProfit) {
-                    maxProfit = profit;
-                } else if (maxProfit > 0 && profit < 0) {
-                    break;
+                    if (currentPrice < 8) {
+                        currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                    } else if (currentPrice < 2001) {
+                        currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                    } else {
+                        currentPrice = Math.round(currentPrice + 1);
+                    }
                 }
 
-                if (currentPrice < 8) {
-                    currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-                } else if (currentPrice < 2001) {
-                    currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
-                } else {
-                    currentPrice = Math.round(currentPrice + 1);
-                }
+                results.push({ cardId, maxProfit });
             }
 
-            self.postMessage({ cardId, maxProfit });
+            self.postMessage(results);
         };
         `;
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+
+        // Worker 批量结果回调
         profitWorker.onmessage = function (e) {
-            const { cardId, maxProfit } = e.data;
-            const card = pendingCards.get(cardId);
-            if (!card) return;
-            pendingCards.delete(cardId);
-            const mpPercent = card.__mpPercent || null;
-            injectHourlyProfit(card, maxProfit * 3600, mpPercent);
+            const results = e.data;
+            if (!Array.isArray(results)) return;
+
+            for (const item of results) {
+                const { cardId, maxProfit } = item;
+                const card = pendingCards.get(cardId);
+                if (!card) continue;
+                pendingCards.delete(cardId);
+                const mpPercent = card.__mpPercent || null;
+                injectHourlyProfit(card, maxProfit * 3600, mpPercent);
+            }
         };
 
-        function init() {
-            // console.log('[合同页面处理] 初始化合同页面处理逻辑');
+        // --- 预计算每个合同的共享上下文（从 Worker 移到主线程） ---
+        function buildOrderContext(resourceId, quality, SCD, SRC, isCustomEnabled, SSB) {
+            const resource = parseInt(resourceId);
+            const zn = SCD.data;
 
+            // 经济周期
+            const economyState = SRC.economyState;
+
+            // 高管加成（支持自定义覆盖）
+            let skillCMO, skillCOO;
+            if (isCustomEnabled && SSB) {
+                skillCMO = SSB.saleBonus;
+                skillCOO = SSB.adminBonus;
+            } else {
+                skillCMO = SRC.saleBonus;
+                skillCOO = SRC.adminBonus;
+            }
+
+            const salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus;
+
+            // 建筑类型 & 工资
+            const buildingKind = Object.entries(zn.SALES).find(([, ids]) =>
+                ids.includes(resource)
+            )?.[0];
+            const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+            const wages = (zn.AVERAGE_SALARY || 0) * (salaryModifier || 1);
+
+            // 饱和度（仅资源150=树按品质区分）
+            const list = SRC.ResourcesRetailInfo || [];
+            let saturation;
+            if (resource === 150) {
+                const m150 = list.find(item => item.dbLetter === 150 && item.quality === quality);
+                saturation = m150?.saturation;
+            } else {
+                const m = list.find(item => item.dbLetter === resource);
+                saturation = m?.saturation;
+            }
+
+            // 天气（仅夏季物品）
+            const resourceDetail = SCD.constantsResources?.[resource];
+            const weather = (resourceDetail && resourceDetail.retailSeason === 'Summer')
+                ? SRC.sellingSpeedMultiplier : undefined;
+
+            // forceQuality（仅资源150需要）
+            const forceQuality = (resource === 150) ? quality : undefined;
+
+            const v = salesModifierWithRecreationBonus + skillCMO;
+            const b = (() => {
+                const r = SRC.administration || 1;
+                return r - (r - 1) * skillCOO / 100;
+            })();
+
+            return {
+                economyState, buildingKind, wages,
+                saturation, weather, forceQuality,
+                v, b
+            };
+        }
+
+        // --- 计算单张卡片的 MP-?%（纯计算，不涉及网络） ---
+        function calcMpPercent(cardData, marketData) {
+            const resourceId = parseInt(cardData.dbLetter);
+            const targetQuality = (cardData.quality !== null && cardData.quality !== undefined) ? cardData.quality : 0;
+
+            if (!marketData || !Array.isArray(marketData) || marketData.length === 0) {
+                return { mpPercent: null, mpNotes: null };
+            }
+
+            // 先精确匹配合同品质，再降级匹配更高品质
+            let matchingOrders = marketData.filter(order => order.quality === targetQuality && order.price > 0);
+            let usedQuality = targetQuality;
+
+            if (matchingOrders.length === 0) {
+                // ID=150（树）只能精确匹配品质；ID=114（机器人）Q0也只能精确匹配
+                const noFallback = (resourceId === 150) || (resourceId === 114 && targetQuality === 0);
+                if (!noFallback) {
+                    const higherQualityOrders = marketData.filter(order => order.quality > targetQuality && order.price > 0);
+                    if (higherQualityOrders.length > 0) {
+                        const qualityGroups = {};
+                        higherQualityOrders.forEach(o => {
+                            if (!qualityGroups[o.quality]) qualityGroups[o.quality] = [];
+                            qualityGroups[o.quality].push(o);
+                        });
+                        const sortedQualities = Object.keys(qualityGroups).map(Number).sort((a, b) => a - b);
+                        usedQuality = sortedQualities[0];
+                        matchingOrders = qualityGroups[usedQuality];
+                    }
+                }
+            }
+
+            if (matchingOrders.length > 0) {
+                const lowestPrice = Math.min(...matchingOrders.map(o => parseFloat(o.price)));
+                if (lowestPrice > 0 && cardData.unitPrice > 0) {
+                    const mpPercent = ((lowestPrice - cardData.unitPrice) / lowestPrice) * 100;
+                    const mpNotes = (usedQuality !== targetQuality) ? `参考Q${usedQuality}价` : null;
+                    return { mpPercent, mpNotes };
+                }
+            }
+
+            return { mpPercent: null, mpNotes: '市场无对应品质' };
+        }
+
+        // --- 批量处理所有卡片（核心优化入口） ---
+        async function processAllCards(cards, forceReset = false) {
+            if (!cards || cards.length === 0) return;
+
+            const realmId = getRealmIdFromLink();
+            const constantsKey = 'SimcompaniesConstantsData';
+            const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
+
+            // 1. 检查数据是否就绪，否则触发初始化后重试
+            if (!localStorage.getItem(constantsKey) || !localStorage.getItem(regionKey)) {
+                try {
+                    const constData = await constantsData.initialize();
+                    Storage.save('constants', constData);
+                    const regionData = await RegionData.fetchFullRegionData();
+                    Storage.save('region', regionData);
+                } catch (err) {
+                    console.error('[合同批量] 数据初始化失败:', err);
+                    return;
+                }
+            }
+
+            const SCD = JSON.parse(localStorage.getItem(constantsKey));
+            const SRC = JSON.parse(localStorage.getItem(regionKey));
+            if (!SCD || !SRC) return;
+
+            // 2. 读取自定义开关
+            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
+            let SSB = null;
+            if (isCustomEnabled) {
+                const bonusKey = `R${realmId}-SC-Saved-Bonuses`;
+                try { SSB = JSON.parse(localStorage.getItem(bonusKey)); } catch (e) { SSB = null; }
+            }
+
+            const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
+
+            // 3. 解析所有卡片，收集有效数据
+            const cardInfos = []; // { card, data, isRetail }
+            const uniqueResourceIds = new Set();
+
+            for (const card of cards) {
+                if (!forceReset && card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) continue;
+
+                const data = parseContractCard(card);
+                if (!data || !data.dbLetter) continue;
+
+                const resourceId = parseInt(data.dbLetter);
+                if (EXCLUDED_IDS.includes(resourceId)) continue;
+
+                const isRetail = Object.values(SCD.data.SALES).some(arr => arr.includes(resourceId));
+
+                card.setAttribute('data-found', 'true');
+                card.removeAttribute('data-retry');
+
+                cardInfos.push({ card, data, isRetail });
+                uniqueResourceIds.add(data.dbLetter);
+            }
+
+            if (cardInfos.length === 0) return;
+
+            // 4. 并行获取所有需要的市场数据（最大优化点！）
+            const marketDataMap = {};
+            const marketPromises = [...uniqueResourceIds].map(async (rid) => {
+                marketDataMap[rid] = await getMarketDataForResource(realmId, rid);
+            });
+            await Promise.all(marketPromises);
+
+            // 5. 计算 MP-?% 并准备发送给 Worker 的订单
+            const orders = []; // 仅零售物品需要 Worker 计算
+
+            for (const { card, data, isRetail } of cardInfos) {
+                // 计算 MP-?%
+                const marketData = marketDataMap[data.dbLetter];
+                const { mpPercent, mpNotes } = calcMpPercent(data, marketData);
+                card.__mpPercent = mpPercent;
+                if (mpNotes) card.__mpNotes = mpNotes;
+
+                if (isRetail) {
+                    // 预计算上下文
+                    const ctx = buildOrderContext(data.dbLetter, data.quality, SCD, SRC, isCustomEnabled, SSB);
+                    const cardId = cardIdCounter++;
+                    pendingCards.set(cardId, card);
+                    orders.push({
+                        cardId,
+                        price: data.unitPrice,
+                        quantity: data.quantity,
+                        quality: data.quality,
+                        resourceId: data.dbLetter,
+                        ctx
+                    });
+                } else {
+                    // 非零售物品直接注入显示
+                    injectHourlyProfit(card, null, mpPercent);
+                }
+            }
+
+            // 6. 批量发送给 Worker（一次性！）
+            if (orders.length > 0) {
+                profitWorker.postMessage({
+                    orders,
+                    shared: { SCD, SRC },
+                    SCXXCS,
+                    PROFIT_PER_BUILDING_LEVEL,
+                    RETAIL_ADJUSTMENT
+                });
+            }
+        }
+
+        function init() {
             const checkPageLoaded = setInterval(() => {
                 const isOnTargetPage = /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
 
                 if (!isOnTargetPage) {
-                    // console.log('[合同页面处理] 用户已离开页面，停止轮询');
                     clearInterval(checkPageLoaded);
-                    removeWarningNotice(); // 🔄 页面离开时清理提示
+                    removeWarningNotice();
                     return;
                 }
 
                 const contractCards = document.querySelectorAll('div[tabindex="0"]');
                 if (contractCards.length > 0) {
-                    // console.log('[合同页面处理] 合同卡片已加载');
                     clearInterval(checkPageLoaded);
-                    insertWarningNotice(); // ✅ 卡片加载后插入提示
-                    contractCards.forEach(handleCard);
+                    insertWarningNotice();
+                    processAllCards([...contractCards]);
                     startMutationObserver();
-                } else {
-                    // console.log('[合同页面处理] 等待合同卡片加载...');
                 }
             }, 500);
         }
@@ -4076,8 +4277,13 @@
             const observer = new MutationObserver((mutationsList) => {
                 for (const mutation of mutationsList) {
                     if (mutation.type === 'childList') {
-                        const contractCards = document.querySelectorAll('div[tabindex="0"]');
-                        contractCards.forEach(handleCard);
+                        // 防抖：避免短时间内重复处理
+                        clearTimeout(processDebounceTimer);
+                        processDebounceTimer = setTimeout(() => {
+                            const contractCards = document.querySelectorAll('div[tabindex="0"]');
+                            processAllCards([...contractCards]);
+                        }, 150);
+                        break;
                     }
                 }
             });
@@ -4086,12 +4292,12 @@
         }
 
         function getRealmIdFromLink() {
-            const link = document.querySelector('a[href*="/company/"]'); // 选择第一个符合条件的 <a> 标签
+            const link = document.querySelector('a[href*="/company/"]');
             if (link) {
-                const match = link.href.match(/\/company\/(\d+)\//); // 提取 href 中的 realmId
-                return match ? parseInt(match[1], 10) : null; // 如果匹配到 realmId，返回
+                const match = link.href.match(/\/company\/(\d+)\//);
+                return match ? parseInt(match[1], 10) : null;
             }
-            return null; // 如果没有找到符合条件的链接，返回 null
+            return null;
         }
 
         // 获取市场数据（含1分钟缓存过期检查）
@@ -4103,214 +4309,46 @@
                 try {
                     const parsed = JSON.parse(raw);
                     const dataArray = Array.isArray(parsed) ? parsed : parsed.data;
-                    // 检查时间戳是否在1分钟内有效
                     if (parsed.timestamp && (Date.now() - parsed.timestamp < 60000)) {
-                        console.log(`[合同-MP] ${key} 缓存命中，共${dataArray.length}条，${Math.floor((Date.now() - parsed.timestamp) / 1000)}s前`);
                         return dataArray;
                     }
-                    console.log(`[合同-MP] ${key} 缓存已过期(${Math.floor((Date.now() - parsed.timestamp) / 1000)}s)，重新请求`);
-                } catch (e) {
-                    console.warn(`[合同-MP] ${key} 缓存解析失败，重新请求`, e);
-                }
-            } else {
-                console.log(`[合同-MP] ${key} 无缓存，发起请求`);
+                } catch (e) { /* 缓存损坏，重新请求 */ }
             }
 
-            // 需要重新请求
             try {
                 const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
                 const response = await fetch(url);
                 const json = await response.json();
                 if (Array.isArray(json)) {
-                    const dataToSave = {
-                        timestamp: Date.now(),
-                        data: json
-                    };
-                    localStorage.setItem(key, JSON.stringify(dataToSave));
-                    console.log(`[合同-MP] ${key} 请求成功，${json.length}条数据已缓存`);
+                    localStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data: json }));
                     return json;
                 }
-                console.warn(`[合同-MP] ${key} 响应非数组:`, typeof json);
             } catch (e) {
-                console.error(`[合同-MP] ${key} 请求失败:`, e);
-                // 如果 fetch 失败但有旧数据，返回旧数据
+                // 请求失败时回退到过期缓存
                 if (raw) {
                     try {
                         const parsed = JSON.parse(raw);
-                        const fallback = Array.isArray(parsed) ? parsed : parsed.data;
-                        console.log(`[合同-MP] ${key} 请求失败，使用${fallback?.length || 0}条过期数据`);
-                        return fallback;
+                        return Array.isArray(parsed) ? parsed : parsed.data;
                     } catch { }
                 }
             }
             return null;
         }
 
-        async function handleCard(card) {
-            // ✅ 提前返回条件改成：
-            if (card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) return;
-
-            const data = parseContractCard(card);
-            if (!data || !data.dbLetter) return;
-
-            const realmId = getRealmIdFromLink();
-            const constantsKey = 'SimcompaniesConstantsData';
-            const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
-
-            if (!localStorage.getItem(constantsKey) || !localStorage.getItem(regionKey)) {
-                // console.log('[合同卡片] 缺少数据，尝试初始化...');
-                card.setAttribute('data-retry', 'true'); // 👈 表明后续还要再处理
-                constantsData.initialize()
-                    .then(data => {
-                        Storage.save('constants', data);
-                        return RegionData.fetchFullRegionData();
-                    })
-                    .then(regionData => {
-                        Storage.save('region', regionData);
-                        // console.log('[合同卡片] 数据初始化完成，重新处理卡片');
-                        handleCard(card); // ✅ 数据准备好再重试
-                    })
-                    .catch(err => {
-                        console.error('[合同卡片] 数据初始化失败:', err);
-                    });
-                return;
-            }
-
-            card.setAttribute('data-found', 'true'); // ✅ 仅在数据准备好后设置
-            card.removeAttribute('data-retry');
-
-            const SCD = JSON.parse(localStorage.getItem(constantsKey));
-            const SRC = JSON.parse(localStorage.getItem(regionKey));
-            // 1. 获取开关状态 (复用你的存储键名)
-            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
-
-            // 2. 初始化 SSB 变量
-            let SSB = null;
-
-            // 3. 只有当开关打开时，才尝试读取 Bonus 数据
-            if (isCustomEnabled) {
-                const bonusKey = `R${realmId}-SC-Saved-Bonuses`;
-                const savedData = localStorage.getItem(bonusKey);
-
-                if (savedData) {
-                    try {
-                        SSB = JSON.parse(savedData);
-                    } catch (e) {
-                        console.error("解析 SSB 数据失败:", e);
-                        SSB = null; // 解析失败则置空
-                    }
-                } else {
-                    SSB = null; // 键不存在
-                }
-            }
-
-            // 排除特定ID（91=亚轨道火箭,94=BFR,95=喷气客机,96=豪华飞机,97=单引擎飞机,99=人造卫星）
-            const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
-            const resourceId = parseInt(data.dbLetter);
-            if (EXCLUDED_IDS.includes(resourceId)) return;
-
-            // 判断是否为零售物品（用于决定是否计算利润）
-            const isRetail = Object.values(SCD.data.SALES).some(arr =>
-                arr.includes(resourceId)
-            );
-
-            // 获取市场数据计算 MP-?%
-            let mpPercent = null;
-            try {
-                const targetQuality = (data.quality !== null && data.quality !== undefined) ? data.quality : 0;
-                const marketData = await getMarketDataForResource(realmId, data.dbLetter);
-                if (marketData && Array.isArray(marketData) && marketData.length > 0) {
-                    // 先精确匹配合同品质，再降级匹配更高品质
-                    let matchingOrders = marketData.filter(order => order.quality === targetQuality && order.price > 0);
-                    let usedQuality = targetQuality;
-
-                    if (matchingOrders.length === 0) {
-                        // ID=150（树）只能精确匹配品质；ID=114（机器人）Q0也只能精确匹配
-                        const noFallback = (resourceId === 150) || (resourceId === 114 && targetQuality === 0);
-                        if (!noFallback) {
-                            // 无精确匹配，尝试使用更高品质
-                            const higherQualityOrders = marketData.filter(order => order.quality > targetQuality && order.price > 0);
-                            if (higherQualityOrders.length > 0) {
-                                // 按品质分组，取最低的更高品质
-                                const qualityGroups = {};
-                                higherQualityOrders.forEach(o => {
-                                    if (!qualityGroups[o.quality]) qualityGroups[o.quality] = [];
-                                    qualityGroups[o.quality].push(o);
-                                });
-                                const sortedQualities = Object.keys(qualityGroups).map(Number).sort((a, b) => a - b);
-                                usedQuality = sortedQualities[0];
-                                matchingOrders = qualityGroups[usedQuality];
-                                console.log(`[合同-MP] 资源${data.dbLetter} 无Q${targetQuality}，降级使用Q${usedQuality} (${matchingOrders.length}条)`);
-                            }
-                        }
-                    }
-
-                    console.log(`[合同-MP] 资源${data.dbLetter} Q${targetQuality} 匹配${matchingOrders.length}条订单 (共${marketData.length}条)`);
-                    if (matchingOrders.length > 0) {
-                        const lowestPrice = Math.min(...matchingOrders.map(o => parseFloat(o.price)));
-                        if (lowestPrice > 0 && data.unitPrice > 0) {
-                            mpPercent = ((lowestPrice - data.unitPrice) / lowestPrice) * 100;
-                            console.log(`[合同-MP] 合同单价${data.unitPrice} 最低市场价${lowestPrice} = MP-${mpPercent.toFixed(2)}%`);
-                            if (usedQuality !== targetQuality) {
-                                card.__mpNotes = `参考Q${usedQuality}价`;
-                            }
-                        }
-                    } else {
-                        card.__mpNotes = '市场无对应品质';
-                        console.log(`[合同-MP] 资源${data.dbLetter} Q${targetQuality} 市场无对应品质订单`);
-                    }
-                }
-            } catch (e) {
-                console.error('[合同-MP] 获取市场数据失败:', e);
-            }
-
-            // 在卡片上暂存 mpPercent，供 worker 回调使用
-            card.__mpPercent = mpPercent;
-
-            const cardId = cardIdCounter++;
-            pendingCards.set(cardId, card);
-
-            // 仅零售物品才发送给 Worker 计算利润
-            if (isRetail) {
-                profitWorker.postMessage({
-                    cardId,
-                    order: {
-                        resourceId: data.dbLetter,
-                        price: data.unitPrice,
-                        quantity: data.quantity,
-                        quality: data.quality
-                    },
-                    SCD,
-                    SRC,
-                    SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB
-                });
-            } else {
-                // 非零售物品只展示 MP-?% 无需等待 worker
-                injectHourlyProfit(card, null, mpPercent);
-            }
-        }
-
         function refreshAllContractProfits() {
             const contractCards = document.querySelectorAll('div[tabindex="0"]');
             contractCards.forEach(card => {
-                // 1. 移除旧的利润/MP显示（防止重复堆叠）
                 const oldProfits = card.querySelectorAll('b');
                 oldProfits.forEach(b => {
                     if (b.textContent.includes('时利润') || b.textContent.includes('MP-')) b.remove();
                 });
-
-                // 2. 移除 data-found 标记，让 handleCard 认为这是一个新卡片
                 card.removeAttribute('data-found');
                 delete card.__mpNotes;
-
-                // 3. 重新执行处理逻辑
-                handleCard(card);
             });
+            processAllCards([...contractCards], true);
         }
 
         function parseContractCard(card) {
-            // console.log(card)
             const result = {
                 quantity: null,
                 quality: null,
@@ -4323,7 +4361,6 @@
 
             const label = card.getAttribute('aria-label') || '';
 
-            // 使用文本强制匹配，如果合同不计算，应当查看翻译平台文本是否发生改变
             const regexEN = /^incoming contract,\s*([\d,]+).*?quality\s+(\d+),\s*at\s*\$([\d,.]+)\s+per unit,\s*total price\s*\$([\d,.]+)/i;
             const regexSC = /^来自.*?的入库合同，([\d,]+)单位的Q(\d+).*?，价格为\$([\d,.]+)每单位，总价\$([\d,.]+)/;
             const regexTC = /^來自.*?的入庫合同，([\d,]+)單位的Q(\d+).*?，價格為\$([\d,.]+)每單位，總價\$([\d,.]+)/;
@@ -4360,7 +4397,6 @@
                 const matched = resources.find(r => r.image === result.resourcePath);
                 if (matched) result.dbLetter = matched.dbLetter;
             }
-            // console.log(result)
             return result;
         }
 
@@ -4377,7 +4413,6 @@
             // 检查是否已注入过
             if (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
                 (priceBox.nextSibling.textContent?.includes('时利润') || priceBox.nextSibling.textContent?.includes('MP-'))) {
-                console.log('[合同-MP] injectHourlyProfit: 已注入过，跳过');
                 return;
             }
 
@@ -4401,12 +4436,10 @@
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
                 displayText += `<span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
-                // 如有备注（如"参考Q1价"），追加在百分比后面
                 if (mpNotes) {
                     displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
                 }
             } else if (mpNotes) {
-                // 仅有备注无计算结果（市场无对应品质）
                 if (displayText) displayText += ' |';
                 displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};">${mpNotes}</span>`;
             }
@@ -4416,7 +4449,6 @@
                 return;
             }
 
-            console.log('[合同-MP] injectHourlyProfit: 注入文本=', displayText);
             profitDisplay.innerHTML = displayText;
             profitDisplay.style.marginLeft = '8px';
             priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
@@ -4474,7 +4506,6 @@
                     '自定义',
                     { buttonClass: 'btn btn-primary' },
                     (isEnabled) => {
-                        // 当开关切换时，触发全局卡片重绘
                         refreshAllContractProfits();
                     }
                 );
