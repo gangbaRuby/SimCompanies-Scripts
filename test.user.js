@@ -4022,7 +4022,7 @@
         `;
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
 
-        // Worker 批量结果回调
+        // Worker 批量结果回调：立即注入时利润（不等待 MP 数据）
         profitWorker.onmessage = function (e) {
             const results = e.data;
             if (!Array.isArray(results)) return;
@@ -4032,8 +4032,8 @@
                 const card = pendingCards.get(cardId);
                 if (!card) continue;
                 pendingCards.delete(cardId);
-                const mpPercent = card.__mpPercent || null;
-                injectHourlyProfit(card, maxProfit * 3600, mpPercent);
+                // 立即显示时利润，MP 部分后续由 MP 数据回调填充
+                injectOrUpdateProfit(card, maxProfit * 3600);
             }
         };
 
@@ -4096,50 +4096,49 @@
             };
         }
 
-        // --- 计算单张卡片的 MP-?%（纯计算，不涉及网络） ---
-        function calcMpPercent(cardData, marketData) {
+        // --- 计算单张卡片的 MP 信息（游戏机制：高Q可替代低Q，但低Q不可替代高Q） ---
+        function calcMpInfo(cardData, marketData) {
             const resourceId = parseInt(cardData.dbLetter);
             const targetQuality = (cardData.quality !== null && cardData.quality !== undefined) ? cardData.quality : 0;
 
             if (!marketData || !Array.isArray(marketData) || marketData.length === 0) {
-                return { mpPercent: null, mpNotes: null };
+                return { mpPercent: null, mpValue: null, mpNotes: null };
             }
 
-            // 先精确匹配合同品质，再降级匹配更高品质
-            let matchingOrders = marketData.filter(order => order.quality === targetQuality && order.price > 0);
-            let usedQuality = targetQuality;
+            // ID=150（树）只能精确匹配品质
+            const exactOnly = (resourceId === 150);
 
-            if (matchingOrders.length === 0) {
-                // ID=150（树）只能精确匹配品质；ID=114（机器人）Q0也只能精确匹配
-                const noFallback = (resourceId === 150) || (resourceId === 114 && targetQuality === 0);
-                if (!noFallback) {
-                    const higherQualityOrders = marketData.filter(order => order.quality > targetQuality && order.price > 0);
-                    if (higherQualityOrders.length > 0) {
-                        const qualityGroups = {};
-                        higherQualityOrders.forEach(o => {
-                            if (!qualityGroups[o.quality]) qualityGroups[o.quality] = [];
-                            qualityGroups[o.quality].push(o);
-                        });
-                        const sortedQualities = Object.keys(qualityGroups).map(Number).sort((a, b) => a - b);
-                        usedQuality = sortedQualities[0];
-                        matchingOrders = qualityGroups[usedQuality];
+            let bestPrice = Infinity;
+            let bestQuality = null;
+
+            if (exactOnly) {
+                // 仅匹配同品质
+                const sameQ = marketData.filter(o => o.quality === targetQuality && o.price > 0);
+                if (sameQ.length > 0) {
+                    bestPrice = Math.min(...sameQ.map(o => parseFloat(o.price)));
+                    bestQuality = targetQuality;
+                }
+            } else {
+                // 遍历 ≥ 合同品质的所有订单（高Q可替代低Q使用）
+                for (const order of marketData) {
+                    const p = parseFloat(order.price);
+                    if (p > 0 && order.quality >= targetQuality && p < bestPrice) {
+                        bestPrice = p;
+                        bestQuality = order.quality;
                     }
                 }
             }
 
-            if (matchingOrders.length > 0) {
-                const lowestPrice = Math.min(...matchingOrders.map(o => parseFloat(o.price)));
-                if (lowestPrice > 0 && cardData.unitPrice > 0) {
-                    const mpPercent = ((lowestPrice - cardData.unitPrice) / lowestPrice) * 100;
-                    const mpNotes = (usedQuality !== targetQuality) ? `参考Q${usedQuality}价` : null;
-                    return { mpPercent, mpNotes };
-                }
+            if (bestPrice !== Infinity && bestPrice > 0 && cardData.unitPrice > 0) {
+                const mpPercent = ((bestPrice - cardData.unitPrice) / bestPrice) * 100;
+                const mpNotes = (bestQuality !== targetQuality) ? `参考Q${bestQuality}价` : null;
+                return { mpPercent, mpValue: bestPrice, mpNotes };
             }
 
-            return { mpPercent: null, mpNotes: '市场无对应品质' };
+            return { mpPercent: null, mpValue: null, mpNotes: '市场无对应品质' };
         }
 
-        // --- 批量处理所有卡片（核心优化入口） ---
+        // --- 批量处理所有卡片（时利润与 MP 分离：时利润立即发送 Worker，MP 后台拉取） ---
         async function processAllCards(cards, forceReset = false) {
             if (!cards || cards.length === 0) return;
 
@@ -4176,7 +4175,7 @@
             const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
 
             // 3. 解析所有卡片，收集有效数据
-            const cardInfos = []; // { card, data, isRetail }
+            const cardInfos = [];
             const uniqueResourceIds = new Set();
 
             for (const card of cards) {
@@ -4192,6 +4191,8 @@
 
                 card.setAttribute('data-found', 'true');
                 card.removeAttribute('data-retry');
+                // 标记 MP 待处理（时利润先展示）
+                if (isRetail) card.__mpPending = true;
 
                 cardInfos.push({ card, data, isRetail });
                 uniqueResourceIds.add(data.dbLetter);
@@ -4199,29 +4200,14 @@
 
             if (cardInfos.length === 0) return;
 
-            // 4. 并行获取所有需要的市场数据（最大优化点！）
-            const marketDataMap = {};
-            const marketPromises = [...uniqueResourceIds].map(async (rid) => {
-                marketDataMap[rid] = await getMarketDataForResource(realmId, rid);
-            });
-            await Promise.all(marketPromises);
-
-            // 5. 计算 MP-?% 并准备发送给 Worker 的订单
-            const orders = []; // 仅零售物品需要 Worker 计算
-
+            // === 流程 A：时利润 — 立即发送给 Worker（不等待 MP 数据！） ===
+            const retailOrders = [];
             for (const { card, data, isRetail } of cardInfos) {
-                // 计算 MP-?%
-                const marketData = marketDataMap[data.dbLetter];
-                const { mpPercent, mpNotes } = calcMpPercent(data, marketData);
-                card.__mpPercent = mpPercent;
-                if (mpNotes) card.__mpNotes = mpNotes;
-
                 if (isRetail) {
-                    // 预计算上下文
                     const ctx = buildOrderContext(data.dbLetter, data.quality, SCD, SRC, isCustomEnabled, SSB);
                     const cardId = cardIdCounter++;
                     pendingCards.set(cardId, card);
-                    orders.push({
+                    retailOrders.push({
                         cardId,
                         price: data.unitPrice,
                         quantity: data.quantity,
@@ -4229,21 +4215,49 @@
                         resourceId: data.dbLetter,
                         ctx
                     });
-                } else {
-                    // 非零售物品直接注入显示
-                    injectHourlyProfit(card, null, mpPercent);
                 }
             }
-
-            // 6. 批量发送给 Worker（一次性！）
-            if (orders.length > 0) {
+            if (retailOrders.length > 0) {
                 profitWorker.postMessage({
-                    orders,
+                    orders: retailOrders,
                     shared: { SCD, SRC },
                     SCXXCS,
                     PROFIT_PER_BUILDING_LEVEL,
                     RETAIL_ADJUSTMENT
                 });
+            }
+
+            // === 流程 B：MP 数据 — 后台拉取，完成后更新显示 ===
+            fetchMpDataAndUpdate(cardInfos, realmId);
+        }
+
+        // --- 后台拉取 MP 数据并更新卡片显示（与利润计算并行） ---
+        async function fetchMpDataAndUpdate(cardInfos, realmId) {
+            // 1. 收集唯一资源ID
+            const uniqueIds = new Set();
+            for (const { data } of cardInfos) {
+                if (data.dbLetter) uniqueIds.add(data.dbLetter);
+            }
+            if (uniqueIds.size === 0) return;
+
+            // 2. 并行获取所有市场数据
+            const marketDataMap = {};
+            const marketPromises = [...uniqueIds].map(async (rid) => {
+                marketDataMap[rid] = await getMarketDataForResource(realmId, rid);
+            });
+            await Promise.all(marketPromises);
+
+            // 3. 计算并更新每张卡片的 MP 信息
+            for (const { card, data } of cardInfos) {
+                const marketData = marketDataMap[data.dbLetter];
+                const mpInfo = calcMpInfo(data, marketData);
+                card.__mpPercent = mpInfo.mpPercent;
+                card.__mpValue = mpInfo.mpValue;
+                if (mpInfo.mpNotes) card.__mpNotes = mpInfo.mpNotes;
+                card.__mpPending = false;
+
+                // 更新卡片上的 MP 显示区域
+                updateCardMpDisplay(card, mpInfo.mpPercent, mpInfo.mpValue, mpInfo.mpNotes);
             }
         }
 
@@ -4338,12 +4352,20 @@
         function refreshAllContractProfits() {
             const contractCards = document.querySelectorAll('div[tabindex="0"]');
             contractCards.forEach(card => {
-                const oldProfits = card.querySelectorAll('b');
-                oldProfits.forEach(b => {
-                    if (b.textContent.includes('时利润') || b.textContent.includes('MP-')) b.remove();
+                // 清理旧的显示元素（通过 data-sc-contract 标记识别）
+                const oldEl = card.__profitDisplayEl;
+                if (oldEl && oldEl.parentNode) oldEl.remove();
+                // 兜底：按文本查找旧的 <b> 元素
+                card.querySelectorAll('b').forEach(b => {
+                    if (b.dataset?.scContract === 'true' ||
+                        b.textContent.includes('时利润') ||
+                        b.textContent.includes('MP-')) b.remove();
                 });
                 card.removeAttribute('data-found');
                 delete card.__mpNotes;
+                delete card.__mpValue;
+                delete card.__mpPending;
+                delete card.__profitDisplayEl;
             });
             processAllCards([...contractCards], true);
         }
@@ -4400,26 +4422,116 @@
             return result;
         }
 
-        function injectHourlyProfit(card, profitValue, mpPercent) {
+        // --- 注入/更新时利润（仅时利润，不含 MP，用于 Worker 回调立即展示） ---
+        function injectOrUpdateProfit(card, profitValue) {
             const infoDiv = Array.from(card.querySelectorAll('div'))
                 .find(div => div.textContent?.includes('@') && div.querySelector('b'));
 
             const priceBox = infoDiv?.querySelector('b');
-            if (!priceBox) {
-                console.warn('[合同-MP] injectHourlyProfit: 未找到priceBox');
+            if (!priceBox) return;
+
+            // 查找是否已有注入元素
+            const existingEl = card.__profitDisplayEl ||
+                (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
+                 priceBox.nextSibling.dataset?.scContract === 'true' ? priceBox.nextSibling : null);
+
+            if (existingEl) {
+                // 已存在：更新时利润部分
+                const profitSpan = existingEl.querySelector('.sc-profit-part');
+                if (profitSpan && profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
+                    if (profitValue < 0) {
+                        profitSpan.innerHTML = `<span style="color:#ff1744;font-weight:bold;">⚠️时利润:${profitValue.toFixed(2)}</span>`;
+                    } else {
+                        profitSpan.innerHTML = `时利润:${profitValue.toFixed(2)}`;
+                    }
+                }
                 return;
             }
 
-            // 检查是否已注入过
+            // 首次注入：仅显示时利润 + MP 占位符
+            const profitDisplay = document.createElement('b');
+            profitDisplay.dataset.scContract = 'true';
+            profitDisplay.style.marginLeft = '8px';
+
+            let profitHtml = '';
+            if (profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
+                if (profitValue < 0) {
+                    profitHtml = `<span class="sc-profit-part" style="color:#ff1744;font-weight:bold;">⚠️时利润:${profitValue.toFixed(2)}</span>`;
+                } else {
+                    profitHtml = `<span class="sc-profit-part">时利润:${profitValue.toFixed(2)}</span>`;
+                }
+            }
+            // MP 占位（后续由 updateCardMpDisplay 填充）
+            const mpPlaceholder = card.__mpPending
+                ? `<span class="sc-mp-part" style="color:#888;"> | MP计算中...</span>`
+                : '';
+
+            profitDisplay.innerHTML = profitHtml + mpPlaceholder;
+            priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
+            card.__profitDisplayEl = profitDisplay;
+        }
+
+        // --- 更新卡片上的 MP 信息显示 ---
+        function updateCardMpDisplay(card, mpPercent, mpValue, mpNotes) {
+            const displayEl = card.__profitDisplayEl;
+            if (!displayEl) {
+                // 如果没有时利润显示元素（非零售物品），创建仅 MP 的显示
+                injectHourlyProfitLegacy(card, null, mpPercent, mpValue, mpNotes);
+                return;
+            }
+
+            // 已有时利润元素：更新 MP 部分
+            const mpSpan = displayEl.querySelector('.sc-mp-part');
+            const dMp = DM();
+            let mpHtml = '';
+
+            if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
+                const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
+                const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
+                mpHtml = ` | <span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
+                // 同时显示 MP 值（最低市场价）
+                if (mpValue !== null && mpValue !== undefined && mpValue > 0) {
+                    mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
+                }
+                if (mpNotes) {
+                    mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
+                }
+            } else {
+                // 无有效 MP 数据
+                if (mpNotes) {
+                    mpHtml = ` | <span style="color:${dMp ? '#aaa' : '#777'};">${mpNotes}</span>`;
+                } else {
+                    mpHtml = ''; // 清空占位符
+                }
+            }
+
+            if (mpSpan) {
+                mpSpan.innerHTML = mpHtml;
+            } else {
+                // 没有占位 span，追加
+                const currentHtml = displayEl.innerHTML;
+                displayEl.innerHTML = currentHtml + mpHtml;
+            }
+        }
+
+        // --- 非零售物品的完整注入（仅 MP，无时利润） ---
+        function injectHourlyProfitLegacy(card, profitValue, mpPercent, mpValue, mpNotes) {
+            const infoDiv = Array.from(card.querySelectorAll('div'))
+                .find(div => div.textContent?.includes('@') && div.querySelector('b'));
+
+            const priceBox = infoDiv?.querySelector('b');
+            if (!priceBox) return;
+
             if (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
-                (priceBox.nextSibling.textContent?.includes('时利润') || priceBox.nextSibling.textContent?.includes('MP-'))) {
+                priceBox.nextSibling.dataset?.scContract === 'true') {
                 return;
             }
 
             const profitDisplay = document.createElement('b');
-            let displayText = '';
+            profitDisplay.dataset.scContract = 'true';
+            profitDisplay.style.marginLeft = '8px';
 
-            // 显示时利润（仅零售物品有有效值）
+            let displayText = '';
             if (profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
                 if (profitValue < 0) {
                     displayText = `<span style="color:#ff1744;font-weight:bold;">⚠️时利润:${profitValue.toFixed(2)}</span>`;
@@ -4428,14 +4540,15 @@
                 }
             }
 
-            // 显示 MP-?% （所有非排除物品）
-            const mpNotes = card.__mpNotes || null;
             const dMpNote = DM();
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
                 if (displayText) displayText += ' |';
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
                 displayText += `<span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
+                if (mpValue && mpValue > 0) {
+                    displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
+                }
                 if (mpNotes) {
                     displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
                 }
@@ -4444,14 +4557,17 @@
                 displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};">${mpNotes}</span>`;
             }
 
-            if (!displayText) {
-                console.warn('[合同-MP] injectHourlyProfit: 无内容可展示 profitValue=', profitValue, 'mpPercent=', mpPercent);
-                return;
-            }
-
+            if (!displayText) return;
             profitDisplay.innerHTML = displayText;
-            profitDisplay.style.marginLeft = '8px';
             priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
+            card.__profitDisplayEl = profitDisplay;
+        }
+
+        // --- 保留旧签名兼容（非零售物品从 MP 回调调用） ---
+        function injectHourlyProfit(card, profitValue, mpPercent) {
+            const mpValue = card.__mpValue || null;
+            const mpNotes = card.__mpNotes || null;
+            injectHourlyProfitLegacy(card, profitValue, mpPercent, mpValue, mpNotes);
         }
 
         function insertWarningNotice() {
