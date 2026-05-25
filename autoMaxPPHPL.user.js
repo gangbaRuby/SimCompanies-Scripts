@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.12
+// @version      1.32.13
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -2927,20 +2927,12 @@
         let summaryDisplay = null; // 用于展示2400h模拟结果的绿色面板
         let calcTimer = null; // 用于限流
 
-        // Worker 代码保持完全不变
+        // Worker 代码 —— 批量处理版本：一次接收所有行，共享数据只传一次
         const workerCode = `
         self.onmessage = function(e) {
-        const { rowId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB, mpPercent, economyOverride} = e.data;
-        const { price, quantity, quality, resourceId: resource } = order;
-        // 根据 MP-?% 调整进货成本价
-        let costPrice = price;
-        if (mpPercent != null && mpPercent !== 0 && isFinite(mpPercent)) {
-            if (mpPercent >= 0) {
-                costPrice = price * (1 - mpPercent / 100);
-            } else {
-                costPrice = price + mpPercent;
-            }
-        }
+        const { orders, shared, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
+        if (!orders || !orders.length) { self.postMessage([]); return; }
+
         const lwe = SCD.retailInfo;
         const zn = SCD.data;
 
@@ -2980,76 +2972,86 @@
             return weather && (p /= weather.sellingSpeedMultiplier), p
         };
 
-        let currentPrice = price,
-            maxProfit = -Infinity,
-            size = 1,
-            acceleration = SRC.acceleration,
-            economyState = (economyOverride != null) ? economyOverride : SRC.economyState,
-            salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
-            skillCMO = (isCustomEnabled && SSB) ? SSB.saleBonus : SRC.saleBonus;
-            skillCOO = (isCustomEnabled && SSB) ? SSB.adminBonus : SRC.adminBonus;
+        // 预计算共享值（主线程已算好传入）
+        const acceleration = SRC.acceleration;
+        const economyState = shared.economyState;
+        const v = shared.v;
+        const b = shared.b;
+        const wages = shared.wages;
+        const buildingKind = shared.buildingKind;
+        const weather = shared.weather;
+        const size = 1;
 
-        const saturation = (() => {
-            const list = SRC.ResourcesRetailInfo;
-            const m = list.find(item =>
-                item.dbLetter === parseInt(resource) &&
-                (parseInt(resource) !== 150 || item.quality === quality)
-            );
-            return m?.saturation;
-        })();
+        const results = [];
 
-        const administrationOverhead = SRC.administration;
-        const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
-            ids.includes(parseInt(resource))
-        )?.[0];
-        const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
-        const averageSalary = zn.AVERAGE_SALARY;
-        const wages = averageSalary * salaryModifier;
-        const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
-        const resourceDetail = SCD.constantsResources[parseInt(resource)]
+        for (const order of orders) {
+            const { rowId, price, quantity, quality, resourceId } = order;
 
-        const v = salesModifierWithRecreationBonus + skillCMO;
-        const b = Ul(administrationOverhead, skillCOO);
-        let selltime;
-
-        while (currentPrice > 0) {
-            const modeledData = wv(economyState, resource, forceQuality ?? null);
-            const w = zL(
-                buildingKind,
-                modeledData,
-                quantity,
-                v,
-                currentPrice,
-                forceQuality === void 0 ? quality : 0,
-                saturation,
-                acceleration,
-                size,
-                resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
-            );
-            const revenue = currentPrice * quantity;
-            const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
-            const secondsToFinish = w;
-            const profit = (!secondsToFinish || secondsToFinish <= 0)
-                ? NaN
-                : (revenue - costPrice * quantity - wagesTotal) / secondsToFinish;
-
-            if (!secondsToFinish || secondsToFinish <= 0) break;
-            if (profit > maxProfit) {
-                maxProfit = profit;
-                selltime = secondsToFinish;
-            } else if (maxProfit > 0 && profit < 0) {
-                break;
+            // 根据 MP-?% 调整进货成本价
+            let costPrice = price;
+            if (shared.mpPercent != null && shared.mpPercent !== 0 && isFinite(shared.mpPercent)) {
+                if (shared.mpPercent >= 0) {
+                    costPrice = price * (1 - shared.mpPercent / 100);
+                } else {
+                    costPrice = price + shared.mpPercent;
+                }
             }
-            if (currentPrice < 8) {
-                currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-            } else if (currentPrice < 2001) {
-                currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+
+            // 饱和度：资源150（树）按品质区分，其余统一
+            let saturation;
+            if (parseInt(resourceId) === 150 && quality !== undefined) {
+                saturation = shared.saturationByQuality ? shared.saturationByQuality[quality] : shared.saturation;
             } else {
-                currentPrice = Math.round(currentPrice + 1);
+                saturation = shared.saturation;
             }
+
+            const forceQuality = (parseInt(resourceId) === 150) ? quality : undefined;
+
+            let currentPrice = price,
+                maxProfit = -Infinity,
+                selltime;
+
+            while (currentPrice > 0) {
+                const modeledData = wv(economyState, resourceId, forceQuality ?? null);
+                const w = zL(
+                    buildingKind,
+                    modeledData,
+                    quantity,
+                    v,
+                    currentPrice,
+                    forceQuality === void 0 ? quality : 0,
+                    saturation,
+                    acceleration,
+                    size,
+                    weather
+                );
+                const revenue = currentPrice * quantity;
+                const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
+                const secondsToFinish = w;
+                const profit = (!secondsToFinish || secondsToFinish <= 0)
+                    ? NaN
+                    : (revenue - costPrice * quantity - wagesTotal) / secondsToFinish;
+
+                if (!secondsToFinish || secondsToFinish <= 0) break;
+                if (profit > maxProfit) {
+                    maxProfit = profit;
+                    selltime = secondsToFinish;
+                } else if (maxProfit > 0 && profit < 0) {
+                    break;
+                }
+                if (currentPrice < 8) {
+                    currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                } else if (currentPrice < 2001) {
+                    currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                } else {
+                    currentPrice = Math.round(currentPrice + 1);
+                }
+            }
+
+            results.push({ rowId, maxProfit, selltime });
         }
 
-        self.postMessage({ rowId, maxProfit, selltime});
+        self.postMessage(results);
         };
         `;
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
@@ -3344,57 +3346,70 @@
             renderUI();
         }
 
-        // 主回调处理
+        // 主回调处理 —— 批量结果 + debounce 模拟更新
+        let _simDebounceTimer = null;
+        const scheduleSimUpdate = () => {
+            if (_simDebounceTimer) clearTimeout(_simDebounceTimer);
+            _simDebounceTimer = setTimeout(() => {
+                _simDebounceTimer = null;
+                updateGlobalSimulation();
+            }, 80);
+        };
+
         profitWorker.onmessage = function (e) {
-            const { rowId, maxProfit, selltime } = e.data;
-            const row = pendingRows.get(rowId);
-            if (!row) return;
-            pendingRows.delete(rowId);
+            const results = e.data;
+            if (!Array.isArray(results)) return;
 
-            // --- 核心改动：把数值作为对象属性直接挂载到 DOM 元素上 ---
-            row.__profitData = { profit: maxProfit, time: selltime };
+            for (const item of results) {
+                const { rowId, maxProfit, selltime } = item;
+                const row = pendingRows.get(rowId);
+                if (!row) continue;
+                pendingRows.delete(rowId);
 
-            const hours = Math.floor(selltime / 3600);
-            const minutes = Math.ceil((selltime % 3600) / 60);
-            const timeStr = `${hours > 0 ? `${hours}h ` : ''}${minutes}m`;
-            const profitStr = (maxProfit * 3600).toFixed(2);
+                // --- 核心改动：把数值作为对象属性直接挂载到 DOM 元素上 ---
+                row.__profitData = { profit: maxProfit, time: selltime };
 
-            if (!row.querySelector('td.auto-profit-info')) {
-                const td = document.createElement('td');
-                td.classList.add('auto-profit-info');
-                const span = document.createElement('span');
-                const d7s = DM();
-                span.style.cssText = `display: inline-block; min-width: 30px; color: ${d7s ? 'white' : '#333'}; background: ${d7s ? '#555' : '#e0e0e0'}; border-radius: 2px; white-space: nowrap;`;
+                const hours = Math.floor(selltime / 3600);
+                const minutes = Math.ceil((selltime % 3600) / 60);
+                const timeStr = `${hours > 0 ? `${hours}h ` : ''}${minutes}m`;
+                const profitStr = (maxProfit * 3600).toFixed(2);
 
-                // 构建显示文案：窄屏(≤425px)用紧凑图标，-Infinity 显示"卖不了"
-                const isNarrow = window.innerWidth <= 576;
-                const isInfinity = !isFinite(maxProfit * 3600);
-                const profitLabel = isInfinity ? '卖不了'
-                    : isNarrow ? (maxProfit >= 0 ? `💰${profitStr}` : `⚠️${profitStr}`)
-                        : `时利润:${profitStr}`;
-                // 存储显示文案到 dataset 方便切换按钮使用
-                span.dataset.p = profitLabel;
-                span.dataset.t = `用时:${timeStr}`;
-                span.textContent = isShowingProfit ? span.dataset.p : span.dataset.t;
+                if (!row.querySelector('td.auto-profit-info')) {
+                    const td = document.createElement('td');
+                    td.classList.add('auto-profit-info');
+                    const span = document.createElement('span');
+                    const d7s = DM();
+                    span.style.cssText = `display: inline-block; min-width: 30px; color: ${d7s ? 'white' : '#333'}; background: ${d7s ? '#555' : '#e0e0e0'}; border-radius: 2px; white-space: nowrap;`;
 
-                td.appendChild(span);
-                row.appendChild(td);
+                    // 构建显示文案：窄屏用紧凑图标，-Infinity 显示"卖不了"
+                    const isNarrow = window.innerWidth <= 576;
+                    const isInfinity = !isFinite(maxProfit * 3600);
+                    const profitLabel = isInfinity ? '卖不了'
+                        : isNarrow ? (maxProfit >= 0 ? `💰${profitStr}` : `⚠️${profitStr}`)
+                            : (maxProfit >= 0 ? `时利润:${profitStr}` : `⚠️时利润:${profitStr}`);
+                    span.dataset.p = profitLabel;
+                    span.dataset.t = `用时:${timeStr}`;
+                    span.textContent = isShowingProfit ? span.dataset.p : span.dataset.t;
 
-                // 窄屏时收缩价格列宽度（通过注入列的前一个兄弟定位价格div）
-                if (window.innerWidth <= 576) {
-                    const priceTd = td.previousElementSibling;
-                    if (priceTd) {
-                        const priceDiv = priceTd.querySelector('div');
-                        if (priceDiv) priceDiv.style.minWidth = '10px';
+                    td.appendChild(span);
+                    row.appendChild(td);
+
+                    // 窄屏时收缩价格列宽度
+                    if (window.innerWidth <= 576) {
+                        const priceTd = td.previousElementSibling;
+                        if (priceTd) {
+                            const priceDiv = priceTd.querySelector('div');
+                            if (priceDiv) priceDiv.style.minWidth = '10px';
+                        }
                     }
-                }
 
-                allProfitSpans.add(span);
+                    allProfitSpans.add(span);
+                }
             }
 
             attachInputListener();
-            // 每次新数据回来，立刻重算 2400h 模拟
-            updateGlobalSimulation();
+            // 批量结果回来后，debounce 一次模拟更新
+            scheduleSimUpdate();
         };
 
         function findValidTbody() {
@@ -3433,67 +3448,133 @@
             }
         }
 
+        // 预计算共享值（同一资源页所有行共用），避免 Worker 内重复计算
+        function buildSharedContext(SCD, SRC, currentResourceId) {
+            const resource = parseInt(currentResourceId);
+            const zn = SCD.data;
+            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
+
+            // 经济周期覆盖
+            const economySelectEl = document.getElementById('sc-economy-select');
+            const economyState = (economySelectEl && economySelectEl.value !== '')
+                ? parseInt(economySelectEl.value)
+                : SRC.economyState;
+
+            // 高管加成（支持自定义覆盖）
+            let skillCMO, skillCOO;
+            if (isCustomEnabled) {
+                const bonusKey = `R${currentRealmId}-SC-Saved-Bonuses`;
+                try {
+                    const SSB = JSON.parse(localStorage.getItem(bonusKey));
+                    if (SSB) {
+                        skillCMO = SSB.saleBonus;
+                        skillCOO = SSB.adminBonus;
+                    } else {
+                        skillCMO = SRC.saleBonus;
+                        skillCOO = SRC.adminBonus;
+                    }
+                } catch { skillCMO = SRC.saleBonus; skillCOO = SRC.adminBonus; }
+            } else {
+                skillCMO = SRC.saleBonus;
+                skillCOO = SRC.adminBonus;
+            }
+
+            const salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus;
+
+            // 建筑类型 & 工资
+            const buildingKind = Object.entries(zn.SALES).find(([, ids]) =>
+                ids.includes(resource)
+            )?.[0];
+            const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+            const wages = (zn.AVERAGE_SALARY || 0) * (salaryModifier || 1);
+
+            // 饱和度和按品质区分的饱和度（仅资源150=树需要）
+            const list = SRC.ResourcesRetailInfo || [];
+            let saturation, saturationByQuality;
+            if (resource === 150) {
+                saturationByQuality = {};
+                for (const item of list) {
+                    if (item.dbLetter === 150 && item.quality != null) {
+                        saturationByQuality[item.quality] = item.saturation;
+                    }
+                }
+                // 默认取 Q0
+                saturation = saturationByQuality[0];
+            } else {
+                const m = list.find(item => item.dbLetter === resource);
+                saturation = m?.saturation;
+            }
+
+            // 天气（仅夏季物品）
+            const resourceDetail = SCD.constantsResources?.[resource];
+            const weather = (resourceDetail && resourceDetail.retailSeason === 'Summer')
+                ? SRC.sellingSpeedMultiplier : undefined;
+
+            const v = salesModifierWithRecreationBonus + skillCMO;
+            const b = (() => {
+                const r = SRC.administration || 1;
+                return r - (r - 1) * skillCOO / 100;
+            })();
+
+            // MP-?% 输入框的值
+            const mpInputEl = document.getElementById('sc-mp-input');
+            const mpPercent = mpInputEl ? (parseFloat(mpInputEl.value) || 0) : 0;
+
+            return {
+                economyState, buildingKind, wages,
+                saturation, saturationByQuality, weather,
+                v, b, mpPercent
+            };
+        }
+
         async function processNewRows(tbody, forceReset = false) {
             if (forceReset) {
                 tbody.querySelectorAll('tr[data-profit-calculated]').forEach(row => {
                     row.removeAttribute('data-profit-calculated');
-                    row.__profitData = null; // 清除缓存的数值数据
+                    row.__profitData = null;
                     const oldTd = row.querySelector('td.auto-profit-info');
-                    if (oldTd) oldTd.remove(); // 移除旧的 UI 单元格
+                    if (oldTd) oldTd.remove();
                 });
                 allProfitSpans.clear();
             }
-            // 此时已确定 currentIsRetail 为 true，直接获取数据即可
+
             const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
             if (!SCD_raw) return;
             const SCD = JSON.parse(SCD_raw);
             const SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${currentRealmId}`));
             if (!SRC) return;
-            // 1. 获取开关状态 (复用你的存储键名)
-            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
 
-            // 2. 初始化 SSB 变量
-            let SSB = null;
-
-            // 3. 只有当开关打开时，才尝试读取 Bonus 数据
-            if (isCustomEnabled) {
-                const bonusKey = `R${currentRealmId}-SC-Saved-Bonuses`;
-                const savedData = localStorage.getItem(bonusKey);
-
-                if (savedData) {
-                    try {
-                        SSB = JSON.parse(savedData);
-                    } catch (e) {
-                        console.error("解析 SSB 数据失败:", e);
-                        SSB = null; // 解析失败则置空
-                    }
-                } else {
-                    SSB = null; // 键不存在
-                }
-            }
-
-            // 读取 MP-?% 输入框的值
-            const mpInputEl = document.getElementById('sc-mp-input');
-            const mpPercent = mpInputEl ? (parseFloat(mpInputEl.value) || 0) : 0;
-
-            // 扫描还未处理过的行
+            // 扫描还未处理过的行，收集为订单数组
             const rows = Array.from(tbody.querySelectorAll('tr'))
                 .filter(r => !r.hasAttribute('data-profit-calculated'));
 
-            rows.forEach(row => {
+            const orders = [];
+            for (const row of rows) {
                 const data = extractNumbersFromAriaLabel(row.getAttribute('aria-label'));
-                if (!data) return;
+                if (!data) continue;
 
                 const rowId = rowIdCounter++;
                 pendingRows.set(rowId, row);
                 row.setAttribute('data-profit-calculated', '1');
-                const economySelectEl = document.getElementById('sc-economy-select');
-                const economyOverride = economySelectEl && economySelectEl.value !== '' ? parseInt(economySelectEl.value) : null;
-                profitWorker.postMessage({ rowId, order: { resourceId: currentResourceId, ...data }, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB, mpPercent, economyOverride });
-            });
+                orders.push({ rowId, price: data.price, quantity: data.quantity, quality: data.quality, resourceId: currentResourceId });
+            }
 
-            // 即使没有新行增加，也要重算模拟结果
+            // 有订单才发送，避免空消息开销
+            if (orders.length > 0) {
+                const shared = buildSharedContext(SCD, SRC, currentResourceId);
+                profitWorker.postMessage({
+                    orders,
+                    shared,
+                    SCD,
+                    SRC,
+                    SCXXCS,
+                    PROFIT_PER_BUILDING_LEVEL,
+                    RETAIL_ADJUSTMENT
+                });
+            }
+
+            // 重算模拟结果
             updateGlobalSimulation();
         }
 
@@ -3839,16 +3920,25 @@
     const incomingContractsHandler = (function () {
         let cardIdCounter = 0;
         const pendingCards = new Map(); // cardId -> DOM element
+        let processDebounceTimer = null; // 防抖计时器
 
-        // Worker 代码
+        // Worker 代码 —— 批量处理版本：一次接收所有卡片，共享数据只传一次
         const workerCode = `
         self.onmessage = function(e) {
-            const { cardId, order, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB} = e.data;
-            const { price, quantity, quality, resourceId: resource } = order;
-            const lwe = SCD.retailInfo;
-            const zn = SCD.data;
-            const Ul = (overhead, skillCOO) => overhead - (overhead - 1) * skillCOO / 100;
-            const wv = (e, t, r) => r === null ? lwe[e][t] : lwe[e][t].quality[r];
+            const { orders, shared, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
+            if (!orders || !orders.length) { self.postMessage([]); return; }
+
+            const lwe = shared.SCD.retailInfo;
+            const zn = shared.SCD.data;
+            const SRC = shared.SRC;
+
+            const Ul = (overhead, skillCOO) => {
+                const r = overhead || 1;
+                return r - (r - 1) * skillCOO / 100;
+            };
+            const wv = (e, t, r) => {
+                return r === null ? lwe[e][t] : lwe[e][t].quality[r];
+            };
             const Upt = (e, t, r, n) => t + (e + n) / r;
             const Hpt = (e, t, r, n, a) => {
                 const o = (n + e) / ((t - a) * (t - a));
@@ -3878,109 +3968,315 @@
                 return weather && (p /= weather.sellingSpeedMultiplier), p
             };
 
-            let currentPrice = price,
-                maxProfit = -Infinity,
-                size = 1,
-                acceleration = SRC.acceleration,
-                economyState = SRC.economyState,
-                salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus,
-                skillCMO = (isCustomEnabled && SSB) ? SSB.saleBonus : SRC.saleBonus;
-                skillCOO = (isCustomEnabled && SSB) ? SSB.adminBonus : SRC.adminBonus;
+            const results = [];
+            const size = 1;
 
-            const saturation = (() => {
-                const list = SRC.ResourcesRetailInfo;
-                const m = list.find(item =>
-                    item.dbLetter === parseInt(resource) &&
-                    (parseInt(resource) !== 150 || item.quality === quality)
-                );
-                return m?.saturation;
-            })();
+            for (const order of orders) {
+                const { cardId, price, quantity, quality, resourceId, ctx } = order;
 
-            const administrationOverhead = SRC.administration;
-            const buildingKind = Object.entries(zn.SALES).find(([k, ids]) =>
-                ids.includes(parseInt(resource))
-            )?.[0];
-            const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
-            const averageSalary = zn.AVERAGE_SALARY;
-            const wages = averageSalary * salaryModifier;
-            const forceQuality = (parseInt(resource) === 150) ? quality : undefined;
-            const resourceDetail = SCD.constantsResources[parseInt(resource)]
+                let currentPrice = price,
+                    maxProfit = -Infinity;
 
-            const v = salesModifierWithRecreationBonus + skillCMO;
-            const b = Ul(administrationOverhead, skillCOO);
+                while (currentPrice > 0) {
+                    const modeledData = wv(ctx.economyState, resourceId, ctx.forceQuality ?? null);
+                    const w = zL(
+                        ctx.buildingKind,
+                        modeledData,
+                        quantity,
+                        ctx.v,
+                        currentPrice,
+                        ctx.forceQuality === void 0 ? quality : 0,
+                        ctx.saturation,
+                        SRC.acceleration,
+                        size,
+                        ctx.weather
+                    );
+                    const revenue = currentPrice * quantity;
+                    const wagesTotal = Math.ceil(w * ctx.wages * SRC.acceleration * ctx.b / 3600);
+                    const secondsToFinish = w;
+                    const profit = (!secondsToFinish || secondsToFinish <= 0)
+                        ? NaN
+                        : (revenue - price * quantity - wagesTotal) / secondsToFinish;
 
-            while (currentPrice > 0) {
-                const modeledData = wv(economyState, resource, forceQuality ?? null);
-                const w = zL(
-                    buildingKind,
-                    modeledData,
-                    quantity,
-                    v,
-                    currentPrice,
-                    forceQuality === void 0 ? quality : 0,
-                    saturation,
-                    acceleration,
-                    size,
-                    resourceDetail.retailSeason === "Summer" ? SRC.sellingSpeedMultiplier : void 0
-                );
-                const revenue = currentPrice * quantity;
-                const wagesTotal = Math.ceil(w * wages * acceleration * b / 3600);
-                const secondsToFinish = w;
-                const profit = (!secondsToFinish || secondsToFinish <= 0)
-                    ? NaN
-                    : (revenue - price * quantity - wagesTotal) / secondsToFinish;
+                    if (!secondsToFinish || secondsToFinish <= 0) break;
+                    if (profit > maxProfit) {
+                        maxProfit = profit;
+                    } else if (maxProfit > 0 && profit < 0) {
+                        break;
+                    }
 
-                if (!secondsToFinish || secondsToFinish <= 0) break;
-                if (profit > maxProfit) {
-                    maxProfit = profit;
-                } else if (maxProfit > 0 && profit < 0) {
-                    break;
+                    if (currentPrice < 8) {
+                        currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                    } else if (currentPrice < 2001) {
+                        currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                    } else {
+                        currentPrice = Math.round(currentPrice + 1);
+                    }
                 }
 
-                if (currentPrice < 8) {
-                    currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
-                } else if (currentPrice < 2001) {
-                    currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
-                } else {
-                    currentPrice = Math.round(currentPrice + 1);
-                }
+                results.push({ cardId, maxProfit });
             }
 
-            self.postMessage({ cardId, maxProfit });
+            self.postMessage(results);
         };
         `;
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+
+        // Worker 批量结果回调：立即注入时利润（不等待 MP 数据）
         profitWorker.onmessage = function (e) {
-            const { cardId, maxProfit } = e.data;
-            const card = pendingCards.get(cardId);
-            if (!card) return;
-            pendingCards.delete(cardId);
-            const mpPercent = card.__mpPercent || null;
-            injectHourlyProfit(card, maxProfit * 3600, mpPercent);
+            const results = e.data;
+            if (!Array.isArray(results)) return;
+
+            for (const item of results) {
+                const { cardId, maxProfit } = item;
+                const card = pendingCards.get(cardId);
+                if (!card) continue;
+                pendingCards.delete(cardId);
+                // 立即显示时利润，MP 部分后续由 MP 数据回调填充
+                injectOrUpdateProfit(card, maxProfit * 3600);
+            }
         };
 
-        function init() {
-            // console.log('[合同页面处理] 初始化合同页面处理逻辑');
+        // --- 预计算每个合同的共享上下文（从 Worker 移到主线程） ---
+        function buildOrderContext(resourceId, quality, SCD, SRC, isCustomEnabled, SSB) {
+            const resource = parseInt(resourceId);
+            const zn = SCD.data;
 
+            // 经济周期
+            const economyState = SRC.economyState;
+
+            // 高管加成（支持自定义覆盖）
+            let skillCMO, skillCOO;
+            if (isCustomEnabled && SSB) {
+                skillCMO = SSB.saleBonus;
+                skillCOO = SSB.adminBonus;
+            } else {
+                skillCMO = SRC.saleBonus;
+                skillCOO = SRC.adminBonus;
+            }
+
+            const salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus;
+
+            // 建筑类型 & 工资
+            const buildingKind = Object.entries(zn.SALES).find(([, ids]) =>
+                ids.includes(resource)
+            )?.[0];
+            const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
+            const wages = (zn.AVERAGE_SALARY || 0) * (salaryModifier || 1);
+
+            // 饱和度（仅资源150=树按品质区分）
+            const list = SRC.ResourcesRetailInfo || [];
+            let saturation;
+            if (resource === 150) {
+                const m150 = list.find(item => item.dbLetter === 150 && item.quality === quality);
+                saturation = m150?.saturation;
+            } else {
+                const m = list.find(item => item.dbLetter === resource);
+                saturation = m?.saturation;
+            }
+
+            // 天气（仅夏季物品）
+            const resourceDetail = SCD.constantsResources?.[resource];
+            const weather = (resourceDetail && resourceDetail.retailSeason === 'Summer')
+                ? SRC.sellingSpeedMultiplier : undefined;
+
+            // forceQuality（仅资源150需要）
+            const forceQuality = (resource === 150) ? quality : undefined;
+
+            const v = salesModifierWithRecreationBonus + skillCMO;
+            const b = (() => {
+                const r = SRC.administration || 1;
+                return r - (r - 1) * skillCOO / 100;
+            })();
+
+            return {
+                economyState, buildingKind, wages,
+                saturation, weather, forceQuality,
+                v, b
+            };
+        }
+
+        // --- 计算单张卡片的 MP 信息（游戏机制：高Q可替代低Q，但低Q不可替代高Q） ---
+        function calcMpInfo(cardData, marketData) {
+            const resourceId = parseInt(cardData.dbLetter);
+            const targetQuality = (cardData.quality !== null && cardData.quality !== undefined) ? cardData.quality : 0;
+
+            if (!marketData || !Array.isArray(marketData) || marketData.length === 0) {
+                return { mpPercent: null, mpValue: null, mpNotes: null };
+            }
+
+            // ID=150（树）只能精确匹配品质
+            const exactOnly = (resourceId === 150);
+
+            let bestPrice = Infinity;
+            let bestQuality = null;
+
+            if (exactOnly) {
+                // 仅匹配同品质
+                const sameQ = marketData.filter(o => o.quality === targetQuality && o.price > 0);
+                if (sameQ.length > 0) {
+                    bestPrice = Math.min(...sameQ.map(o => parseFloat(o.price)));
+                    bestQuality = targetQuality;
+                }
+            } else {
+                // 遍历 ≥ 合同品质的所有订单（高Q可替代低Q使用）
+                for (const order of marketData) {
+                    const p = parseFloat(order.price);
+                    if (p > 0 && order.quality >= targetQuality && p < bestPrice) {
+                        bestPrice = p;
+                        bestQuality = order.quality;
+                    }
+                }
+            }
+
+            if (bestPrice !== Infinity && bestPrice > 0 && cardData.unitPrice > 0) {
+                const mpPercent = ((bestPrice - cardData.unitPrice) / bestPrice) * 100;
+                const mpNotes = (bestQuality !== targetQuality) ? `参考Q${bestQuality}价` : null;
+                return { mpPercent, mpValue: bestPrice, mpNotes };
+            }
+
+            return { mpPercent: null, mpValue: null, mpNotes: '市场无对应品质' };
+        }
+
+        // --- 批量处理所有卡片（时利润与 MP 分离：时利润立即发送 Worker，MP 后台拉取） ---
+        async function processAllCards(cards, forceReset = false) {
+            if (!cards || cards.length === 0) return;
+
+            const realmId = getRealmIdFromLink();
+            const constantsKey = 'SimcompaniesConstantsData';
+            const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
+
+            // 1. 检查数据是否就绪，否则触发初始化后重试
+            if (!localStorage.getItem(constantsKey) || !localStorage.getItem(regionKey)) {
+                try {
+                    const constData = await constantsData.initialize();
+                    Storage.save('constants', constData);
+                    const regionData = await RegionData.fetchFullRegionData();
+                    Storage.save('region', regionData);
+                } catch (err) {
+                    console.error('[合同批量] 数据初始化失败:', err);
+                    return;
+                }
+            }
+
+            const SCD = JSON.parse(localStorage.getItem(constantsKey));
+            const SRC = JSON.parse(localStorage.getItem(regionKey));
+            if (!SCD || !SRC) return;
+
+            // 2. 读取自定义开关
+            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
+            let SSB = null;
+            if (isCustomEnabled) {
+                const bonusKey = `R${realmId}-SC-Saved-Bonuses`;
+                try { SSB = JSON.parse(localStorage.getItem(bonusKey)); } catch (e) { SSB = null; }
+            }
+
+            const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
+
+            // 3. 解析所有卡片，收集有效数据
+            const cardInfos = [];
+            const uniqueResourceIds = new Set();
+
+            for (const card of cards) {
+                if (!forceReset && card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) continue;
+
+                const data = parseContractCard(card);
+                if (!data || !data.dbLetter) continue;
+
+                const resourceId = parseInt(data.dbLetter);
+                if (EXCLUDED_IDS.includes(resourceId)) continue;
+
+                const isRetail = Object.values(SCD.data.SALES).some(arr => arr.includes(resourceId));
+
+                card.setAttribute('data-found', 'true');
+                card.removeAttribute('data-retry');
+                // 标记 MP 待处理（时利润先展示）
+                if (isRetail) card.__mpPending = true;
+
+                cardInfos.push({ card, data, isRetail });
+                uniqueResourceIds.add(data.dbLetter);
+            }
+
+            if (cardInfos.length === 0) return;
+
+            // === 流程 A：时利润 — 立即发送给 Worker（不等待 MP 数据！） ===
+            const retailOrders = [];
+            for (const { card, data, isRetail } of cardInfos) {
+                if (isRetail) {
+                    const ctx = buildOrderContext(data.dbLetter, data.quality, SCD, SRC, isCustomEnabled, SSB);
+                    const cardId = cardIdCounter++;
+                    pendingCards.set(cardId, card);
+                    retailOrders.push({
+                        cardId,
+                        price: data.unitPrice,
+                        quantity: data.quantity,
+                        quality: data.quality,
+                        resourceId: data.dbLetter,
+                        ctx
+                    });
+                }
+            }
+            if (retailOrders.length > 0) {
+                profitWorker.postMessage({
+                    orders: retailOrders,
+                    shared: { SCD, SRC },
+                    SCXXCS,
+                    PROFIT_PER_BUILDING_LEVEL,
+                    RETAIL_ADJUSTMENT
+                });
+            }
+
+            // === 流程 B：MP 数据 — 后台拉取，完成后更新显示 ===
+            fetchMpDataAndUpdate(cardInfos, realmId);
+        }
+
+        // --- 后台拉取 MP 数据并更新卡片显示（与利润计算并行） ---
+        async function fetchMpDataAndUpdate(cardInfos, realmId) {
+            // 1. 收集唯一资源ID
+            const uniqueIds = new Set();
+            for (const { data } of cardInfos) {
+                if (data.dbLetter) uniqueIds.add(data.dbLetter);
+            }
+            if (uniqueIds.size === 0) return;
+
+            // 2. 并行获取所有市场数据
+            const marketDataMap = {};
+            const marketPromises = [...uniqueIds].map(async (rid) => {
+                marketDataMap[rid] = await getMarketDataForResource(realmId, rid);
+            });
+            await Promise.all(marketPromises);
+
+            // 3. 计算并更新每张卡片的 MP 信息
+            for (const { card, data } of cardInfos) {
+                const marketData = marketDataMap[data.dbLetter];
+                const mpInfo = calcMpInfo(data, marketData);
+                card.__mpPercent = mpInfo.mpPercent;
+                card.__mpValue = mpInfo.mpValue;
+                if (mpInfo.mpNotes) card.__mpNotes = mpInfo.mpNotes;
+                card.__mpPending = false;
+
+                // 更新卡片上的 MP 显示区域
+                updateCardMpDisplay(card, mpInfo.mpPercent, mpInfo.mpValue, mpInfo.mpNotes);
+            }
+        }
+
+        function init() {
             const checkPageLoaded = setInterval(() => {
                 const isOnTargetPage = /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
 
                 if (!isOnTargetPage) {
-                    // console.log('[合同页面处理] 用户已离开页面，停止轮询');
                     clearInterval(checkPageLoaded);
-                    removeWarningNotice(); // 🔄 页面离开时清理提示
+                    removeWarningNotice();
                     return;
                 }
 
                 const contractCards = document.querySelectorAll('div[tabindex="0"]');
                 if (contractCards.length > 0) {
-                    // console.log('[合同页面处理] 合同卡片已加载');
                     clearInterval(checkPageLoaded);
-                    insertWarningNotice(); // ✅ 卡片加载后插入提示
-                    contractCards.forEach(handleCard);
+                    insertWarningNotice();
+                    processAllCards([...contractCards]);
                     startMutationObserver();
-                } else {
-                    // console.log('[合同页面处理] 等待合同卡片加载...');
                 }
             }, 500);
         }
@@ -3995,8 +4291,13 @@
             const observer = new MutationObserver((mutationsList) => {
                 for (const mutation of mutationsList) {
                     if (mutation.type === 'childList') {
-                        const contractCards = document.querySelectorAll('div[tabindex="0"]');
-                        contractCards.forEach(handleCard);
+                        // 防抖：避免短时间内重复处理
+                        clearTimeout(processDebounceTimer);
+                        processDebounceTimer = setTimeout(() => {
+                            const contractCards = document.querySelectorAll('div[tabindex="0"]');
+                            processAllCards([...contractCards]);
+                        }, 150);
+                        break;
                     }
                 }
             });
@@ -4005,12 +4306,12 @@
         }
 
         function getRealmIdFromLink() {
-            const link = document.querySelector('a[href*="/company/"]'); // 选择第一个符合条件的 <a> 标签
+            const link = document.querySelector('a[href*="/company/"]');
             if (link) {
-                const match = link.href.match(/\/company\/(\d+)\//); // 提取 href 中的 realmId
-                return match ? parseInt(match[1], 10) : null; // 如果匹配到 realmId，返回
+                const match = link.href.match(/\/company\/(\d+)\//);
+                return match ? parseInt(match[1], 10) : null;
             }
-            return null; // 如果没有找到符合条件的链接，返回 null
+            return null;
         }
 
         // 获取市场数据（含1分钟缓存过期检查）
@@ -4022,214 +4323,54 @@
                 try {
                     const parsed = JSON.parse(raw);
                     const dataArray = Array.isArray(parsed) ? parsed : parsed.data;
-                    // 检查时间戳是否在1分钟内有效
                     if (parsed.timestamp && (Date.now() - parsed.timestamp < 60000)) {
-                        console.log(`[合同-MP] ${key} 缓存命中，共${dataArray.length}条，${Math.floor((Date.now() - parsed.timestamp) / 1000)}s前`);
                         return dataArray;
                     }
-                    console.log(`[合同-MP] ${key} 缓存已过期(${Math.floor((Date.now() - parsed.timestamp) / 1000)}s)，重新请求`);
-                } catch (e) {
-                    console.warn(`[合同-MP] ${key} 缓存解析失败，重新请求`, e);
-                }
-            } else {
-                console.log(`[合同-MP] ${key} 无缓存，发起请求`);
+                } catch (e) { /* 缓存损坏，重新请求 */ }
             }
 
-            // 需要重新请求
             try {
                 const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
                 const response = await fetch(url);
                 const json = await response.json();
                 if (Array.isArray(json)) {
-                    const dataToSave = {
-                        timestamp: Date.now(),
-                        data: json
-                    };
-                    localStorage.setItem(key, JSON.stringify(dataToSave));
-                    console.log(`[合同-MP] ${key} 请求成功，${json.length}条数据已缓存`);
+                    localStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data: json }));
                     return json;
                 }
-                console.warn(`[合同-MP] ${key} 响应非数组:`, typeof json);
             } catch (e) {
-                console.error(`[合同-MP] ${key} 请求失败:`, e);
-                // 如果 fetch 失败但有旧数据，返回旧数据
+                // 请求失败时回退到过期缓存
                 if (raw) {
                     try {
                         const parsed = JSON.parse(raw);
-                        const fallback = Array.isArray(parsed) ? parsed : parsed.data;
-                        console.log(`[合同-MP] ${key} 请求失败，使用${fallback?.length || 0}条过期数据`);
-                        return fallback;
+                        return Array.isArray(parsed) ? parsed : parsed.data;
                     } catch { }
                 }
             }
             return null;
         }
 
-        async function handleCard(card) {
-            // ✅ 提前返回条件改成：
-            if (card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) return;
-
-            const data = parseContractCard(card);
-            if (!data || !data.dbLetter) return;
-
-            const realmId = getRealmIdFromLink();
-            const constantsKey = 'SimcompaniesConstantsData';
-            const regionKey = `SimcompaniesRetailCalculation_${realmId}`;
-
-            if (!localStorage.getItem(constantsKey) || !localStorage.getItem(regionKey)) {
-                // console.log('[合同卡片] 缺少数据，尝试初始化...');
-                card.setAttribute('data-retry', 'true'); // 👈 表明后续还要再处理
-                constantsData.initialize()
-                    .then(data => {
-                        Storage.save('constants', data);
-                        return RegionData.fetchFullRegionData();
-                    })
-                    .then(regionData => {
-                        Storage.save('region', regionData);
-                        // console.log('[合同卡片] 数据初始化完成，重新处理卡片');
-                        handleCard(card); // ✅ 数据准备好再重试
-                    })
-                    .catch(err => {
-                        console.error('[合同卡片] 数据初始化失败:', err);
-                    });
-                return;
-            }
-
-            card.setAttribute('data-found', 'true'); // ✅ 仅在数据准备好后设置
-            card.removeAttribute('data-retry');
-
-            const SCD = JSON.parse(localStorage.getItem(constantsKey));
-            const SRC = JSON.parse(localStorage.getItem(regionKey));
-            // 1. 获取开关状态 (复用你的存储键名)
-            const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-            const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
-
-            // 2. 初始化 SSB 变量
-            let SSB = null;
-
-            // 3. 只有当开关打开时，才尝试读取 Bonus 数据
-            if (isCustomEnabled) {
-                const bonusKey = `R${realmId}-SC-Saved-Bonuses`;
-                const savedData = localStorage.getItem(bonusKey);
-
-                if (savedData) {
-                    try {
-                        SSB = JSON.parse(savedData);
-                    } catch (e) {
-                        console.error("解析 SSB 数据失败:", e);
-                        SSB = null; // 解析失败则置空
-                    }
-                } else {
-                    SSB = null; // 键不存在
-                }
-            }
-
-            // 排除特定ID（91=亚轨道火箭,94=BFR,95=喷气客机,96=豪华飞机,97=单引擎飞机,99=人造卫星）
-            const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
-            const resourceId = parseInt(data.dbLetter);
-            if (EXCLUDED_IDS.includes(resourceId)) return;
-
-            // 判断是否为零售物品（用于决定是否计算利润）
-            const isRetail = Object.values(SCD.data.SALES).some(arr =>
-                arr.includes(resourceId)
-            );
-
-            // 获取市场数据计算 MP-?%
-            let mpPercent = null;
-            try {
-                const targetQuality = (data.quality !== null && data.quality !== undefined) ? data.quality : 0;
-                const marketData = await getMarketDataForResource(realmId, data.dbLetter);
-                if (marketData && Array.isArray(marketData) && marketData.length > 0) {
-                    // 先精确匹配合同品质，再降级匹配更高品质
-                    let matchingOrders = marketData.filter(order => order.quality === targetQuality && order.price > 0);
-                    let usedQuality = targetQuality;
-
-                    if (matchingOrders.length === 0) {
-                        // ID=150（树）只能精确匹配品质；ID=114（机器人）Q0也只能精确匹配
-                        const noFallback = (resourceId === 150) || (resourceId === 114 && targetQuality === 0);
-                        if (!noFallback) {
-                            // 无精确匹配，尝试使用更高品质
-                            const higherQualityOrders = marketData.filter(order => order.quality > targetQuality && order.price > 0);
-                            if (higherQualityOrders.length > 0) {
-                                // 按品质分组，取最低的更高品质
-                                const qualityGroups = {};
-                                higherQualityOrders.forEach(o => {
-                                    if (!qualityGroups[o.quality]) qualityGroups[o.quality] = [];
-                                    qualityGroups[o.quality].push(o);
-                                });
-                                const sortedQualities = Object.keys(qualityGroups).map(Number).sort((a, b) => a - b);
-                                usedQuality = sortedQualities[0];
-                                matchingOrders = qualityGroups[usedQuality];
-                                console.log(`[合同-MP] 资源${data.dbLetter} 无Q${targetQuality}，降级使用Q${usedQuality} (${matchingOrders.length}条)`);
-                            }
-                        }
-                    }
-
-                    console.log(`[合同-MP] 资源${data.dbLetter} Q${targetQuality} 匹配${matchingOrders.length}条订单 (共${marketData.length}条)`);
-                    if (matchingOrders.length > 0) {
-                        const lowestPrice = Math.min(...matchingOrders.map(o => parseFloat(o.price)));
-                        if (lowestPrice > 0 && data.unitPrice > 0) {
-                            mpPercent = ((lowestPrice - data.unitPrice) / lowestPrice) * 100;
-                            console.log(`[合同-MP] 合同单价${data.unitPrice} 最低市场价${lowestPrice} = MP-${mpPercent.toFixed(2)}%`);
-                            if (usedQuality !== targetQuality) {
-                                card.__mpNotes = `参考Q${usedQuality}价`;
-                            }
-                        }
-                    } else {
-                        card.__mpNotes = '市场无对应品质';
-                        console.log(`[合同-MP] 资源${data.dbLetter} Q${targetQuality} 市场无对应品质订单`);
-                    }
-                }
-            } catch (e) {
-                console.error('[合同-MP] 获取市场数据失败:', e);
-            }
-
-            // 在卡片上暂存 mpPercent，供 worker 回调使用
-            card.__mpPercent = mpPercent;
-
-            const cardId = cardIdCounter++;
-            pendingCards.set(cardId, card);
-
-            // 仅零售物品才发送给 Worker 计算利润
-            if (isRetail) {
-                profitWorker.postMessage({
-                    cardId,
-                    order: {
-                        resourceId: data.dbLetter,
-                        price: data.unitPrice,
-                        quantity: data.quantity,
-                        quality: data.quality
-                    },
-                    SCD,
-                    SRC,
-                    SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT, isCustomEnabled, SSB
-                });
-            } else {
-                // 非零售物品只展示 MP-?% 无需等待 worker
-                injectHourlyProfit(card, null, mpPercent);
-            }
-        }
-
         function refreshAllContractProfits() {
             const contractCards = document.querySelectorAll('div[tabindex="0"]');
             contractCards.forEach(card => {
-                // 1. 移除旧的利润/MP显示（防止重复堆叠）
-                const oldProfits = card.querySelectorAll('b');
-                oldProfits.forEach(b => {
-                    if (b.textContent.includes('时利润') || b.textContent.includes('MP-')) b.remove();
+                // 清理旧的显示元素（通过 data-sc-contract 标记识别）
+                const oldEl = card.__profitDisplayEl;
+                if (oldEl && oldEl.parentNode) oldEl.remove();
+                // 兜底：按文本查找旧的 <b> 元素
+                card.querySelectorAll('b').forEach(b => {
+                    if (b.dataset?.scContract === 'true' ||
+                        b.textContent.includes('时利润') ||
+                        b.textContent.includes('MP-')) b.remove();
                 });
-
-                // 2. 移除 data-found 标记，让 handleCard 认为这是一个新卡片
                 card.removeAttribute('data-found');
                 delete card.__mpNotes;
-
-                // 3. 重新执行处理逻辑
-                handleCard(card);
+                delete card.__mpValue;
+                delete card.__mpPending;
+                delete card.__profitDisplayEl;
             });
+            processAllCards([...contractCards], true);
         }
 
         function parseContractCard(card) {
-            // console.log(card)
             const result = {
                 quantity: null,
                 quality: null,
@@ -4242,7 +4383,6 @@
 
             const label = card.getAttribute('aria-label') || '';
 
-            // 使用文本强制匹配，如果合同不计算，应当查看翻译平台文本是否发生改变
             const regexEN = /^incoming contract,\s*([\d,]+).*?quality\s+(\d+),\s*at\s*\$([\d,.]+)\s+per unit,\s*total price\s*\$([\d,.]+)/i;
             const regexSC = /^来自.*?的入库合同，([\d,]+)单位的Q(\d+).*?，价格为\$([\d,.]+)每单位，总价\$([\d,.]+)/;
             const regexTC = /^來自.*?的入庫合同，([\d,]+)單位的Q(\d+).*?，價格為\$([\d,.]+)每單位，總價\$([\d,.]+)/;
@@ -4279,31 +4419,120 @@
                 const matched = resources.find(r => r.image === result.resourcePath);
                 if (matched) result.dbLetter = matched.dbLetter;
             }
-            // console.log(result)
             return result;
         }
 
-        function injectHourlyProfit(card, profitValue, mpPercent) {
+        // --- 注入/更新时利润（仅时利润，不含 MP，用于 Worker 回调立即展示） ---
+        function injectOrUpdateProfit(card, profitValue) {
             const infoDiv = Array.from(card.querySelectorAll('div'))
                 .find(div => div.textContent?.includes('@') && div.querySelector('b'));
 
             const priceBox = infoDiv?.querySelector('b');
-            if (!priceBox) {
-                console.warn('[合同-MP] injectHourlyProfit: 未找到priceBox');
+            if (!priceBox) return;
+
+            // 查找是否已有注入元素
+            const existingEl = card.__profitDisplayEl ||
+                (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
+                 priceBox.nextSibling.dataset?.scContract === 'true' ? priceBox.nextSibling : null);
+
+            if (existingEl) {
+                // 已存在：更新时利润部分
+                const profitSpan = existingEl.querySelector('.sc-profit-part');
+                if (profitSpan && profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
+                    if (profitValue < 0) {
+                        profitSpan.innerHTML = `<span style="color:#ff1744;font-weight:bold;">⚠️时利润:${profitValue.toFixed(2)}</span>`;
+                    } else {
+                        profitSpan.innerHTML = `时利润:${profitValue.toFixed(2)}`;
+                    }
+                }
                 return;
             }
 
-            // 检查是否已注入过
+            // 首次注入：仅显示时利润 + MP 占位符
+            const profitDisplay = document.createElement('b');
+            profitDisplay.dataset.scContract = 'true';
+            profitDisplay.style.marginLeft = '8px';
+
+            let profitHtml = '';
+            if (profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
+                if (profitValue < 0) {
+                    profitHtml = `<span class="sc-profit-part" style="color:#ff1744;font-weight:bold;">⚠️时利润:${profitValue.toFixed(2)}</span>`;
+                } else {
+                    profitHtml = `<span class="sc-profit-part">时利润:${profitValue.toFixed(2)}</span>`;
+                }
+            }
+            // MP 占位（后续由 updateCardMpDisplay 填充）
+            const mpPlaceholder = card.__mpPending
+                ? `<span class="sc-mp-part" style="color:#888;white-space:nowrap;"> | MP计算中...</span>`
+                : '';
+
+            profitDisplay.innerHTML = profitHtml + mpPlaceholder;
+            priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
+            card.__profitDisplayEl = profitDisplay;
+        }
+
+        // --- 更新卡片上的 MP 信息显示 ---
+        function updateCardMpDisplay(card, mpPercent, mpValue, mpNotes) {
+            const displayEl = card.__profitDisplayEl;
+            if (!displayEl) {
+                // 如果没有时利润显示元素（非零售物品），创建仅 MP 的显示
+                injectHourlyProfitLegacy(card, null, mpPercent, mpValue, mpNotes);
+                return;
+            }
+
+            // 已有时利润元素：更新 MP 部分
+            const mpSpan = displayEl.querySelector('.sc-mp-part');
+            const dMp = DM();
+            let mpHtml = '';
+
+            if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
+                const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
+                const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
+                mpHtml = ` | <span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
+                // 同时显示 MP 值（最低市场价），与百分比保持一体不换行
+                if (mpValue !== null && mpValue !== undefined && mpValue > 0) {
+                    mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
+                }
+                if (mpNotes) {
+                    mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
+                }
+                mpHtml += `</span>`;
+            } else {
+                // 无有效 MP 数据
+                if (mpNotes) {
+                    mpHtml = ` | <span style="color:${dMp ? '#aaa' : '#777'};">${mpNotes}</span>`;
+                } else {
+                    mpHtml = ''; // 清空占位符
+                }
+            }
+
+            if (mpSpan) {
+                mpSpan.innerHTML = mpHtml;
+            } else {
+                // 没有占位 span，追加
+                const currentHtml = displayEl.innerHTML;
+                displayEl.innerHTML = currentHtml + mpHtml;
+            }
+        }
+
+        // --- 非零售物品的完整注入（仅 MP，无时利润） ---
+        function injectHourlyProfitLegacy(card, profitValue, mpPercent, mpValue, mpNotes) {
+            const infoDiv = Array.from(card.querySelectorAll('div'))
+                .find(div => div.textContent?.includes('@') && div.querySelector('b'));
+
+            const priceBox = infoDiv?.querySelector('b');
+            if (!priceBox) return;
+
             if (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
-                (priceBox.nextSibling.textContent?.includes('时利润') || priceBox.nextSibling.textContent?.includes('MP-'))) {
-                console.log('[合同-MP] injectHourlyProfit: 已注入过，跳过');
+                priceBox.nextSibling.dataset?.scContract === 'true') {
                 return;
             }
 
             const profitDisplay = document.createElement('b');
-            let displayText = '';
+            profitDisplay.dataset.scContract = 'true';
+            profitDisplay.style.marginLeft = '8px';
 
-            // 显示时利润（仅零售物品有有效值）
+            let displayText = '';
             if (profitValue !== null && profitValue !== undefined && isFinite(profitValue)) {
                 if (profitValue < 0) {
                     displayText = `<span style="color:#ff1744;font-weight:bold;">⚠️时利润:${profitValue.toFixed(2)}</span>`;
@@ -4312,33 +4541,38 @@
                 }
             }
 
-            // 显示 MP-?% （所有非排除物品）
-            const mpNotes = card.__mpNotes || null;
             const dMpNote = DM();
+            let mpText = '';
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
                 if (displayText) displayText += ' |';
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
-                displayText += `<span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
-                // 如有备注（如"参考Q1价"），追加在百分比后面
-                if (mpNotes) {
-                    displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
+                // 整个 MP 信息用 nowrap 包裹，保证百分比和价格不被换行断开
+                mpText = `<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
+                if (mpValue && mpValue > 0) {
+                    mpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
                 }
+                if (mpNotes) {
+                    mpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
+                }
+                mpText += `</span>`;
+                displayText += mpText;
             } else if (mpNotes) {
-                // 仅有备注无计算结果（市场无对应品质）
                 if (displayText) displayText += ' |';
                 displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};">${mpNotes}</span>`;
             }
 
-            if (!displayText) {
-                console.warn('[合同-MP] injectHourlyProfit: 无内容可展示 profitValue=', profitValue, 'mpPercent=', mpPercent);
-                return;
-            }
-
-            console.log('[合同-MP] injectHourlyProfit: 注入文本=', displayText);
+            if (!displayText) return;
             profitDisplay.innerHTML = displayText;
-            profitDisplay.style.marginLeft = '8px';
             priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
+            card.__profitDisplayEl = profitDisplay;
+        }
+
+        // --- 保留旧签名兼容（非零售物品从 MP 回调调用） ---
+        function injectHourlyProfit(card, profitValue, mpPercent) {
+            const mpValue = card.__mpValue || null;
+            const mpNotes = card.__mpNotes || null;
+            injectHourlyProfitLegacy(card, profitValue, mpPercent, mpValue, mpNotes);
         }
 
         function insertWarningNotice() {
@@ -4393,7 +4627,6 @@
                     '自定义',
                     { buttonClass: 'btn btn-primary' },
                     (isEnabled) => {
-                        // 当开关切换时，触发全局卡片重绘
                         refreshAllContractProfits();
                     }
                 );
@@ -7068,7 +7301,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    合同页面突出负时利润
+        // @changelog    修改合同页面mp-?%未考虑高品质低价的情况，交易所对负利润结果做出提示，优化交易所、合同页面时利润显示逻辑
 
         fetch(scriptUrl)
             .then(res => res.text())
