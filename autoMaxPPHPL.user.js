@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.14
+// @version      1.32.15
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -666,6 +666,19 @@
                     console.warn("⚠️ 读取 localStorage 时解析失败，初始化为空对象", e);
                 }
 
+                // --- 新增：保存指定position的建筑信息（id, kind, size, position, robotsSpecialization）供模块17等使用 ---
+                const TARGET_POSITIONS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'B0', 'B1', 'B2', 'B3'];
+                const buildings = data
+                    .filter(b => TARGET_POSITIONS.includes(b.position))
+                    .map(b => ({
+                        id: b.id,
+                        kind: b.kind,
+                        size: b.size,
+                        position: b.position,
+                        robotsSpecialization: b.robotsSpecialization
+                    }));
+                stored.buildings = buildings;
+
                 const oldAcademyActive = stored.academyActive ?? 0; // 使用 nullish 合并更安全
                 const newAcademyActive = result.active;             // 新计算值
 
@@ -679,8 +692,11 @@
                     if (typeof RegionData !== "undefined" && RegionData.fetchFullRegionData) {
                         RegionData.fetchFullRegionData()
                             .then(newData => {
-                                // 合并回 localStorage
-                                const merged = { ...stored, ...newData };
+                                // 合并回 localStorage（保留 buildings 不被覆盖）
+                                const existingRaw = localStorage.getItem(key);
+                                let existingData = {};
+                                try { existingData = JSON.parse(existingRaw); } catch (e) { }
+                                const merged = { ...existingData, ...newData };
                                 localStorage.setItem(key, JSON.stringify(merged));
                                 // console.log("✅ 高管加成已刷新:", key);
                             })
@@ -4461,7 +4477,7 @@
             // 查找是否已有注入元素
             const existingEl = card.__profitDisplayEl ||
                 (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
-                 priceBox.nextSibling.dataset?.scContract === 'true' ? priceBox.nextSibling : null);
+                    priceBox.nextSibling.dataset?.scContract === 'true' ? priceBox.nextSibling : null);
 
             if (existingEl) {
                 // 已存在：更新时利润部分
@@ -7200,6 +7216,242 @@
     })();
 
     // ======================
+    // 模块17：COO收益计算
+    // ======================
+    (function () {
+        // 建筑 kind → 基本时薪映射（严格区分大小写）
+        const BASE_WAGES = {
+            '0': 759, '1': 448.5, '2': 379.5, '3': 0, '4': 0, '5': 0,
+            '6': 241.5, '7': 586.5, '8': 724.5, '9': 759,
+            'A': 345, 'a': 552, 'b': 414, 'B': 586.5, 'C': 172.5,
+            'c': 414, 'D': 621, 'd': 172.5, 'E': 414, 'e': 414,
+            'F': 138, 'f': 448.5, 'G': 138, 'g': 345, 'H': 310.5,
+            'h': 586.5, 'I': 241.5, 'i': 379.5, 'j': 448.5, 'k': 379.5,
+            'L': 379.5, 'l': 517.5, 'M': 276, 'm': 655.5, 'n': 0,
+            'O': 517.5, 'o': 379.5, 'P': 103.5, 'p': 448.5, 'q': 517.5,
+            'Q': 276, 'R': 483, 'r': 586.5, 'S': 310.5, 's': 586.5,
+            'T': 138, 't': 207, 'u': 241.5, 'v': 79.35, 'W': 345,
+            'x': 483, 'Y': 414, 'y': 0, 'z': 241.5
+        };
+
+        function getBuildingsData() {
+            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            if (realmId === null) return [];
+            const key = `SimcompaniesRetailCalculation_${realmId}`;
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) return [];
+                const data = JSON.parse(raw);
+                return data.buildings || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function getSRCData() {
+            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            if (realmId === null) return null;
+            const key = `SimcompaniesRetailCalculation_${realmId}`;
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // 计算当前所有建筑运行24小时的管理费
+        function calcTotalAdminFee(buildings, SRC) {
+            if (!buildings || buildings.length === 0 || !SRC) return 0;
+            const adminOverhead = SRC.administration || 1;
+            if (adminOverhead <= 1) return 0;
+            let total = 0;
+            for (const b of buildings) {
+                const baseWage = BASE_WAGES[b.kind];
+                if (baseWage === undefined || baseWage === 0) continue;
+                // 机器人：robotsSpecialization 为数字则表示安装了机器人，减少3%管理费即 *0.97
+                const robotMultiplier = (typeof b.robotsSpecialization === 'number') ? 0.97 : 1;
+                total += baseWage * b.size * 24 * robotMultiplier * (adminOverhead - 1);
+            }
+            return total;
+        }
+
+        function showCOOCalcModal() {
+            // 清理旧弹窗
+            const existing = document.getElementById('sc-coo-calc-overlay');
+            if (existing) existing.remove();
+
+            const buildings = getBuildingsData();
+            const SRC = getSRCData();
+
+            if (!buildings || buildings.length === 0) {
+                alert('未找到建筑数据，请先在游戏中打开任意页面以触发建筑数据捕获，或手动更新领域数据。');
+                return;
+            }
+            if (!SRC) {
+                alert('未找到领域数据，请先更新领域数据（左下角按钮）。');
+                return;
+            }
+
+            const totalFee = calcTotalAdminFee(buildings, SRC);
+            const defaultCOO = SRC.adminBonus || 0;
+
+            const d17 = DM();
+            const bg = d17 ? '#1e1e1e' : '#fff';
+            const fg = d17 ? '#efefef' : '#333';
+            const fg2 = d17 ? '#ccc' : '#555';
+            const border = d17 ? '#555' : '#ccc';
+            const inputBg = d17 ? '#333' : '#f5f5f5';
+            const inputFg = d17 ? '#efefef' : '#333';
+            const accentBg = d17 ? '#1a3a5c' : '#e3f2fd';
+            const accentBorder = d17 ? '#2a5a8c' : '#bbdefb';
+            const resultBg = d17 ? '#1a3a1a' : '#e8f5e9';
+            const resultBorder = d17 ? '#2a5a2a' : '#c8e6c9';
+
+            // 锁定背景滚动
+            const origOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+
+            const overlay = document.createElement('div');
+            overlay.id = 'sc-coo-calc-overlay';
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 99999;
+                display: flex; justify-content: center; align-items: center;
+                opacity: 0; transition: opacity 0.2s;
+            `;
+
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                background: ${bg}; color: ${fg}; border-radius: 12px;
+                width: 440px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+                padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                font-family: sans-serif; transform: scale(0.95);
+                transition: transform 0.2s;
+            `;
+
+            modal.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid ${border}; padding-bottom:12px; margin-bottom:16px;">
+                    <h3 style="margin:0; font-size:18px;">💰COO收益计算</h3>
+                    <button id="sc-coo-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d17 ? '#aaa' : '#999'}; line-height:1;">&times;</button>
+                </div>
+
+                <div style="background:${accentBg}; border:1px solid ${accentBorder}; border-radius:8px; padding:12px; margin-bottom:16px;">
+                    <div style="font-size:13px; color:${fg2}; margin-bottom:4px;">当前地图上所有建筑运行24小时的管理费</div>
+                    <div id="sc-coo-total-fee" style="font-size:24px; font-weight:bold; color:#2196F3;">$${totalFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div style="font-size:11px; color:${d17 ? '#888' : '#999'}; margin-top:4px;">管理费用: ${(((SRC.administration || 1) - 1) * 100).toFixed(1)}% | 建筑数: ${buildings.length}</div>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:14px; font-weight:bold; display:block; margin-bottom:6px;">COO有效点数</label>
+                    <input id="sc-coo-input" type="number" min="0" step="1" value="${defaultCOO}"
+                        style="width:100%; padding:10px; border:1px solid ${border}; border-radius:6px;
+                        background:${inputBg}; color:${inputFg}; font-size:16px; box-sizing:border-box;">
+                </div>
+
+                <div style="background:${resultBg}; border:1px solid ${resultBorder}; border-radius:8px; padding:12px;">
+                    <div style="font-size:13px; color:${fg2}; margin-bottom:4px;">COO节省的管理费</div>
+                    <div id="sc-coo-saved-fee" style="font-size:24px; font-weight:bold; color:#4CAF50;">$0.00</div>
+                    <div style="font-size:13px; color:${fg2}; margin-top:8px; margin-bottom:4px;">每日实际管理费</div>
+                    <div id="sc-coo-remain-fee" style="font-size:24px; font-weight:bold; color:#FF9800;">$0.00</div>
+                </div>
+
+                <div style="margin-top:16px; font-size:11px; color:${d17 ? '#888' : '#999'}; text-align:center;">
+                    计算公式：某建筑管理费 = 一级基本工资*等级*24h*机器人*管理费用 | COO节省的管理费 = 建筑管理费总和 * COO有效点数%
+                </div>
+            `;
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            // 动画入场
+            requestAnimationFrame(() => {
+                overlay.style.opacity = '1';
+                modal.style.transform = 'scale(1)';
+            });
+
+            // 更新结果函数
+            const updateResult = () => {
+                const cooPoints = parseFloat(document.getElementById('sc-coo-input')?.value) || 0;
+                const savedFee = totalFee * (cooPoints / 100);
+                const remainFee = totalFee - savedFee;
+                const savedEl = document.getElementById('sc-coo-saved-fee');
+                const remainEl = document.getElementById('sc-coo-remain-fee');
+                if (savedEl) savedEl.textContent = '$' + savedFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                if (remainEl) remainEl.textContent = '$' + remainFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
+
+            // 绑定输入事件
+            document.getElementById('sc-coo-input').addEventListener('input', updateResult);
+            updateResult(); // 初始计算
+
+            // 关闭逻辑
+            const closeModal = () => {
+                overlay.style.opacity = '0';
+                modal.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    overlay.remove();
+                    document.body.style.overflow = origOverflow;
+                    document.removeEventListener('keydown', handleEsc);
+                }, 200);
+            };
+
+            overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+            document.getElementById('sc-coo-close').onclick = closeModal;
+            const handleEsc = (e) => { if (e.key === 'Escape') closeModal(); };
+            document.addEventListener('keydown', handleEsc);
+        }
+
+        // --- 注入按钮到高管页面 ---
+        function injectCOOButton() {
+            // 查找目标容器
+            const h3 = document.querySelector('.css-6zujxw h3');
+            if (!h3) return;
+            // 防止重复注入
+            if (document.getElementById('sc-coo-calc-btn')) return;
+
+            const btn = document.createElement('button');
+            btn.id = 'sc-coo-calc-btn';
+            btn.textContent = 'COO收益计算';
+            btn.style.cssText = `
+                margin-left: 12px; padding: 4px 12px; background: #2196F3; color: white;
+                border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                font-weight: bold; vertical-align: middle; transition: all 0.2s;
+            `;
+            btn.onmouseenter = () => btn.style.backgroundColor = '#1976d2';
+            btn.onmouseleave = () => btn.style.backgroundColor = '#2196F3';
+            btn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showCOOCalcModal();
+            };
+
+            h3.appendChild(btn);
+        }
+
+        // --- 页面监听与初始化（MutationObserver，与模块16一致） ---
+        function isExecPage() {
+            return /\/headquarters\/executives\/?$/.test(location.href);
+        }
+
+        const observer = new MutationObserver(() => {
+            if (isExecPage()) injectCOOButton();
+        });
+
+        function init() {
+            observer.observe(document.body, { childList: true, subtree: true });
+            if (isExecPage()) injectCOOButton();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    })();
+
+    // ======================
     // 检测更新模块
     // ======================
     function compareVersions(v1, v2) {
@@ -7340,7 +7592,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修改合同页面mp-?%展示格式，如有更好方案可直接提出
+        // @changelog    高管页面增加COO收益计算
 
         fetch(scriptUrl)
             .then(res => res.text())
