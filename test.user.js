@@ -4463,7 +4463,7 @@
             }
             // MP 占位（后续由 updateCardMpDisplay 填充）
             const mpPlaceholder = card.__mpPending
-                ? `<span class="sc-mp-part" style="color:#888;"> | MP计算中...</span>`
+                ? `<span class="sc-mp-part" style="color:#888;white-space:nowrap;"> | MP计算中...</span>`
                 : '';
 
             profitDisplay.innerHTML = profitHtml + mpPlaceholder;
@@ -4488,14 +4488,15 @@
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
-                mpHtml = ` | <span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
-                // 同时显示 MP 值（最低市场价）
+                mpHtml = ` | <span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
+                // 同时显示 MP 值（最低市场价），与百分比保持一体不换行
                 if (mpValue !== null && mpValue !== undefined && mpValue > 0) {
                     mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
                 }
                 if (mpNotes) {
                     mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
                 }
+                mpHtml += `</span>`;
             } else {
                 // 无有效 MP 数据
                 if (mpNotes) {
@@ -4541,17 +4542,21 @@
             }
 
             const dMpNote = DM();
+            let mpText = '';
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
                 if (displayText) displayText += ' |';
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
-                displayText += `<span style="${mpColor}">${prefix}${Math.abs(mpPercent).toFixed(2)}%</span>`;
+                // 整个 MP 信息用 nowrap 包裹，保证百分比和价格不被换行断开
+                mpText = `<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
                 if (mpValue && mpValue > 0) {
-                    displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
+                    mpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
                 }
                 if (mpNotes) {
-                    displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
+                    mpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
                 }
+                mpText += `</span>`;
+                displayText += mpText;
             } else if (mpNotes) {
                 if (displayText) displayText += ' |';
                 displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};">${mpNotes}</span>`;
