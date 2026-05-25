@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.13
+// @version      1.32.14
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -4227,6 +4227,14 @@
                 });
             }
 
+            // 为非零售物品提前注入 MP 占位符（与时利润计算并行展示）
+            for (const { card, isRetail } of cardInfos) {
+                if (!isRetail) {
+                    card.__mpPending = true;
+                    injectMpPlaceholder(card);
+                }
+            }
+
             // === 流程 B：MP 数据 — 后台拉取，完成后更新显示 ===
             fetchMpDataAndUpdate(cardInfos, realmId);
         }
@@ -4422,6 +4430,26 @@
             return result;
         }
 
+        // --- 为非零售物品提前注入 MP 占位符（无时利润） ---
+        function injectMpPlaceholder(card) {
+            const infoDiv = Array.from(card.querySelectorAll('div'))
+                .find(div => div.textContent?.includes('@') && div.querySelector('b'));
+            const priceBox = infoDiv?.querySelector('b');
+            if (!priceBox) return;
+
+            // 防止重复注入
+            if (priceBox.nextSibling?.nodeType === Node.ELEMENT_NODE &&
+                priceBox.nextSibling.dataset?.scContract === 'true') return;
+
+            const dPh = DM();
+            const el = document.createElement('b');
+            el.dataset.scContract = 'true';
+            el.style.marginLeft = '8px';
+            el.innerHTML = `<span class="sc-mp-part" style="color:${dPh ? '#aaa' : '#888'};white-space:nowrap;">MP计算中...</span>`;
+            priceBox.parentNode.insertBefore(el, priceBox.nextSibling);
+            card.__profitDisplayEl = el;
+        }
+
         // --- 注入/更新时利润（仅时利润，不含 MP，用于 Worker 回调立即展示） ---
         function injectOrUpdateProfit(card, profitValue) {
             const infoDiv = Array.from(card.querySelectorAll('div'))
@@ -4444,8 +4472,11 @@
                     } else {
                         profitSpan.innerHTML = `时利润:${profitValue.toFixed(2)}`;
                     }
+                    return;
                 }
-                return;
+                // 结构不完整（MP 先到达了），移除重建
+                existingEl.remove();
+                if (card.__profitDisplayEl === existingEl) card.__profitDisplayEl = null;
             }
 
             // 首次注入：仅显示时利润 + MP 占位符
@@ -4461,12 +4492,23 @@
                     profitHtml = `<span class="sc-profit-part">时利润:${profitValue.toFixed(2)}</span>`;
                 }
             }
-            // MP 占位（后续由 updateCardMpDisplay 填充）
-            const mpPlaceholder = card.__mpPending
-                ? `<span class="sc-mp-part" style="color:#888;white-space:nowrap;"> | MP计算中...</span>`
-                : '';
+            // MP 占位（后续由 updateCardMpDisplay 填充）或直接显示已有 MP 数据
+            const dPh = DM();
+            let mpHtml = '';
+            if (card.__mpPending) {
+                mpHtml = `<span class="sc-mp-part" style="color:${dPh ? '#aaa' : '#888'};white-space:nowrap;"> | MP计算中...</span>`;
+            } else if (card.__mpPercent !== undefined && card.__mpPercent !== null && isFinite(card.__mpPercent)) {
+                // MP 数据已先到达，直接渲染
+                const prefix = card.__mpPercent < 0 ? 'MP+' : 'MP-';
+                const mpColor = card.__mpPercent < 0 ? 'color:#ef5350;' : '';
+                mpHtml = ` | <span class="sc-mp-part" style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(card.__mpPercent).toFixed(2)}%`;
+                if (card.__mpNotes) {
+                    mpHtml += `<span style="color:${dPh ? '#aaa' : '#777'};font-size:0.85em;">(${card.__mpNotes})</span>`;
+                }
+                mpHtml += `</span>`;
+            }
 
-            profitDisplay.innerHTML = profitHtml + mpPlaceholder;
+            profitDisplay.innerHTML = profitHtml + mpHtml;
             priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
             card.__profitDisplayEl = profitDisplay;
         }
@@ -4475,24 +4517,22 @@
         function updateCardMpDisplay(card, mpPercent, mpValue, mpNotes) {
             const displayEl = card.__profitDisplayEl;
             if (!displayEl) {
-                // 如果没有时利润显示元素（非零售物品），创建仅 MP 的显示
+                // 如果没有时利润显示元素，创建仅 MP 的显示
                 injectHourlyProfitLegacy(card, null, mpPercent, mpValue, mpNotes);
                 return;
             }
 
             // 已有时利润元素：更新 MP 部分
             const mpSpan = displayEl.querySelector('.sc-mp-part');
+            const hasProfit = !!displayEl.querySelector('.sc-profit-part');
+            const sep = hasProfit ? ' | ' : '';
             const dMp = DM();
             let mpHtml = '';
 
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
-                mpHtml = ` | <span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
-                // 同时显示 MP 值（最低市场价），与百分比保持一体不换行
-                if (mpValue !== null && mpValue !== undefined && mpValue > 0) {
-                    mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
-                }
+                mpHtml = `${sep}<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
                 if (mpNotes) {
                     mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
                 }
@@ -4500,7 +4540,7 @@
             } else {
                 // 无有效 MP 数据
                 if (mpNotes) {
-                    mpHtml = ` | <span style="color:${dMp ? '#aaa' : '#777'};">${mpNotes}</span>`;
+                    mpHtml = `${sep}<span style="color:${dMp ? '#aaa' : '#777'};">${mpNotes}</span>`;
                 } else {
                     mpHtml = ''; // 清空占位符
                 }
@@ -4508,6 +4548,8 @@
 
             if (mpSpan) {
                 mpSpan.innerHTML = mpHtml;
+                // 清除占位符遗留的灰色，恢复正常文字颜色
+                mpSpan.style.color = '';
             } else {
                 // 没有占位 span，追加
                 const currentHtml = displayEl.innerHTML;
@@ -4549,9 +4591,6 @@
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
                 // 整个 MP 信息用 nowrap 包裹，保证百分比和价格不被换行断开
                 mpText = `<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
-                if (mpValue && mpValue > 0) {
-                    mpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(MP:$${mpValue.toFixed(2)})</span>`;
-                }
                 if (mpNotes) {
                     mpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
                 }
@@ -7301,7 +7340,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修改合同页面mp-?%未考虑高品质低价的情况，交易所对负利润结果做出提示，优化交易所、合同页面时利润显示逻辑
+        // @changelog    修改合同页面mp-?%展示格式，如有更好方案可直接提出
 
         fetch(scriptUrl)
             .then(res => res.text())
