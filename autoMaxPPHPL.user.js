@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.15
+// @version      1.32.16
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -353,7 +353,7 @@
     // ======================
     const createGlobalCustomToggle = (key, label, nativeStyles = {}, onToggleCallback) => {
         const CONFIG_KEY = 'SC_PageActions_Settings';
-        const DEFAULT_VALUE = (key === 'executiveCustomToggle') ? false : true;
+        const DEFAULT_VALUE = (key === 'executiveCustomToggle' || key === 'marketMaxProfitToggle') ? false : true;
         const wrapper = document.createElement('div');
 
         // console.log(`[调试] 按钮 ${label} 初始化，传入样式:`, nativeStyles);
@@ -2009,6 +2009,7 @@
                             使用<strong style="color:#FF8888;">逗号（, 或 ，）</strong>分隔，可在插件菜单中禁用此功能。支持格式：<br>
                             • 时间点：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">10pm</code>、<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">11:30</code> → 今晚/明天该时刻的分钟数<br>
                             • 明天时刻：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">+14:13</code>、<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">+2pm</code> → 强制明天该时刻<br>
+                            • 后天时刻：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">++14:13</code>、<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">++2pm</code> → 强制后天该时刻<br>
                             • 明天时长：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">+11h11m</code> → 24小时 + 指定时长<br>
                             • 持续时间：<code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">1d12h30m</code> → 累加为总分钟<br>
                             字母不区分大小写，半角全角均可。
@@ -2173,6 +2174,36 @@
                 .replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
                 .trim();
             const lower = s.toLowerCase();
+
+            // --- 步骤 1.5: ++HH:MM am/pm 格式 (强制后天时刻, 如 "++14:13", "++11:30pm") ---
+            const doublePlusTimeMatch = lower.match(/^\+\+(\d{1,2}):(\d{1,2})\s*(am|pm)?$/);
+            if (doublePlusTimeMatch) {
+                let hours = parseInt(doublePlusTimeMatch[1], 10);
+                const minutes = parseInt(doublePlusTimeMatch[2], 10);
+                const ampm = doublePlusTimeMatch[3];
+                if (ampm === 'pm' && hours !== 12) hours += 12;
+                else if (ampm === 'am' && hours === 12) hours = 0;
+                // 以今天 HH:MM 为基准，强制 +48h 到后天
+                const targetTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
+                const diffMs = targetTime.getTime() - today.getTime() + 2 * 24 * 60 * 60 * 1000;
+                return `${Math.floor(diffMs / 60000)}m`;
+            }
+
+            // --- 步骤 1.6: ++HH am/pm (如 "++2pm") ---
+            if (lower.startsWith('++')) {
+                const rest = lower.slice(2);
+                const doublePlusAmpmMatch = rest.match(/^(\d{1,2})\s*(am|pm)$/);
+                if (doublePlusAmpmMatch) {
+                    let hours = parseInt(doublePlusAmpmMatch[1], 10);
+                    const ampm = doublePlusAmpmMatch[2];
+                    if (ampm === 'pm' && hours !== 12) hours += 12;
+                    else if (ampm === 'am' && hours === 12) hours = 0;
+                    const targetTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, 0, 0, 0);
+                    const diffMs = targetTime.getTime() - today.getTime() + 2 * 24 * 60 * 60 * 1000;
+                    return `${Math.floor(diffMs / 60000)}m`;
+                }
+                // 不支持 ++ 持续时间格式，继续后续解析
+            }
 
             // --- 步骤 2: +HH:MM am/pm 格式 (强制明天时刻, 如 "+14:13", "+11:30pm") ---
             const plusTimeMatch = lower.match(/^\+(\d{1,2}):(\d{1,2})\s*(am|pm)?$/);
@@ -4053,6 +4084,220 @@
             }
         };
 
+        // =====================
+        // 市场最大时利专用 Worker
+        // =====================
+        const marketWorkerCode = `
+        self.onmessage = function(e) {
+            const { orders, shared, customBonuses, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
+            if (!orders || !orders.length) { self.postMessage([]); return; }
+
+            const lwe = shared.SCD.retailInfo;
+            const zn = shared.SCD.data;
+            const SRC = shared.SRC;
+
+            const Ul = (overhead, skillCOO) => {
+                const r = overhead || 1;
+                return r - (r - 1) * skillCOO / 100;
+            };
+            const wv = (e, t, r) => {
+                return r === null ? lwe[e][t] : lwe[e][t].quality[r];
+            };
+            const Upt = (e, t, r, n) => t + (e + n) / r;
+            const Hpt = (e, t, r, n, a) => {
+                const o = (n + e) / ((t - a) * (t - a));
+                return e - (r - t) * (r - t) * o;
+            };
+            const qpt = (e, t, r, n, a = 1) => (a * ((n - t) * 3600) - r) / (e + r);
+            const Bpt = (e, t, r, n, a, o) => {
+                const g = RETAIL_ADJUSTMENT[e] ?? 1;
+                const s = Math.min(Math.max(2 - n, 0), 2),
+                      l = Math.max(0.9, s / 2 + 0.5),
+                      c = r / 12;
+                const d = PROFIT_PER_BUILDING_LEVEL *
+                    (t.buildingLevelsNeededPerUnitPerHour * t.modeledUnitsSoldAnHour + 1) *
+                    g *
+                    (s / 2 * (1 + c * zn.RETAIL_MODELING_QUALITY_WEIGHT)) +
+                    (t.modeledStoreWages ?? 0) * SCXXCS;
+                const h = t.modeledUnitsSoldAnHour * l;
+                const p = Upt(d, t.modeledProductionCostPerUnit, h, t.modeledStoreWages ?? 0);
+                const m = Hpt(d, p, o, t.modeledStoreWages ?? 0, t.modeledProductionCostPerUnit);
+                return qpt(m, t.modeledProductionCostPerUnit, t.modeledStoreWages ?? 0, o, a);
+            };
+            const zL = (buildingKind, modeledData, quantity, salesModifier, price, qOverride, saturation, acc, size, weather) => {
+                const u = Bpt(buildingKind, modeledData, qOverride, saturation, quantity, price);
+                if (u <= 0) return NaN;
+                const d = u / acc / size;
+                let p = d - d * salesModifier / 100;
+                return weather && (p /= weather.sellingSpeedMultiplier), p
+            };
+
+            function buildCtx(resourceId, quality, isCustomEnabled, adminBonus, saleBonus) {
+                const resource = parseInt(resourceId);
+                let skillCMO, skillCOO;
+                if (isCustomEnabled && adminBonus != null && saleBonus != null) {
+                    skillCMO = saleBonus;
+                    skillCOO = adminBonus;
+                } else {
+                    skillCMO = SRC.saleBonus;
+                    skillCOO = SRC.adminBonus;
+                }
+                const salesModifierWithRecreationBonus = SRC.salesModifier + SRC.recreationBonus;
+                const buildingKind = Object.entries(zn.SALES).find(([, ids]) =>
+                    ids.includes(resource)
+                )?.[0];
+                const salaryModifier = shared.SCD.buildingsSalaryModifier?.[buildingKind];
+                const wages = (zn.AVERAGE_SALARY || 0) * (salaryModifier || 1);
+                let saturation;
+                if (resource === 150) {
+                    const list = SRC.ResourcesRetailInfo || [];
+                    const m150 = list.find(item => item.dbLetter === 150 && item.quality === quality);
+                    saturation = m150?.saturation;
+                } else {
+                    const list = SRC.ResourcesRetailInfo || [];
+                    const m = list.find(item => item.dbLetter === resource);
+                    saturation = m?.saturation;
+                }
+                const resourceDetail = shared.SCD.constantsResources?.[resource];
+                const weather = (resourceDetail && resourceDetail.retailSeason === 'Summer')
+                    ? SRC.sellingSpeedMultiplier : undefined;
+                const forceQuality = (resource === 150) ? quality : undefined;
+                const v = salesModifierWithRecreationBonus + skillCMO;
+                const b = Ul(SRC.administration, skillCOO);
+                return {
+                    economyState: SRC.economyState, buildingKind, wages,
+                    saturation, weather, forceQuality, v, b
+                };
+            }
+
+            // 对单个价格跑完整售价寻优，返回每小时利润（null 表示无法计算）
+            function calcSingle(price, quantity, quality, resourceId, ctx) {
+                const resource = parseInt(resourceId);
+                const forceQ = (resource === 150) ? quality : undefined;
+                const size = 1;
+                let currentPrice = price;
+                let maxProfit = -Infinity;
+                while (currentPrice > 0) {
+                    const modeledData = wv(ctx.economyState, resourceId, forceQ ?? null);
+                    const w = zL(
+                        ctx.buildingKind, modeledData, quantity, ctx.v,
+                        currentPrice,
+                        forceQ === void 0 ? quality : 0,
+                        ctx.saturation, SRC.acceleration, size, ctx.weather
+                    );
+                    const revenue = currentPrice * quantity;
+                    const wagesTotal = Math.ceil(w * ctx.wages * SRC.acceleration * ctx.b / 3600);
+                    const secondsToFinish = w;
+                    const profit = (!secondsToFinish || secondsToFinish <= 0)
+                        ? NaN
+                        : (revenue - price * quantity - wagesTotal) / secondsToFinish;
+                    if (!secondsToFinish || secondsToFinish <= 0) break;
+                    if (profit > maxProfit) {
+                        maxProfit = profit;
+                    } else if (maxProfit > 0 && profit < 0) {
+                        break;
+                    }
+                    if (currentPrice < 8) {
+                        currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
+                    } else if (currentPrice < 2001) {
+                        currentPrice = Math.round((currentPrice + 0.1) * 10) / 10;
+                    } else {
+                        currentPrice = Math.round(currentPrice + 1);
+                    }
+                }
+                return maxProfit > -Infinity ? maxProfit * 3600 : null;
+            }
+
+            const results = [];
+            for (const order of orders) {
+                const { cardId, marketData, targetQuality, quantity, resourceId } = order;
+                if (!marketData || !marketData.length) {
+                    results.push({ cardId, maxProfit: null, bestPrice: null, bestQuality: null });
+                    continue;
+                }
+
+                const cb = customBonuses || {};
+                const ctx = buildCtx(resourceId, targetQuality,
+                    cb.isCustomEnabled === true, cb.adminBonus, cb.saleBonus);
+
+                const resource = parseInt(resourceId);
+                const exactOnly = (resource === 150);
+
+                // 按品质分组，每组 {price, qty} 升序（用市场挂单自身数量计算）
+                const qualityGroups = new Map();
+                for (const entry of marketData) {
+                    const p = parseFloat(entry.price);
+                    const q = entry.quality;
+                    const qty = parseFloat(entry.quantity) || 1;
+                    if (p <= 0) continue;
+                    if (exactOnly && q !== targetQuality) continue;
+                    if (!qualityGroups.has(q)) qualityGroups.set(q, []);
+                    qualityGroups.get(q).push({ price: p, qty });
+                }
+                for (const entries of qualityGroups.values()) {
+                    entries.sort((a, b) => a.price - b.price);
+                }
+
+                let bestProfit = -Infinity;
+                let bestPrice = null;
+                let bestQuality = null;
+
+                for (const [quality, entries] of qualityGroups) {
+                    // 最低价先算 — 负利润则跳过整个品质
+                    const cheapestProfit = calcSingle(entries[0].price, entries[0].qty, quality, resourceId, ctx);
+                    if (cheapestProfit === null || cheapestProfit < 0) continue;
+                    if (cheapestProfit > bestProfit) {
+                        bestProfit = cheapestProfit;
+                        bestPrice = entries[0].price;
+                        bestQuality = quality;
+                    }
+                    // 其余价格逐个严格计算
+                    for (let i = 1; i < entries.length; i++) {
+                        const { price: p, qty } = entries[i];
+                        const entryProfit = calcSingle(p, qty, quality, resourceId, ctx);
+                        if (entryProfit === null || entryProfit < 0) break;
+                        if (entryProfit > bestProfit) {
+                            bestProfit = entryProfit;
+                            bestPrice = p;
+                            bestQuality = quality;
+                        }
+                    }
+                }
+
+                results.push({
+                    cardId,
+                    maxProfit: bestProfit > -Infinity ? bestProfit : null,
+                    bestPrice: bestPrice,
+                    bestQuality: bestQuality
+                });
+            }
+
+            self.postMessage(results);
+        };
+        `;
+        const marketProfitWorker = new Worker(URL.createObjectURL(new Blob([marketWorkerCode], { type: 'application/javascript' })));
+        let marketCardIdCounter = 1000000; // 独立计数器，避免与合同 cardId 冲突
+        const pendingMarketCards = new Map(); // cardId -> { card, mpPercent, mpValue, mpNotes }
+
+        marketProfitWorker.onmessage = function (e) {
+            const results = e.data;
+            if (!Array.isArray(results)) return;
+
+            for (const item of results) {
+                const { cardId, maxProfit, bestPrice, bestQuality } = item;
+                const entry = pendingMarketCards.get(cardId);
+                if (!entry) continue;
+                pendingMarketCards.delete(cardId);
+
+                const { card, mpPercent, mpValue, mpNotes } = entry;
+                card.__marketMaxProfit = maxProfit;
+                card.__marketMaxPrice = bestPrice;
+                card.__marketMaxQuality = bestQuality;
+                // 刷新卡片显示
+                updateCardMpDisplay(card, mpPercent, mpValue, mpNotes);
+            }
+        };
+
         // --- 预计算每个合同的共享上下文（从 Worker 移到主线程） ---
         function buildOrderContext(resourceId, quality, SCD, SRC, isCustomEnabled, SSB) {
             const resource = parseInt(resourceId);
@@ -4148,10 +4393,10 @@
             if (bestPrice !== Infinity && bestPrice > 0 && cardData.unitPrice > 0) {
                 const mpPercent = ((bestPrice - cardData.unitPrice) / bestPrice) * 100;
                 const mpNotes = (bestQuality !== targetQuality) ? `参考Q${bestQuality}价` : null;
-                return { mpPercent, mpValue: bestPrice, mpNotes };
+                return { mpPercent, mpValue: bestPrice, mpNotes, mpBestQuality: bestQuality };
             }
 
-            return { mpPercent: null, mpValue: null, mpNotes: '市场无对应品质' };
+            return { mpPercent: null, mpValue: null, mpNotes: '市场无对应品质', mpBestQuality: null };
         }
 
         // --- 批量处理所有卡片（时利润与 MP 分离：时利润立即发送 Worker，MP 后台拉取） ---
@@ -4252,11 +4497,11 @@
             }
 
             // === 流程 B：MP 数据 — 后台拉取，完成后更新显示 ===
-            fetchMpDataAndUpdate(cardInfos, realmId);
+            fetchMpDataAndUpdate(cardInfos, realmId, SCD, SRC);
         }
 
         // --- 后台拉取 MP 数据并更新卡片显示（与利润计算并行） ---
-        async function fetchMpDataAndUpdate(cardInfos, realmId) {
+        async function fetchMpDataAndUpdate(cardInfos, realmId, SCD, SRC) {
             // 1. 收集唯一资源ID
             const uniqueIds = new Set();
             for (const { data } of cardInfos) {
@@ -4272,16 +4517,78 @@
             await Promise.all(marketPromises);
 
             // 3. 计算并更新每张卡片的 MP 信息
-            for (const { card, data } of cardInfos) {
+            const marketMaxProfitEnabled = (() => {
+                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                return cfg['marketMaxProfitToggle'] === true;
+            })();
+
+            // 收集需要发送给市场最大时利 Worker 的订单
+            pendingMarketCards.clear(); // 清理上一次计算的残留
+            const marketOrders = [];
+            let customBonuses = null;
+            if (marketMaxProfitEnabled) {
+                const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                const isCustomEnabled = pageActionsConfig['executiveCustomToggle'] === true;
+                if (isCustomEnabled) {
+                    const bonusKey = `R${realmId}-SC-Saved-Bonuses`;
+                    try {
+                        const SSB = JSON.parse(localStorage.getItem(bonusKey));
+                        if (SSB) {
+                            customBonuses = { isCustomEnabled: true, adminBonus: SSB.adminBonus, saleBonus: SSB.saleBonus };
+                        }
+                    } catch (e) { }
+                }
+                if (!customBonuses) {
+                    customBonuses = { isCustomEnabled: false, adminBonus: null, saleBonus: null };
+                }
+            }
+
+            for (const { card, data, isRetail } of cardInfos) {
                 const marketData = marketDataMap[data.dbLetter];
                 const mpInfo = calcMpInfo(data, marketData);
+                card.__resourceId = data.dbLetter;  // 供跳转链接使用
                 card.__mpPercent = mpInfo.mpPercent;
                 card.__mpValue = mpInfo.mpValue;
+                card.__mpBestQuality = mpInfo.mpBestQuality;
                 if (mpInfo.mpNotes) card.__mpNotes = mpInfo.mpNotes;
                 card.__mpPending = false;
 
-                // 更新卡片上的 MP 显示区域
+                // 如果开启了"显示市场最大时利"，收集订单稍后发送给 Worker
+                if (marketMaxProfitEnabled && isRetail && marketData && marketData.length > 0) {
+                    const cid = marketCardIdCounter++;
+                    pendingMarketCards.set(cid, {
+                        card,
+                        mpPercent: mpInfo.mpPercent,
+                        mpValue: mpInfo.mpValue,
+                        mpNotes: mpInfo.mpNotes
+                    });
+                    marketOrders.push({
+                        cardId: cid,
+                        marketData: marketData,
+                        targetQuality: (data.quality !== null && data.quality !== undefined) ? data.quality : 0,
+                        quantity: data.quantity,
+                        resourceId: data.dbLetter
+                    });
+                    // 暂时置空，等 Worker 回调填充
+                    card.__marketMaxProfit = null;
+                } else {
+                    card.__marketMaxProfit = null;
+                }
+
+                // 更新卡片上的 MP 显示区域（市场最大时利暂未算出，先显示 MP-%）
                 updateCardMpDisplay(card, mpInfo.mpPercent, mpInfo.mpValue, mpInfo.mpNotes);
+            }
+
+            // 发送市场最大时利订单给 Worker（异步计算）
+            if (marketOrders.length > 0) {
+                marketProfitWorker.postMessage({
+                    orders: marketOrders,
+                    shared: { SCD, SRC },
+                    customBonuses: customBonuses,
+                    SCXXCS,
+                    PROFIT_PER_BUILDING_LEVEL,
+                    RETAIL_ADJUSTMENT
+                });
             }
         }
 
@@ -4340,7 +4647,7 @@
 
         // 获取市场数据（含1分钟缓存过期检查）
         async function getMarketDataForResource(realmId, resourceId) {
-            const key = `market_${realmId}_${resourceId}`;
+            const key = `market_all_${realmId}_${resourceId}`;
             const raw = localStorage.getItem(key);
 
             if (raw) {
@@ -4383,12 +4690,18 @@
                 card.querySelectorAll('b').forEach(b => {
                     if (b.dataset?.scContract === 'true' ||
                         b.textContent.includes('时利润') ||
-                        b.textContent.includes('MP-')) b.remove();
+                        b.textContent.includes('MP-') ||
+                        b.textContent.includes('MP+') ||
+                        b.textContent.includes('市场最大时利')) b.remove();
                 });
                 card.removeAttribute('data-found');
                 delete card.__mpNotes;
                 delete card.__mpValue;
+                delete card.__mpBestQuality;
                 delete card.__mpPending;
+                delete card.__marketMaxProfit;
+                delete card.__marketMaxPrice;
+                delete card.__marketMaxQuality;
                 delete card.__profitDisplayEl;
             });
             processAllCards([...contractCards], true);
@@ -4468,6 +4781,7 @@
 
         // --- 注入/更新时利润（仅时利润，不含 MP，用于 Worker 回调立即展示） ---
         function injectOrUpdateProfit(card, profitValue) {
+            card.__contractProfit = profitValue;  // 供市场最大时利比较用
             const infoDiv = Array.from(card.querySelectorAll('div'))
                 .find(div => div.textContent?.includes('@') && div.querySelector('b'));
 
@@ -4511,17 +4825,48 @@
             // MP 占位（后续由 updateCardMpDisplay 填充）或直接显示已有 MP 数据
             const dPh = DM();
             let mpHtml = '';
+            const mmpEnabled = (() => {
+                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                return cfg['marketMaxProfitToggle'] === true;
+            })();
             if (card.__mpPending) {
                 mpHtml = `<span class="sc-mp-part" style="color:${dPh ? '#aaa' : '#888'};white-space:nowrap;"> | MP计算中...</span>`;
-            } else if (card.__mpPercent !== undefined && card.__mpPercent !== null && isFinite(card.__mpPercent)) {
-                // MP 数据已先到达，直接渲染
-                const prefix = card.__mpPercent < 0 ? 'MP+' : 'MP-';
-                const mpColor = card.__mpPercent < 0 ? 'color:#ef5350;' : '';
-                mpHtml = ` | <span class="sc-mp-part" style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(card.__mpPercent).toFixed(2)}%`;
-                if (card.__mpNotes) {
-                    mpHtml += `<span style="color:${dPh ? '#aaa' : '#777'};font-size:0.85em;">(${card.__mpNotes})</span>`;
+            } else {
+                // 先构建 MP-% 部分（始终显示）
+                let mpPartHtml = '';
+                if (card.__mpPercent !== undefined && card.__mpPercent !== null && isFinite(card.__mpPercent)) {
+                    const prefix = card.__mpPercent < 0 ? 'MP+' : 'MP-';
+                    const mpColor = card.__mpPercent < 0 ? 'color:#ef5350;' : '';
+                    mpPartHtml = ` | <span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(card.__mpPercent).toFixed(2)}%`;
+                    // 开关开启时追加参考价格
+                    if (mmpEnabled && card.__mpValue != null && isFinite(card.__mpValue)) {
+                        mpPartHtml += ` ($${card.__mpValue.toFixed(2)})`;
+                    }
+                    if (card.__mpNotes) {
+                        mpPartHtml += `<span style="color:${dPh ? '#aaa' : '#777'};font-size:0.85em;"> ${card.__mpNotes}</span>`;
+                    }
+                    mpPartHtml += `</span>`;
                 }
-                mpHtml += `</span>`;
+                // 开关开启时追加市场最大时利
+                let mmpPartHtml = '';
+                if (mmpEnabled && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+                    const mmp = card.__marketMaxProfit;
+                    const mmpColor = mmp < 0 ? 'color:#ff1744;' : 'color:#4caf50;';
+                    let mmpNote = '';
+                    if (card.__marketMaxQuality != null && card.__marketMaxPrice != null) {
+                        mmpNote = ` (Q${card.__marketMaxQuality} $${card.__marketMaxPrice.toFixed(2)})`;
+                    }
+                    mmpPartHtml = ` | <span style="${mmpColor}white-space:nowrap;">市场最大时利:${mmp.toFixed(2)}`;
+                    if (mmpNote) {
+                        mmpPartHtml += `<span style="color:${dPh ? '#aaa' : '#777'};font-size:0.85em;">${mmpNote}</span>`;
+                    }
+                    mmpPartHtml += `</span>`;
+                    if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
+                        const lnkColor = '#ff9800';
+                        mmpPartHtml += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:${lnkColor};text-decoration:none;">📈交易所</a>`;
+                    }
+                }
+                mpHtml = `<span class="sc-mp-part">${mpPartHtml}${mmpPartHtml}</span>`;
             }
 
             profitDisplay.innerHTML = profitHtml + mpHtml;
@@ -4538,29 +4883,58 @@
                 return;
             }
 
+            // 检查是否开启了"显示更多"
+            const marketMaxProfitEnabled = (() => {
+                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                return cfg['marketMaxProfitToggle'] === true;
+            })();
+
             // 已有时利润元素：更新 MP 部分
             const mpSpan = displayEl.querySelector('.sc-mp-part');
             const hasProfit = !!displayEl.querySelector('.sc-profit-part');
             const sep = hasProfit ? ' | ' : '';
             const dMp = DM();
-            let mpHtml = '';
 
+            // 1. 构建 MP-% 部分（始终显示）
+            let mpPartHtml = '';
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
-                mpHtml = `${sep}<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
-                if (mpNotes) {
-                    mpHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
+                mpPartHtml = `${sep}<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
+                if (marketMaxProfitEnabled && mpValue != null && isFinite(mpValue)) {
+                    mpPartHtml += ` ($${mpValue.toFixed(2)})`;
                 }
-                mpHtml += `</span>`;
+                if (mpNotes) {
+                    mpPartHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;"> ${mpNotes}</span>`;
+                }
+                mpPartHtml += `</span>`;
             } else {
                 // 无有效 MP 数据
                 if (mpNotes) {
-                    mpHtml = `${sep}<span style="color:${dMp ? '#aaa' : '#777'};">${mpNotes}</span>`;
-                } else {
-                    mpHtml = ''; // 清空占位符
+                    mpPartHtml = `${sep}<span style="color:${dMp ? '#aaa' : '#777'};">${mpNotes}</span>`;
                 }
             }
+
+            // 2. 开关开启时追加市场最大时利
+            let mmpPartHtml = '';
+            if (marketMaxProfitEnabled && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+                const mmp = card.__marketMaxProfit;
+                const mmpColor = mmp < 0 ? 'color:#ff1744;' : 'color:#4caf50;';
+                let mmpNote = '';
+                if (card.__marketMaxQuality != null && card.__marketMaxPrice != null) {
+                    mmpNote = ` (Q${card.__marketMaxQuality} $${card.__marketMaxPrice.toFixed(2)})`;
+                }
+                mmpPartHtml = ` | <span style="${mmpColor}white-space:nowrap;">市场最大时利:${mmp.toFixed(2)}`;
+                if (mmpNote) {
+                    mmpPartHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">${mmpNote}</span>`;
+                }
+                mmpPartHtml += `</span>`;
+                if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
+                    mmpPartHtml += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">📈交易所</a>`;
+                }
+            }
+
+            const mpHtml = mpPartHtml + mmpPartHtml;
 
             if (mpSpan) {
                 mpSpan.innerHTML = mpHtml;
@@ -4600,21 +4974,49 @@
             }
 
             const dMpNote = DM();
-            let mpText = '';
+            // 检查是否开启了"显示更多"
+            const mmpEnabledLegacy = (() => {
+                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                return cfg['marketMaxProfitToggle'] === true;
+            })();
+
+            // 1. 构建 MP-% 部分（始终显示，参考价格仅在开关开启时显示）
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
                 if (displayText) displayText += ' |';
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
-                // 整个 MP 信息用 nowrap 包裹，保证百分比和价格不被换行断开
-                mpText = `<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
-                if (mpNotes) {
-                    mpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">(${mpNotes})</span>`;
+                let mpBaseText = `<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
+                if (mmpEnabledLegacy && mpValue != null && isFinite(mpValue)) {
+                    mpBaseText += ` ($${mpValue.toFixed(2)})`;
                 }
-                mpText += `</span>`;
-                displayText += mpText;
+                if (mpNotes) {
+                    mpBaseText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;"> ${mpNotes}</span>`;
+                }
+                mpBaseText += `</span>`;
+                displayText += mpBaseText;
             } else if (mpNotes) {
                 if (displayText) displayText += ' |';
                 displayText += `<span style="color:${dMpNote ? '#aaa' : '#777'};">${mpNotes}</span>`;
+            }
+
+            // 2. 开关开启时追加市场最大时利
+            if (mmpEnabledLegacy && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+                if (displayText) displayText += ' |';
+                const mmp = card.__marketMaxProfit;
+                const mmpColor = mmp < 0 ? 'color:#ff1744;' : 'color:#4caf50;';
+                let mmpNote = '';
+                if (card.__marketMaxQuality != null && card.__marketMaxPrice != null) {
+                    mmpNote = ` (Q${card.__marketMaxQuality} $${card.__marketMaxPrice.toFixed(2)})`;
+                }
+                let mmpText = `<span style="${mmpColor}white-space:nowrap;">市场最大时利:${mmp.toFixed(2)}`;
+                if (mmpNote) {
+                    mmpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">${mmpNote}</span>`;
+                }
+                mmpText += `</span>`;
+                if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
+                    mmpText += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">📈交易所</a>`;
+                }
+                displayText += mmpText;
             }
 
             if (!displayText) return;
@@ -4699,6 +5101,18 @@
                 `;
                 customBtn.onclick = () => executiveCustomButton.show();
                 btnGroup.appendChild(customBtn);
+
+                // 2c. 显示更多信息开关按钮
+                const marketToggle = createGlobalCustomToggle(
+                    'marketMaxProfitToggle',
+                    '显示更多',
+                    {},
+                    () => {
+                        refreshAllContractProfits();
+                    }
+                );
+                marketToggle.wrapper.style.marginLeft = "0";
+                btnGroup.appendChild(marketToggle.wrapper);
 
                 tip.appendChild(btnGroup);
 
@@ -6384,14 +6798,15 @@
             }
         };
 
-        // 3. processMarketData
-        function processMarketData(json, realm, id) {
+        // 3. processMarketData（isAll: 是否为 /all/ 端点，使用不同缓存键避免被单品质数据覆盖）
+        function processMarketData(json, realm, id, isAll) {
             if (!Array.isArray(json)) return;
             const dataToSave = {
                 timestamp: Date.now(),
                 data: json
             };
-            localStorage.setItem(`market_${realm}_${id}`, JSON.stringify(dataToSave));
+            const prefix = isAll ? 'market_all_' : 'market_';
+            localStorage.setItem(`${prefix}${realm}_${id}`, JSON.stringify(dataToSave));
         }
 
         const originalFetch = window.fetch;
@@ -6406,7 +6821,7 @@
 
                 const response = await originalFetch(...args);
                 response.clone().json().then(json => {
-                    processMarketData(json, realm, id);
+                    processMarketData(json, realm, id, !!matchAll);
                 }).catch(() => { });
                 return response;
             }
@@ -6426,11 +6841,12 @@
                     const id = parseInt(m[2], 10);
                     this._realm = realm;
                     this._id = id;
+                    this._isAll = !!matchAll;
                     this.addEventListener('readystatechange', () => {
                         if (this.readyState === 4 && this.status >= 200 && this.status < 300) {
                             try {
                                 const json = JSON.parse(this.responseText);
-                                processMarketData(json, this._realm, this._id);
+                                processMarketData(json, this._realm, this._id, this._isAll);
                             } catch { }
                         }
                     }, false);
@@ -7592,7 +8008,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    高管页面增加COO收益计算
+        // @changelog    合同页面增加显示更多按钮，打开可显示详细mp，市场最大时利润及跳转，自定义运行时长增加强制后天该时刻
 
         fetch(scriptUrl)
             .then(res => res.text())
