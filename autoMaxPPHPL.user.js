@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.17
+// @version      1.32.18
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -11,6 +11,7 @@
 // @downloadURL  https://sc.22-7.top/scripts/autoMaxPPHPL.user.js
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
+// @connect      api.simcotools.com
 // ==/UserScript==
 
 (function () {
@@ -1438,6 +1439,7 @@
                 createPageActionToggle('contractProfit', '合同计算时利润'),
                 createPageActionToggle('executiveHistory', '显示高管培训记录'),
                 createPageActionToggle('formerExecEnhance', '前任高管更多信息'),
+                createPageActionToggle('outgoingMP', '出库合同MP-?%'),
                 createPageActionToggle('autoSelectBestMarketRow', '交易所自动选中高亮行', false)
             );
             secondaryMenu.appendChild(secBtnGroup);
@@ -5301,7 +5303,7 @@
             outgoingContractPage: { //出库合同/出售页面
                 pattern: /^https:\/\/www\.simcompanies\.com(?:\/[a-z-]+)?\/headquarters\/warehouse\/(?:[^\/]+)\/(?:sell|contract)\/?$/,
                 action: (url) => {
-                    // console.log('[出库合同页面识别] 已进入出库页面');
+                    if (!isPageModuleEnabled('outgoingMP')) return;
                     outgoingContractMPHandler.init();
                 }
             },
@@ -8027,6 +8029,64 @@
         const DEFAULT_PRESETS = 'MP-4%';
         let initTimer = null;
 
+        // VWAP 相关常量与函数
+        const VWAP_CACHE_KEY = 'SC_OutgoingVWAP_Cache';
+        const VWAP_CACHE_MS = 10 * 60 * 1000;
+
+        async function getVWAPData(realmId, resourceId, quality) {
+            const cacheKey = `${VWAP_CACHE_KEY}_${realmId}_${resourceId}_${quality}`;
+            try {
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) { const p = JSON.parse(cached); if (Date.now() - p.t < VWAP_CACHE_MS) return p.v; }
+            } catch (e) { /* ignore */ }
+            try {
+                const url = `https://api.simcotools.com/v1/realms/${realmId}/market/vwaps/${resourceId}/${quality}`;
+                const vwap = await new Promise((resolve) => {
+                    if (typeof GM_xmlhttpRequest === 'function') {
+                        GM_xmlhttpRequest({
+                            method: 'GET',
+                            url: url,
+                            onload: function (resp) {
+                                try {
+                                    const data = JSON.parse(resp.responseText);
+                                    const v = typeof data === 'number' ? data
+                                        : (data.vwap || data.price || data.value
+                                            || (Array.isArray(data.vwaps) && data.vwaps[0]?.vwap)
+                                            || (Array.isArray(data) && data[0]?.vwap));
+                                    console.log('[VWAP] API返回:', { status: resp.status, raw: resp.responseText?.substring(0, 100), parsed: v });
+                                    resolve(typeof v === 'number' && v > 0 ? v : null);
+                                } catch (e) { console.warn('[VWAP] 解析失败:', e); resolve(null); }
+                            },
+                            onerror: function (e) { console.warn('[VWAP] GM_xmlhttpRequest 错误:', e); resolve(null); },
+                            ontimeout: function () { console.warn('[VWAP] 请求超时'); resolve(null); },
+                            timeout: 10000
+                        });
+                    } else {
+                        fetch(url)
+                            .then(r => r.json())
+                            .then(data => {
+                                const v = typeof data === 'number' ? data
+                                    : (data.vwap || data.price || data.value
+                                        || (Array.isArray(data.vwaps) && data.vwaps[0]?.vwap)
+                                        || (Array.isArray(data) && data[0]?.vwap));
+                                console.log('[VWAP] fetch返回:', v);
+                                resolve(typeof v === 'number' && v > 0 ? v : null);
+                            })
+                            .catch(e => { console.warn('[VWAP] fetch失败:', e); resolve(null); });
+                    }
+                });
+                if (vwap !== null) {
+                    try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), v: vwap })); } catch (e) { }
+                    return vwap;
+                }
+            } catch (e) { /* ignore */ }
+            try {
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) { const p = JSON.parse(cached); return p.v; }
+            } catch (e) { }
+            return null;
+        }
+
         function isUseInputEnabled() {
             return localStorage.getItem(USE_INPUT_KEY) === 'true';
         }
@@ -8084,12 +8144,13 @@
                     </div>
                     <div style="padding:15px;">
                         <p style="margin-top:0;margin-bottom:15px;font-size:14px;line-height:1.6;">
-                            使用<strong style="color:#FF8888;">逗号（, 或 ，）</strong>分隔。支持：<br>
-                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">MP-4%</code> → 市场最低价 -4%<br>
-                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">MP+5%</code> → 市场最低价 +5%<br>
-                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">MP-10</code> → 市场最低价 -$10<br>
-                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">MP+6</code> → 市场最低价 +$6<br>
-                            字母不区分大小写，半角全角均可。不符合步长的价格会显示↓↑两个选项供选择。
+                            使用<strong style="color:#FF8888;">逗号（, 或 ，）</strong>分隔。使用MP±%或者VWAP±%。支持：<br>
+                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">MP-4%</code> → MP -4%<br>
+                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">MP+5%</code> → MP +5%<br>
+                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">MP-10</code> → MP -$10<br>
+                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">MP+6</code> → MP +$6<br>
+                            • <code style="background:${codeBg};color:${codeFg};padding:1px 4px;border-radius:3px;">VWAP-4%</code> → VWAP -4%<br>
+                            VWAP来自simcotools.com。字母不区分大小写，半角全角均可。
                         </p>
                         <textarea id="outgoingmp-config-input"
                             style="width:100%;height:80px;margin-bottom:12px;padding:8px;border:1px solid ${inputBorder};border-radius:4px;box-sizing:border-box;font-size:14px;color:${inputFg};background:${inputBg};resize:vertical;"></textarea>
@@ -8221,17 +8282,17 @@
             return bestPrice !== Infinity ? { price: bestPrice, quality: bestQuality } : null;
         }
 
-        // 解析预设值为目标价格
+        // 解析预设值为目标价格（支持MP-和VWAP-前缀，不区分大小写）
         function calcTargetPrice(mpPrice, preset) {
             const s = preset.trim().toLowerCase();
-            let m = s.match(/^mp\s*([+-])\s*([\d.]+)\s*%$/);
+            let m = s.match(/^(?:mp|vwap)\s*([+-])\s*([\d.]+)\s*%$/);
             if (m) {
                 const pct = parseFloat(m[2]) / 100;
                 return m[1] === '-' ? mpPrice * (1 - pct) : mpPrice * (1 + pct);
             }
-            m = s.match(/^mp\s*-\s*([\d.]+)$/);
+            m = s.match(/^(?:mp|vwap)\s*-\s*([\d.]+)$/);
             if (m && !s.includes('%')) return mpPrice - parseFloat(m[1]);
-            m = s.match(/^mp\s*\+\s*([\d.]+)$/);
+            m = s.match(/^(?:mp|vwap)\s*\+\s*([\d.]+)$/);
             if (m && !s.includes('%')) return mpPrice + parseFloat(m[1]);
             m = s.match(/^([\d.]+)$/);
             if (m) return parseFloat(m[1]);
@@ -8336,6 +8397,12 @@
             const marketData = await getMarketData(realmId, resourceId);
             const mpInfo = marketData ? findLowestMP(marketData, resourceId, quality) : null;
 
+            // 获取 VWAP 数据（仅合同页面）
+            let vwapPrice = null;
+            if (isContract) {
+                vwapPrice = await getVWAPData(realmId, resourceId, quality);
+            }
+
             // MP 信息提示文字
             const infoSpan = document.createElement('span');
             infoSpan.className = 'outgoingmp-info';
@@ -8360,32 +8427,71 @@
                 infoSpan.textContent = `Q${mpInfo.quality}最低 $${mpInfo.price}`;
             }
 
-            // 基于输入框已有值或市场最低价（根据开关决定）
+            // VWAP 信息展示（仅合同页面）
+            if (isContract && vwapPrice !== null && vwapPrice > 0) {
+                const vwapText = ` | VWAP $${vwapPrice.toFixed(2)}`;
+                infoSpan.textContent = (infoSpan.textContent || '') + vwapText;
+            }
+
+            // 基准价确定
             const currentVal = parseFloat(priceInput.value);
             const useInput = isUseInputEnabled() && currentVal > 0;
-            const basePrice = useInput ? currentVal : (mpInfo ? mpInfo.price : 0);
+            const mpBasePrice = mpInfo ? mpInfo.price : 0;
 
             // 开关开但输入框无有效值 → 提示已回退市场价
             if (isUseInputEnabled() && !(currentVal > 0) && mpInfo) {
                 infoSpan.textContent = (infoSpan.textContent || '') + '（已用市场价）';
             }
 
-            if (basePrice > 0) {
-                if (isContract) {
-                    // contract 页面：使用预设系统（合同无步长限制，直接保留3位小数）
+            // 生成预设按钮的通用函数
+            const createPresetBtn = (basePrice, presets, labelMap) => {
+                if (basePrice <= 0) return;
+                presets.slice().reverse().forEach(preset => {
+                    const rawTarget = calcTargetPrice(basePrice, preset);
+                    if (rawTarget === null) return;
+                    const rounded = Math.round(rawTarget * 1000) / 1000;
+                    const btn = document.createElement('button');
+                    btn.type = 'button'; btn.className = btnClass;
+                    btn.textContent = labelMap ? labelMap(preset) : preset;
+                    btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); setInputValue(priceInput, rounded); };
+                    btnRow.appendChild(btn);
+                });
+            };
+
+            if (isContract) {
+                // contract 页面：MP 和 VWAP 两组预设按钮同时展示
+                if (!useInput) {
                     const presets = loadPresets();
-                    presets.slice().reverse().forEach(preset => {
-                        const rawTarget = calcTargetPrice(basePrice, preset);
-                        if (rawTarget === null) return;
-                        const rounded = Math.round(rawTarget * 1000) / 1000;
-                        const btn = document.createElement('button');
-                        btn.type = 'button'; btn.className = btnClass;
-                        btn.textContent = preset;
-                        btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); setInputValue(priceInput, rounded); };
-                        btnRow.appendChild(btn);
-                    });
+                    // MP预设按钮（仅处理不以vwap开头的预设）
+                    const mpPresets = presets.filter(p => !/^vwap/i.test(p.trim()));
+                    if (mpPresets.length > 0) {
+                        createPresetBtn(mpBasePrice, mpPresets, null);
+                    }
+                    // VWAP预设按钮（所有预设转为VWAP前缀，去重后显示）
+                    if (vwapPrice && vwapPrice > 0 && presets.length > 0) {
+                        const seenLabels = new Set();
+                        presets.slice().reverse().forEach(preset => {
+                            const rawTarget = calcTargetPrice(vwapPrice, preset);
+                            if (rawTarget === null) return;
+                            const label = preset.replace(/^mp/i, 'VWAP');
+                            if (seenLabels.has(label)) return;
+                            seenLabels.add(label);
+                            const rounded = Math.round(rawTarget * 1000) / 1000;
+                            const btn = document.createElement('button');
+                            btn.type = 'button'; btn.className = btnClass;
+                            btn.textContent = label;
+                            btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); setInputValue(priceInput, rounded); };
+                            btnRow.appendChild(btn);
+                        });
+                    }
                 } else {
-                    // sell 页面：市场价 和 压价
+                    // 基于输入框已有价格
+                    createPresetBtn(currentVal, loadPresets(), null);
+                }
+            } else {
+                // sell 页面：市场价 和 压价（仅使用MP基准）
+                const basePrice = mpBasePrice || (vwapPrice || 0);
+                if (basePrice > 0) {
                     const step = getSellStep(basePrice);
                     const mpRounded = roundToStep(basePrice, false);
                     // 市场价
@@ -8425,8 +8531,18 @@
                 _profitCalcTimer = setTimeout(calcAndDisplayProfit, 200);
             };
 
-            // 监听 DOM 变化（运输元素出现/消失）
-            _profitObserver = new MutationObserver(() => schedule());
+            // 监听 DOM 变化（运输元素出现/消失），但忽略利润明细自身的 DOM 变更以避免循环重建
+            _profitObserver = new MutationObserver((mutations) => {
+                const isOwnMutation = mutations.some(m => {
+                    let el = m.target;
+                    while (el) {
+                        if (el.classList && el.classList.contains('sc-profit-display')) return true;
+                        el = el.parentElement;
+                    }
+                    return false;
+                });
+                if (!isOwnMutation) schedule();
+            });
             _profitObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
 
             // 监听输入框变化（React 受控组件不触发 characterData）
@@ -8444,7 +8560,11 @@
         }
 
         function calcAndDisplayProfit() {
-            // 清理旧展示
+            // 清理旧展示前，记住展开状态
+            const oldDisplay = document.querySelector('.sc-profit-display');
+            if (oldDisplay) {
+                _profitDetailExpanded = oldDisplay.getAttribute('data-expanded') === 'true';
+            }
             document.querySelectorAll('.sc-profit-display').forEach(e => e.remove());
 
             const onPage = /\/headquarters\/warehouse\/(?:[^\/]+)\/(?:sell|contract)\/?$/.test(location.href);
@@ -8455,62 +8575,62 @@
             // 先获取价格和数量，未填则不出利润
             const priceInput = document.querySelector('input[name="price"]');
             const qtyInput = document.querySelector('input[name="amount"], input[name="quantity"]');
-            if (!priceInput || !qtyInput) { /* console.log('[利润预估] 未找到价格或数量输入框'); */ return; }
+            if (!priceInput || !qtyInput) { /* console.log('[利润明细] 未找到价格或数量输入框'); */ return; }
             const price = parseFloat(priceInput.value) || 0;
             const quantity = parseFloat(qtyInput.value) || 0;
-            if (price <= 0 || quantity <= 0) { /* console.log('[利润预估] 价格或数量≤0, 跳过', { price, quantity }); */ return; }
+            if (price <= 0 || quantity <= 0) { /* console.log('[利润明细] 价格或数量≤0, 跳过', { price, quantity }); */ return; }
 
             // 获取资源ID、品质
             const resourceId = parseResourceId();
             const quality = parseQuality();
-            if (!resourceId) { /* console.log('[利润预估] 未识别到资源ID'); */ return; }
-            /* console.log('[利润预估] 开始计算', { resourceId, quality, price, quantity, isContract }); */
+            if (!resourceId) { /* console.log('[利润明细] 未识别到资源ID'); */ return; }
+            /* console.log('[利润明细] 开始计算', { resourceId, quality, price, quantity, isContract }); */
 
             // 从 constantsResources 获取每单位运输用量（transportation 字段）
             const SCD = (() => { try { return JSON.parse(localStorage.getItem('SimcompaniesConstantsData')); } catch (e) { return null; } })();
-            if (!SCD) { /* console.log('[利润预估] SimcompaniesConstantsData 不存在'); */ return; }
+            if (!SCD) { /* console.log('[利润明细] SimcompaniesConstantsData 不存在'); */ return; }
             const resourceInfo = SCD?.constantsResources?.[resourceId];
             const perUnitTransport = resourceInfo?.transportation ?? 0;
-            /* console.log('[利润预估] 运输数据', { resourceInfo_exists: !!resourceInfo, perUnitTransport, constantsKeys: SCD?.constantsResources ? Object.keys(SCD.constantsResources).slice(0,5) : 'null' }); */
+            /* console.log('[利润明细] 运输数据', { resourceInfo_exists: !!resourceInfo, perUnitTransport, constantsKeys: SCD?.constantsResources ? Object.keys(SCD.constantsResources).slice(0,5) : 'null' }); */
 
             // 计算运输总量（游戏向上取整；合同运输量始终减半，市场出售始终全量）
             const contractExactTransport = perUnitTransport * quantity * 0.5;
             const contractTransportTotal = Math.ceil(contractExactTransport);
             const sellExactTransport = perUnitTransport * quantity * 1;
             const sellTransportTotal = Math.ceil(sellExactTransport);
-            /* console.log('[利润预估] 运输量', { contractTransportTotal, sellTransportTotal, isContract }); */
+            /* console.log('[利润明细] 运输量', { contractTransportTotal, sellTransportTotal, isContract }); */
 
             // 从缓存读取仓库数据
             const realmId = getRealmIdFromLink();
-            if (realmId === null) { /* console.log('[利润预估] realmId 为空'); */ return; }
+            if (realmId === null) { /* console.log('[利润明细] realmId 为空'); */ return; }
             const SRC = (() => { try { return JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`)); } catch (e) { return null; } })();
             const warehouse = SRC?.warehouseResources;
-            if (!warehouse || !Array.isArray(warehouse)) { /* console.log('[利润预估] warehouseResources 不存在或非数组'); */ return; }
-            /* console.log('[利润预估] 仓库数据', { realmId, warehouseLen: warehouse.length, hasSRC: !!SRC }); */
+            if (!warehouse || !Array.isArray(warehouse)) { /* console.log('[利润明细] warehouseResources 不存在或非数组'); */ return; }
+            /* console.log('[利润明细] 仓库数据', { realmId, warehouseLen: warehouse.length, hasSRC: !!SRC }); */
 
             // 找产品单位成本（cost 总和 / amount）
             let productUnitCost = 0;
             const productEntries = warehouse.filter(e => e.kind === resourceId && e.quality === quality);
-            /* console.log('[利润预估] 产品匹配', { resourceId, quality, matchCount: productEntries.length }); */
+            /* console.log('[利润明细] 产品匹配', { resourceId, quality, matchCount: productEntries.length }); */
             if (productEntries.length > 0) {
                 const e = productEntries[0];
                 const costSum = Object.values(e.cost || {}).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
                 productUnitCost = e.amount > 0 ? costSum / e.amount : 0;
-                /* console.log('[利润预估] 产品成本明细', { amount: e.amount, costSum, productUnitCost, costKeys: Object.keys(e.cost||{}) }); */
+                /* console.log('[利润明细] 产品成本明细', { amount: e.amount, costSum, productUnitCost, costKeys: Object.keys(e.cost||{}) }); */
             } else {
-                /* console.log('[利润预估] ⚠️ 仓库中未找到匹配产品，尝试列出相关kind', 
+                /* console.log('[利润明细] ⚠️ 仓库中未找到匹配产品，尝试列出相关kind', 
                     warehouse.filter(e => e.kind === resourceId).map(e => ({kind:e.kind, quality:e.quality, amount:e.amount}))); */
             }
 
             // 找运输单位成本（资源ID=13，无品质区分）
             let transportUnitCost = 0;
             const transportEntries = warehouse.filter(e => e.kind === 13);
-            /* console.log('[利润预估] 运输单位匹配', { matchCount: transportEntries.length }); */
+            /* console.log('[利润明细] 运输单位匹配', { matchCount: transportEntries.length }); */
             if (transportEntries.length > 0) {
                 const e = transportEntries[0];
                 const costSum = Object.values(e.cost || {}).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
                 transportUnitCost = e.amount > 0 ? costSum / e.amount : 0;
-                /* console.log('[利润预估] 运输成本明细', { amount: e.amount, costSum, transportUnitCost }); */
+                /* console.log('[利润明细] 运输成本明细', { amount: e.amount, costSum, transportUnitCost }); */
             }
 
             const revenue = price * quantity;
@@ -8521,7 +8641,7 @@
             const contractProfit = revenue - productCost - contractTransportCost;
             // 市场利润：4%手续费扣在总收入上，运输费另计（全量运输）
             const marketProfit = revenue * 0.96 - productCost - sellTransportCost;
-            /* console.log('[利润预估] 计算结果', { revenue, productCost, contractTransportCost, sellTransportCost, contractProfit, marketProfit }); */
+            /* console.log('[利润明细] 计算结果', { revenue, productCost, contractTransportCost, sellTransportCost, contractProfit, marketProfit }); */
 
             // 运输向上取整提醒（合同和市场分别可能浪费不同数量）
             const sellWasteTransport = sellTransportTotal - sellExactTransport;
@@ -8558,14 +8678,18 @@
 
             // 标题头 + 三角（根据记住的展开状态显示）
             let html = `<div id="sc-profit-header" style="font-weight:bold;cursor:pointer;display:flex;align-items:center;gap:4px;">
-                <span id="sc-profit-arrow">${_profitDetailExpanded ? '▼' : '▶'}</span> 📊 利润预估
+                <span id="sc-profit-arrow">${_profitDetailExpanded ? '▼' : '▶'}</span> 📊 利润明细
             </div>`;
 
-            // 摘要行（两列）
-            html += `<div id="sc-profit-summary" style="display:flex;flex-wrap:wrap;gap:${isNarrow ? '4px' : '16px'};margin-top:4px;">
-                <span>市场利润: <b style="color:${profitColor(marketNet)};">${fmt(marketNet)}</b></span>
-                <span>合同利润: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>
-            </div>`;
+            // 摘要行：合同页面只显示合同利润，出售页面显示双列
+            html += `<div id="sc-profit-summary" style="display:flex;flex-wrap:wrap;gap:${isNarrow ? '4px' : '16px'};margin-top:4px;">`;
+            if (isContract) {
+                html += `<span>合同利润: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
+            } else {
+                html += `<span>市场利润: <b style="color:${profitColor(marketNet)};">${fmt(marketNet)}</b></span>`;
+                html += `<span>合同利润: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
+            }
+            html += `</div>`;
 
             // 明细表（默认隐藏，记住展开状态）
             const thStyle = `padding:2px 6px;text-align:right;font-weight:bold;color:${d ? '#aaa' : '#666'};`;
@@ -8573,14 +8697,25 @@
             const rowStyle = `border-bottom:1px solid ${d ? '#333' : '#e0e0e0'};`;
             const labelTd = (t, bold) => `<td style="${thStyle}text-align:left;${bold ? 'font-weight:bold;' : ''}">${t}</td>`;
             html += `<div id="sc-profit-detail" style="display:${_profitDetailExpanded ? 'block' : 'none'};margin-top:6px;">
-                <table style="border-collapse:collapse;width:100%;">
-                    <tr>${labelTd('')}<th style="${thStyle}">市场</th><th style="${thStyle}">合同</th></tr>
+                <table style="border-collapse:collapse;width:100%;">`;
+            if (isContract) {
+                // 合同页面：仅合同列
+                html += `<tr>${labelTd('')}<th style="${thStyle}">合同</th></tr>
+                    <tr style="${rowStyle}">${labelTd('收入')}<td style="${tdStyle}">${fmt(revenue)}</td></tr>
+                    <tr style="${rowStyle}">${labelTd('成本')}<td style="${tdStyle};color:#f44336;">-${fmt(productCost)}</td></tr>
+                    <tr style="${rowStyle}">${labelTd('手续费')}<td style="${tdStyle}">${fmt(contractFee)}</td></tr>
+                    <tr style="${rowStyle}">${labelTd('运输费用')}<td style="${tdStyle};color:#f44336;">-${fmt(contractTransportCost)}</td></tr>
+                    <tr>${labelTd('利润', true)}<td style="${tdStyle};font-weight:bold;color:${profitColor(contractNet)};">${fmt(contractNet)}</td></tr>`;
+            } else {
+                // 出售页面：市场+合同双列
+                html += `<tr>${labelTd('')}<th style="${thStyle}">市场</th><th style="${thStyle}">合同</th></tr>
                     <tr style="${rowStyle}">${labelTd('收入')}<td style="${tdStyle}">${fmt(revenue)}</td><td style="${tdStyle}">${fmt(revenue)}</td></tr>
                     <tr style="${rowStyle}">${labelTd('成本')}<td style="${tdStyle};color:#f44336;">-${fmt(productCost)}</td><td style="${tdStyle};color:#f44336;">-${fmt(productCost)}</td></tr>
                     <tr style="${rowStyle}">${labelTd('手续费')}<td style="${tdStyle};color:#f44336;">-${fmt(marketFee)}</td><td style="${tdStyle}">${fmt(contractFee)}</td></tr>
                     <tr style="${rowStyle}">${labelTd('运输费用')}<td style="${tdStyle};color:#f44336;">-${fmt(sellTransportCost)}</td><td style="${tdStyle};color:#f44336;">-${fmt(contractTransportCost)}</td></tr>
-                    <tr>${labelTd('利润', true)}<td style="${tdStyle};font-weight:bold;color:${profitColor(marketNet)};">${fmt(marketNet)}</td><td style="${tdStyle};font-weight:bold;color:${profitColor(contractNet)};">${fmt(contractNet)}</td></tr>
-                </table>
+                    <tr>${labelTd('利润', true)}<td style="${tdStyle};font-weight:bold;color:${profitColor(marketNet)};">${fmt(marketNet)}</td><td style="${tdStyle};font-weight:bold;color:${profitColor(contractNet)};">${fmt(contractNet)}</td></tr>`;
+            }
+            html += `</table>
             </div>`;
 
             // 运输浪费提醒
@@ -8589,6 +8724,7 @@
             }
 
             displayDiv.innerHTML = html;
+            displayDiv.setAttribute('data-expanded', _profitDetailExpanded ? 'true' : 'false');
 
             // --- 展开/折叠交互（持久化状态） ---
             displayDiv.querySelector('#sc-profit-header').addEventListener('click', () => {
@@ -8603,6 +8739,7 @@
                     arrow.textContent = '▶';
                     _profitDetailExpanded = false;
                 }
+                displayDiv.setAttribute('data-expanded', _profitDetailExpanded ? 'true' : 'false');
             });
 
             // 插入位置：找到包含价格输入框的 .row 容器，插到其后面
@@ -9248,7 +9385,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    仓库出库增加mp-，利润明细，仓库资源详细页增加传统零售时利润展示。功能开关设置中增加交易所自动选中高亮行，默认关闭。
+        // @changelog    仓库出库增加VWAP。功能开关设置中增加出库合同MP-?%开关，默认开始，增加交易所自动选中高亮行，默认关闭。
 
         fetch(scriptUrl)
             .then(res => res.text())
