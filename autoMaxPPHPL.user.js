@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.18
+// @version      1.32.19
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3025,6 +3025,8 @@
         let summaryDisplay = null; // 用于展示2400h模拟结果的绿色面板
         let calcTimer = null; // 用于限流
         let _autoSelectTimer = null; // 自动选中最佳订单行的定时器
+        let _pendingAutoSelect = null; // { targetQuality, startTime } 品质切换后等待API数据刷新再选中
+        let _pendingAutoSelectPollTimer = null; // 等待API返回的轮询定时器
 
         // Worker 代码 —— 批量处理版本：一次接收所有行，共享数据只传一次
         const workerCode = `
@@ -3213,37 +3215,42 @@
         }
 
         // 自动选中最佳利润行：先匹配品质，再点击行
+        // 品质不同时切换品质，然后持续监听市场API返回，数据就绪后由 updateGlobalSimulation 完成选中
         function autoSelectBestRow(bestRow) {
-            // 1. 从 aria-label 解析最佳行的品质
             const labelData = extractNumbersFromAriaLabel(bestRow.getAttribute('aria-label'));
             if (!labelData) return;
             const targetQuality = labelData.quality;
 
-            // 2. 获取当前品质筛选按钮
             const qBtn = document.getElementById('quality-selection');
             if (!qBtn) return;
 
-            // 读取当前选中的品质
             const currentSpan = qBtn.querySelector('span');
             const currentQuality = currentSpan ? parseInt(currentSpan.textContent?.trim()) : NaN;
             if (isNaN(currentQuality)) return;
 
-            // 3. 品质不同则切换
             if (currentQuality !== targetQuality) {
-                // 点击按钮打开下拉菜单
                 qBtn.click();
-                // 等待下拉菜单渲染后点击目标品质
                 setTimeout(() => {
                     const dropdownMenu = qBtn.parentElement?.querySelector('.dropdown-menu');
                     if (!dropdownMenu) return;
                     const items = dropdownMenu.querySelectorAll('li a');
                     for (const item of items) {
                         const txt = item.textContent?.trim();
-                        if (txt === '全部') continue; // 跳过"全部"
+                        if (txt === '全部') continue;
                         const q = parseInt(txt);
                         if (q === targetQuality) {
                             item.click();
-                            // 品质切换后 updateGlobalSimulation 会重新运行并再次调用本函数选中行
+                            // 记录切换前两个market缓存键的最新时间戳（all和非all）
+                            const keys = [`market_all_${currentRealmId}_${currentResourceId}`, `market_${currentRealmId}_${currentResourceId}`];
+                            let prevTs = 0;
+                            for (const k of keys) {
+                                try {
+                                    const raw = localStorage.getItem(k);
+                                    if (raw) { const p = JSON.parse(raw); if ((p.timestamp || 0) > prevTs) prevTs = p.timestamp || 0; }
+                                } catch (e) { }
+                            }
+                            _pendingAutoSelect = { targetQuality, startTime: Date.now(), prevTs };
+                            _startPendingAutoSelectPoll();
                             return;
                         }
                     }
@@ -3251,10 +3258,81 @@
                 return;
             }
 
-            // 4. 品质已匹配，直接点击行选中
-            // 模拟用户点击：focus + click
             bestRow.focus();
             bestRow.click();
+        }
+
+        // 持续监听当前产品市场API是否返回（检测localStorage中两个缓存键的时间戳变化）
+        // 数据就绪后直接查找最佳行并点击
+        function _startPendingAutoSelectPoll() {
+            if (_pendingAutoSelectPollTimer) clearTimeout(_pendingAutoSelectPollTimer);
+            if (!_pendingAutoSelect) return;
+
+            const MAX_WAIT = 20000;
+            if (Date.now() - _pendingAutoSelect.startTime > MAX_WAIT) {
+                _pendingAutoSelect = null;
+                return;
+            }
+
+            // 检查quality-selection当前值是否已匹配目标品质
+            const qBtn = document.getElementById('quality-selection');
+            const currentSpan = qBtn?.querySelector('span');
+            const curQ = currentSpan ? parseInt(currentSpan.textContent?.trim()) : NaN;
+            if (curQ !== _pendingAutoSelect.targetQuality) {
+                _pendingAutoSelectPollTimer = setTimeout(_startPendingAutoSelectPoll, 300);
+                return;
+            }
+
+            // 检查两个缓存键是否有新数据
+            const keys = [`market_all_${currentRealmId}_${currentResourceId}`, `market_${currentRealmId}_${currentResourceId}`];
+            let newTs = 0;
+            for (const k of keys) {
+                try {
+                    const raw = localStorage.getItem(k);
+                    if (raw) { const p = JSON.parse(raw); if ((p.timestamp || 0) > newTs) newTs = p.timestamp || 0; }
+                } catch (e) { }
+            }
+
+            if (newTs > _pendingAutoSelect.prevTs) {
+                _pendingAutoSelectPollTimer = setTimeout(() => {
+                    _pendingAutoSelectPollTimer = null;
+                    _tryClickBestRow();
+                }, 800);
+                return;
+            }
+
+            _pendingAutoSelectPollTimer = setTimeout(_startPendingAutoSelectPoll, 500);
+        }
+
+        // 在 pending 状态下，查找当前页面中利润最高的行并点击
+        function _tryClickBestRow() {
+            if (!_pendingAutoSelect) return;
+            const tbody = findValidTbody();
+            if (!tbody) return;
+
+            let bestRow = null, bestProfit = -Infinity;
+            tbody.querySelectorAll('tr[data-profit-calculated]').forEach(row => {
+                if (row.offsetParent !== null && row.__profitData && row.__profitData.profit > bestProfit) {
+                    bestProfit = row.__profitData.profit;
+                    bestRow = row;
+                }
+            });
+
+            if (bestRow) {
+                const qBtn = document.getElementById('quality-selection');
+                const curSpan = qBtn?.querySelector('span');
+                const curQ = curSpan ? parseInt(curSpan.textContent?.trim()) : NaN;
+                if (curQ === _pendingAutoSelect.targetQuality) {
+                    _pendingAutoSelect = null;
+                    bestRow.focus();
+                    bestRow.click();
+                    return;
+                }
+            }
+
+            if (_pendingAutoSelect && Date.now() - _pendingAutoSelect.startTime < 20000) {
+                _pendingAutoSelectPollTimer = setTimeout(_startPendingAutoSelectPoll, 500);
+            }
         }
 
         function updateGlobalSimulation() {
@@ -3300,9 +3378,12 @@
 
             // 用于展示的状态文本
             let statusText = "";
+            let bldLevel = 1;
 
             if (isSimulationMode) {
                 // === 模式 A：真实扫货模拟 (修正：强制 价格升序 + 品质降序) ===
+                const storedLevel = localStorage.getItem('sc_building_level');
+                bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
 
                 // 1. 预提取所有行的数据，并转换为数值对象
                 const processedRows = rawRows.map(item => {
@@ -3407,14 +3488,19 @@
                         } catch (e) { return false; }
                     })();
                     if (autoSelectEnabled) {
-                        clearTimeout(_autoSelectTimer);
-                        _autoSelectTimer = setTimeout(() => autoSelectBestRow(best.row), 600);
+                        // 品质切换后有 pending 状态时：跳过正常自动选中，由轮询在数据就绪后完成
+                        if (_pendingAutoSelect) {
+                            // 不操作，等待 _startPendingAutoSelectPoll 检测到新数据后调用 _tryClickBestRow
+                        } else {
+                            clearTimeout(_autoSelectTimer);
+                            _autoSelectTimer = setTimeout(() => autoSelectBestRow(best.row), 600);
+                        }
                     }
                 }
 
                 // 4. 读取建筑等级和运行时长设置（等级整数≥1，时长可小数）
                 const storedLevel = localStorage.getItem('sc_building_level');
-                const bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
+                bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
                 const storedHours = localStorage.getItem('sc_building_hours');
                 const bldHours = storedHours !== null ? Math.max(0, parseFloat(storedHours) || 0) : 24;
                 const targetSeconds = bldLevel * bldHours * 3600;
@@ -3440,15 +3526,18 @@
                 displayTitle = `${bldLevel}级建筑运行${bldHours}H正时利`;
                 borderColor = isFull ? "#4CAF50" : "#ff9800"; // 绿或橙
 
-                // 格式化时间字符串
-                const timeStr = formatDuration(totalHours);
-                statusText = isFull ? "货源充足" : `仅覆盖 ${timeStr}`;
+                // // 格式化时间字符串
+                // const timeStr = formatDuration(totalHours);
+                // statusText = isFull ? "货源充足" : `仅覆盖 ${timeStr}`;
             }
 
             // 5. 渲染 UI
             const avgStr = avgProfitPerHour.toFixed(2);
             const totalProfitK = (totalProfitVal / 1000).toFixed(1);
             const durationStr = formatDuration(totalTimeSeconds / 3600);
+            const bldRunHours = totalTimeSeconds / 3600 / bldLevel;
+            const bldRunStr = formatDuration(bldRunHours);
+
 
             // 读取当前 MP 设置用于展示
             const mpInputEl = document.getElementById('sc-mp-input');
@@ -3481,7 +3570,7 @@
                 simContent.innerHTML = `
                     <div style="font-family: sans-serif; display: flex; flex-direction: column; gap: ${isNarrowR ? '2px' : '8px'}; font-size: ${isNarrowR ? '11px' : ''};">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${d7r ? '#444' : '#ddd'}; padding-bottom: ${isNarrowR ? '0px' : '6px'}; font-size: 14px;">
-                            <span style="color: ${d7r ? '#aaa' : '#777'};">${displayTitle}</span>
+                            <span style="color: ${d7r ? '#aaa' : '#777'};">${displayTitle}<span id="sc-info-tip" title="自动更新数据有延迟，左下可手动更新&#10;显示均为1级建筑" onclick="event.stopPropagation();var ex=document.getElementById('sc-info-popup');if(ex){ex.remove();return;}var t=this;var isD=window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);isD=isD&&isD.map(Number).reduce(function(a,b){return a+b},0)<380;var d=document.createElement('div');d.id='sc-info-popup';d.textContent='自动更新数据有延迟，左下可手动更新 | 显示均为1级建筑';d.style.cssText='position:absolute;top:100%;left:0;margin-top:4px;padding:5px 10px;background:'+(isD?'#333':'#fff')+';color:'+(isD?'#eee':'#333')+';border:1px solid '+(isD?'#555':'#bbb')+';border-radius:4px;font-size:11px;font-weight:normal;white-space:nowrap;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,.35);';t.parentElement.style.position='relative';t.parentElement.appendChild(d);" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-left:5px;width:16px;height:16px;min-width:16px;font-size:10px;font-weight:bold;line-height:1;color:${d7r ? '#bbb' : '#555'};background:${d7r ? '#444' : '#e8e8e8'};border:1px solid ${d7r ? '#555' : '#bbb'};border-radius:50%;vertical-align:middle;user-select:none;flex-shrink:0;">?</span></span>
                             <span style="font-weight: bold; color: ${borderColor};">$${avgStr}<span style="font-weight:normal;">/h</span></span>
                         </div>
 
@@ -3493,7 +3582,7 @@
                             </div>
 
                             <div style="background: ${d7r ? '#333' : '#e8e8e8'}; color: ${d7r ? '#ccc' : '#555'}; padding: ${isNarrowR ? '1px 4px' : '2px 6px'}; border-radius: 4px;">
-                                用时: ${durationStr}
+                                ${bldLevel}级建筑可运行: ${bldRunStr}
                             </div>
                             ${mpBadgeHtml}${periodBadgeHtml}
                         </div>
@@ -3734,10 +3823,85 @@
             updateGlobalSimulation();
         }
 
+        // ===== 监听购买成功（market-order/take POST），自动切回"全部" =====
+        (function () {
+            const TAKE_URL = '/api/v2/market-order/take/';
+
+            function onTakeSuccess() {
+                if (!currentResourceId || !currentRealmId) return;
+                const autoSelectEnabled = (() => {
+                    try {
+                        const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                        return cfg['autoSelectBestMarketRow'] === true;
+                    } catch (e) { return false; }
+                })();
+                if (!autoSelectEnabled) return;
+
+                // 清除当前pending状态，避免干扰
+                if (_pendingAutoSelectPollTimer) { clearTimeout(_pendingAutoSelectPollTimer); _pendingAutoSelectPollTimer = null; }
+                _pendingAutoSelect = null;
+
+                // 点击quality-selection下拉菜单中的"全部"，让游戏自然刷新数据
+                const qBtn = document.getElementById('quality-selection');
+                if (!qBtn) return;
+                const currentSpan = qBtn.querySelector('span');
+                const curQ = currentSpan ? parseInt(currentSpan.textContent?.trim()) : NaN;
+                if (isNaN(curQ)) return;
+
+                // 当前已是"全部"则不需要切换，游戏购买后会自动请求新数据
+                if (curQ === '全部' || isNaN(curQ)) return;
+
+                qBtn.click();
+                setTimeout(() => {
+                    const dropdownMenu = qBtn.parentElement?.querySelector('.dropdown-menu');
+                    if (!dropdownMenu) return;
+                    const items = dropdownMenu.querySelectorAll('li a');
+                    for (const item of items) {
+                        if (item.textContent?.trim() === '全部') {
+                            item.click();
+                            // 品质切换后游戏会自动请求新市场数据，正常流程会触发 updateGlobalSimulation
+                            return;
+                        }
+                    }
+                }, 100);
+            }
+
+            // 拦截 fetch
+            const origFetch = window.fetch;
+            window.fetch = async function (...args) {
+                const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+                const isTake = url.includes(TAKE_URL);
+                const response = await origFetch.apply(this, args);
+                if (isTake && response.ok) {
+                    try {
+                        const cloned = response.clone();
+                        cloned.json().then(() => onTakeSuccess()).catch(() => { });
+                    } catch (e) { }
+                }
+                return response;
+            };
+
+            // 拦截 XHR
+            const origOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function (method, url) {
+                if (typeof url === 'string' && url.includes(TAKE_URL) && method.toUpperCase() === 'POST') {
+                    this.addEventListener('load', function () {
+                        if (this.status >= 200 && this.status < 300) {
+                            onTakeSuccess();
+                        }
+                    });
+                }
+                return origOpen.apply(this, arguments);
+            };
+        })();
+
         return {
             init(resourceId) {
                 currentResourceId = resourceId;
                 currentRealmId = null;
+                clearTimeout(_autoSelectTimer);
+                if (_pendingAutoSelectPollTimer) { clearTimeout(_pendingAutoSelectPollTimer); _pendingAutoSelectPollTimer = null; }
+                _pendingAutoSelect = null;
                 let globalObserver = null;
                 let tableObserver = null;
 
@@ -4015,12 +4179,6 @@
                         simContent.id = 'sc-sim-content';
                         simContent.innerHTML = `<div style="color:${d7 ? '#888' : '#777'};font-size:12px;text-align:center;padding:8px;">等待数据加载…</div>`;
                         summaryDisplay.appendChild(simContent);
-
-                        // 简短提示（放最底部）
-                        const infoFooter = document.createElement('div');
-                        infoFooter.style.cssText = `margin-top: ${isNarrow7 ? '0px' : '8px'}; padding-top: ${isNarrow7 ? '0px' : '6px'}; border-top: 1px solid ${d7 ? '#444' : '#ddd'}; font-size: ${isNarrow7 ? '10px' : ''}; color: ${d7 ? '#777' : '#999'}; text-align: center;`;
-                        infoFooter.textContent = '自动更新数据有延迟，左下可手动更新|显示均为1级建筑';
-                        summaryDisplay.appendChild(infoFooter);
 
                         container.appendChild(summaryDisplay);
 
@@ -8205,31 +8363,74 @@
         // 限定在百科链接同级容器内查找，避免误抓页面其他位置的星星图标
         function parseQuality() {
             const encLink = document.querySelector('a[href*="/encyclopedia/"][href*="/resource/"]');
-            // 以百科链接的父元素为搜索范围（星星与链接在同一容器内）
-            const searchRoot = encLink ? encLink.parentElement : document.body;
-            const stars = searchRoot.querySelectorAll('svg[data-icon="star"]');
-            if (stars.length === 0) return 0;
-            // 按父元素分组
-            const groups = new Map();
-            stars.forEach(svg => {
-                const p = svg.parentElement;
-                if (!groups.has(p)) groups.set(p, []);
-                groups.get(p).push(svg);
-            });
-            let maxQ = 0;
-            for (const [parent, svgs] of groups) {
-                // 先检查父元素文本中是否有数字（高星如 "7 ★"）
-                const txt = parent.textContent?.trim() || '';
-                const numMatch = txt.match(/^(\d+)/);
-                if (numMatch) {
-                    const q = parseInt(numMatch[1], 10);
-                    if (q > maxQ) maxQ = q;
-                } else if (svgs.length > maxQ) {
-                    // 纯星星（低星如 ★★★ = Q3）
-                    maxQ = svgs.length;
+
+            // 辅助函数：从 star SVG 列表中解析品质
+            const countStarsFromList = (stars) => {
+                if (stars.length === 0) return 0;
+                const groups = new Map();
+                stars.forEach(svg => {
+                    const p = svg.parentElement;
+                    if (!groups.has(p)) groups.set(p, []);
+                    groups.get(p).push(svg);
+                });
+                let maxQ = 0;
+                for (const [parent, svgs] of groups) {
+                    const txt = parent.textContent?.trim() || '';
+                    const numMatch = txt.match(/^(\d+)/);
+                    if (numMatch) {
+                        const q = parseInt(numMatch[1], 10);
+                        if (q > maxQ) maxQ = q;
+                    } else if (svgs.length > maxQ) {
+                        maxQ = svgs.length;
+                    }
+                }
+                return maxQ;
+            };
+
+            // 多选择器尝试匹配星星图标（兼容不同版本的 Font Awesome 及可能的 UI 变更）
+            const starSelectors = [
+                'svg[data-icon="star"]',
+                'svg.fa-star',
+                '.fa-star',
+                '[class*="fa-star"]',
+            ];
+
+            // 策略1：从百科链接向上逐级搜索（最多8层），品质星星与百科链接在同一棵子树内
+            if (encLink) {
+                let el = encLink.parentElement;
+                for (let i = 0; i < 8 && el; i++) {
+                    for (const sel of starSelectors) {
+                        try {
+                            const stars = el.querySelectorAll(sel);
+                            if (stars.length > 0) {
+                                const q = countStarsFromList(stars);
+                                if (q > 0) return q;
+                            }
+                        } catch (e) { /* 选择器无效则跳过 */ }
+                    }
+                    el = el.parentElement;
                 }
             }
-            return maxQ;
+
+            // 策略2：从价格输入框附近的表单区域搜索（sell/contract 页面专用）
+            const priceInput = document.querySelector('input[name="price"]');
+            if (priceInput) {
+                let formEl = priceInput.parentElement;
+                for (let i = 0; i < 8 && formEl; i++) {
+                    for (const sel of starSelectors) {
+                        try {
+                            const stars = formEl.querySelectorAll(sel);
+                            if (stars.length > 0) {
+                                const q = countStarsFromList(stars);
+                                if (q > 0) return q;
+                            }
+                        } catch (e) { /* 选择器无效则跳过 */ }
+                    }
+                    formEl = formEl.parentElement;
+                }
+            }
+
+            return 0;
         }
 
         // 读取缓存：优先时间戳新的，过期(>1分钟)则重新请求 /all/
@@ -8575,10 +8776,10 @@
             // 先获取价格和数量，未填则不出利润
             const priceInput = document.querySelector('input[name="price"]');
             const qtyInput = document.querySelector('input[name="amount"], input[name="quantity"]');
-            if (!priceInput || !qtyInput) { /* console.log('[利润明细] 未找到价格或数量输入框'); */ return; }
+            if (!priceInput || !qtyInput) {  /* console.log('[利润明细] 未找到价格或数量输入框'); */  return; }
             const price = parseFloat(priceInput.value) || 0;
             const quantity = parseFloat(qtyInput.value) || 0;
-            if (price <= 0 || quantity <= 0) { /* console.log('[利润明细] 价格或数量≤0, 跳过', { price, quantity }); */ return; }
+            if (price <= 0 || quantity <= 0) {  /* console.log('[利润明细] 价格或数量≤0, 跳过', { price, quantity }); */  return; }
 
             // 获取资源ID、品质
             const resourceId = parseResourceId();
@@ -8588,7 +8789,7 @@
 
             // 从 constantsResources 获取每单位运输用量（transportation 字段）
             const SCD = (() => { try { return JSON.parse(localStorage.getItem('SimcompaniesConstantsData')); } catch (e) { return null; } })();
-            if (!SCD) { /* console.log('[利润明细] SimcompaniesConstantsData 不存在'); */ return; }
+            if (!SCD) {  /* console.log('[利润明细] SimcompaniesConstantsData 不存在'); */  return; }
             const resourceInfo = SCD?.constantsResources?.[resourceId];
             const perUnitTransport = resourceInfo?.transportation ?? 0;
             /* console.log('[利润明细] 运输数据', { resourceInfo_exists: !!resourceInfo, perUnitTransport, constantsKeys: SCD?.constantsResources ? Object.keys(SCD.constantsResources).slice(0,5) : 'null' }); */
@@ -8602,10 +8803,10 @@
 
             // 从缓存读取仓库数据
             const realmId = getRealmIdFromLink();
-            if (realmId === null) { /* console.log('[利润明细] realmId 为空'); */ return; }
+            if (realmId === null) {  /* console.log('[利润明细] realmId 为空'); */  return; }
             const SRC = (() => { try { return JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`)); } catch (e) { return null; } })();
             const warehouse = SRC?.warehouseResources;
-            if (!warehouse || !Array.isArray(warehouse)) { /* console.log('[利润明细] warehouseResources 不存在或非数组'); */ return; }
+            if (!warehouse || !Array.isArray(warehouse)) {  /* console.log('[利润明细] warehouseResources 不存在或非数组'); */  return; }
             /* console.log('[利润明细] 仓库数据', { realmId, warehouseLen: warehouse.length, hasSRC: !!SRC }); */
 
             // 找产品单位成本（cost 总和 / amount）
@@ -8618,8 +8819,8 @@
                 productUnitCost = e.amount > 0 ? costSum / e.amount : 0;
                 /* console.log('[利润明细] 产品成本明细', { amount: e.amount, costSum, productUnitCost, costKeys: Object.keys(e.cost||{}) }); */
             } else {
-                /* console.log('[利润明细] ⚠️ 仓库中未找到匹配产品，尝试列出相关kind', 
-                    warehouse.filter(e => e.kind === resourceId).map(e => ({kind:e.kind, quality:e.quality, amount:e.amount}))); */
+                /* console.log('[利润明细] ⚠️ 仓库中未找到匹配产品，尝试列出相关kind',
+                   warehouse.filter(e => e.kind === resourceId).map(e => ({kind:e.kind, quality:e.quality, amount:e.amount}))); */
             }
 
             // 找运输单位成本（资源ID=13，无品质区分）
@@ -8934,26 +9135,37 @@
 
         // 在给定容器内解析品质（星标 SVG）
         function parseQualityFromContainer(container) {
-            const stars = container.querySelectorAll('svg[data-icon="star"]');
-            if (stars.length === 0) return 0;
-            const groups = new Map();
-            stars.forEach(svg => {
-                const p = svg.parentElement;
-                if (!groups.has(p)) groups.set(p, []);
-                groups.get(p).push(svg);
-            });
-            let maxQ = 0;
-            for (const [parent, svgs] of groups) {
-                const txt = parent.textContent?.trim() || '';
-                const numMatch = txt.match(/^(\d+)/);
-                if (numMatch) {
-                    const q = parseInt(numMatch[1], 10);
-                    if (q > maxQ) maxQ = q;
-                } else if (svgs.length > maxQ) {
-                    maxQ = svgs.length;
-                }
+            const starSelectors = [
+                'svg[data-icon="star"]',
+                'svg.fa-star',
+                '.fa-star',
+                '[class*="fa-star"]',
+            ];
+            for (const sel of starSelectors) {
+                try {
+                    const stars = container.querySelectorAll(sel);
+                    if (stars.length === 0) continue;
+                    const groups = new Map();
+                    stars.forEach(svg => {
+                        const p = svg.parentElement;
+                        if (!groups.has(p)) groups.set(p, []);
+                        groups.get(p).push(svg);
+                    });
+                    let maxQ = 0;
+                    for (const [parent, svgs] of groups) {
+                        const txt = parent.textContent?.trim() || '';
+                        const numMatch = txt.match(/^(\d+)/);
+                        if (numMatch) {
+                            const q = parseInt(numMatch[1], 10);
+                            if (q > maxQ) maxQ = q;
+                        } else if (svgs.length > maxQ) {
+                            maxQ = svgs.length;
+                        }
+                    }
+                    if (maxQ > 0) return maxQ;
+                } catch (e) { /* 选择器无效则跳过 */ }
             }
-            return maxQ;
+            return 0;
         }
 
         // 基于结构查找物品堆叠容器（不依赖特定CSS类名，兼容锁定/未锁定两种状态）
@@ -9385,7 +9597,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    仓库出库增加VWAP。功能开关设置中增加出库合同MP-?%开关，默认开始，增加交易所自动选中高亮行，默认关闭。
+        // @changelog    修复出库MP-?%获取品质错误，优化增加交易所自动选中高亮行，交易所扫货模拟销售用时改为显示指定建筑等级用时。
 
         fetch(scriptUrl)
             .then(res => res.text())
