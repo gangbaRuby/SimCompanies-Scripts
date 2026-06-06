@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.19
+// @version      1.32.20
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -10,6 +10,7 @@
 // @updateURL    https://sc.22-7.top/scripts/autoMaxPPHPL.user.js
 // @downloadURL  https://sc.22-7.top/scripts/autoMaxPPHPL.user.js
 // @grant        GM_xmlhttpRequest
+// @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
 // @connect      api.simcotools.com
 // ==/UserScript==
@@ -1073,6 +1074,9 @@
     const PanelUI = (() => {
         let panelElement = null;
         const statusElements = {};
+        let needsPositionRecalc = true; // 页面刷新后/拖拽后首次打开面板时重新计算位置
+        let intendedLeft = null;   // 用户拖拽/存储的预期 left（窗口缩放时据此贴边，不保存）
+        let intendedBottom = null; // 用户拖拽/存储的预期 bottom
 
         const typeDisplayNames = {
             r1: 'R1',
@@ -1087,8 +1091,6 @@
             style.textContent = `
             .SimcompaniesRetailCalculation-mini-panel {
                 position: fixed;
-                left: 10px;
-                bottom: 55px;
                 z-index: 9999;
                 font-family: Arial, sans-serif;
             }
@@ -1105,6 +1107,9 @@
                 justify-content: center;
                 color: white;
                 font-size: 18px;
+                user-select: none;
+                -webkit-user-select: none;
+                line-height: 1;
             }
             .SimcompaniesRetailCalculation-panel-content {
                 display: none;
@@ -1115,6 +1120,9 @@
                 border-radius: 4px;
                 padding: 8px;
                 min-width: min(260px, calc(100vw - 26px));
+                max-width: calc(100vw - 20px);
+                max-height: calc(100vh - 100px);
+                overflow-y: auto;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.3);
                 color: var(--sc-panel-fg, #efefef);
             }
@@ -1254,16 +1262,270 @@
             });
         };
 
+        // --- 面板拖拽位置存储相关 ---
+        const PANEL_POS_KEY = 'SC_PanelPosition';
+        const getSavedPos = () => {
+            try {
+                const raw = localStorage.getItem(PANEL_POS_KEY);
+                if (raw) return JSON.parse(raw);
+            } catch (e) { /* ignore */ }
+            return null;
+        };
+        const savePos = (left, bottom) => {
+            try { localStorage.setItem(PANEL_POS_KEY, JSON.stringify({ left, bottom })); } catch (e) { /* ignore */ }
+        };
+
+        // 还原按钮到默认位置（油猴菜单保底操作）
+        const resetPanelPosition = () => {
+            localStorage.removeItem(PANEL_POS_KEY);
+            intendedLeft = 10;
+            intendedBottom = 55;
+            if (panelElement) {
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const btnW = panelElement.offsetWidth || 32;
+                const btnH = panelElement.offsetHeight || 32;
+                const intendedTop = vh - intendedBottom - btnH;
+                const left = Math.max(0, Math.min(vw - btnW, intendedLeft));
+                const top = Math.max(0, Math.min(vh - btnH, intendedTop));
+                panelElement.style.left = left + 'px';
+                panelElement.style.bottom = (vh - top - btnH) + 'px';
+                panelElement.style.top = 'auto';
+            }
+        };
+
+        // 面板展开位置自动适配视口（每次打开时调用，先重置再计算）
+        const adjustPanelPosition = (contentEl) => {
+            // 重置所有位置样式
+            contentEl.style.top = ''; contentEl.style.bottom = '';
+            contentEl.style.left = ''; contentEl.style.right = '';
+            contentEl.style.maxHeight = ''; contentEl.style.maxWidth = '';
+            contentEl.style.overflowY = '';
+            void contentEl.offsetHeight;
+
+            const triggerEl = panelElement.querySelector('.SimcompaniesRetailCalculation-trigger-btn');
+            if (!triggerEl) return;
+            const margin = 10;
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const triggerRect = triggerEl.getBoundingClientRect();
+            const triggerH = triggerRect.height;
+
+            // ---- 1. 自适应面板尺寸 ----
+            // 内容不能挡按钮：上方空间 = 按钮顶部到视口顶；下方空间 = 视口底到按钮底
+            const availTop = triggerRect.top - margin;
+            const availBottom = vh - triggerRect.bottom - margin;
+            const availLeft = triggerRect.left - margin;
+            const availRight = vw - triggerRect.right - margin;
+
+            contentEl.style.maxHeight = Math.max(availTop, availBottom, 100) + 'px';
+            contentEl.style.overflowY = 'auto';
+            contentEl.style.maxWidth = Math.max(triggerRect.width + Math.max(availLeft, availRight), vw - margin * 2, 260) + 'px';
+
+            // ---- 2. 垂直定位：选择空间更大的一侧，紧贴按钮 ----
+            const gap = triggerH; // 内容紧贴按钮边缘
+            contentEl.style.top = 'auto';
+            contentEl.style.bottom = gap + 'px';
+            void contentEl.offsetHeight;
+            let rect = contentEl.getBoundingClientRect();
+            const neededH = Math.min(rect.height, parseFloat(contentEl.style.maxHeight));
+
+            if (rect.top < margin && availBottom >= neededH) {
+                // 上方出界，下方有空间 → 向下展开
+                contentEl.style.bottom = 'auto';
+                contentEl.style.top = gap + 'px';
+            } else if (availTop < neededH && availBottom >= neededH) {
+                // 上方空间不够但下方够 → 向下展开
+                contentEl.style.bottom = 'auto';
+                contentEl.style.top = gap + 'px';
+            } else {
+                // 默认向上展开
+                contentEl.style.top = 'auto';
+                contentEl.style.bottom = gap + 'px';
+            }
+
+            // ---- 3. 水平定位：哪边空间大就朝哪边展开，紧贴按钮 ----
+            const panelRect = panelElement.getBoundingClientRect();
+
+            // 按钮在右半屏 → 面板向左展开（right 对齐）；按钮在左半屏 → 向右展开（left 对齐）
+            const btnCenterX = triggerRect.left + triggerRect.width / 2;
+            if (btnCenterX > vw / 2) {
+                // 按钮偏右 → 面板向左展开，内容右边缘对齐按钮右边缘
+                contentEl.style.left = 'auto';
+                contentEl.style.right = (panelRect.right - triggerRect.right) + 'px';
+            } else {
+                // 按钮偏左 → 面板向右展开，内容左边缘对齐按钮左边缘
+                contentEl.style.right = 'auto';
+                contentEl.style.left = (triggerRect.left - panelRect.left) + 'px';
+            }
+
+            // ---- 4. 最终边界检查 ----
+            void contentEl.offsetHeight;
+            rect = contentEl.getBoundingClientRect();
+            if (rect.left < margin) { contentEl.style.left = margin + 'px'; contentEl.style.right = 'auto'; }
+            if (rect.right > vw - margin) { contentEl.style.right = (vw - rect.right) + 'px'; contentEl.style.left = 'auto'; }
+            if (rect.top < margin) { contentEl.style.bottom = 'auto'; contentEl.style.top = margin + 'px'; }
+        };
+
         // 创建界面元素
         const createPanel = () => {
             const panel = document.createElement('div');
             panel.className = 'SimcompaniesRetailCalculation-mini-panel';
 
-            // 触发器按钮
+            // 触发器按钮（可拖拽）
             const trigger = document.createElement('button');
             trigger.className = 'SimcompaniesRetailCalculation-trigger-btn';
             trigger.textContent = '≡';
-            trigger.addEventListener('click', togglePanel);
+
+            // --- 拖拽逻辑（长按1秒启动 + 鼠标 + 触摸） ---
+            let dragState = null;
+            let longPressTimer = null;
+            const clearLongPress = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } };
+
+            const getClientPos = (e) => {
+                if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                return { x: e.clientX, y: e.clientY };
+            };
+            const getPanelBounds = () => {
+                const w = panel.offsetWidth || 40;
+                const h = panel.offsetHeight || 40;
+                return { w, h };
+            };
+            const clampPosition = (left, top) => {
+                const { w, h } = getPanelBounds();
+                return {
+                    left: Math.max(0, Math.min(window.innerWidth - w, left)),
+                    top: Math.max(0, Math.min(window.innerHeight - h, top))
+                };
+            };
+            const saveDragPosition = () => {
+                const rect = panel.getBoundingClientRect();
+                intendedLeft = Math.round(rect.left);
+                intendedBottom = Math.round(window.innerHeight - rect.bottom);
+                savePos(intendedLeft, intendedBottom);
+            };
+
+            // 根据预期位置 + 当前视口边界自动贴边（不保存，保留用户原始位置）
+            const applyClampedPosition = () => {
+                if (intendedLeft === null || !panel) return;
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const btnW = panel.offsetWidth || 32;
+                const btnH = panel.offsetHeight || 32;
+                const intendedTop = vh - intendedBottom - btnH;
+                const left = Math.max(0, Math.min(vw - btnW, intendedLeft));
+                const top = Math.max(0, Math.min(vh - btnH, intendedTop));
+                panel.style.left = left + 'px';
+                panel.style.bottom = (vh - top - btnH) + 'px';
+                panel.style.top = 'auto';
+            };
+
+            // 恢复上次拖拽位置（或默认位置），并贴边
+            const savedPos = getSavedPos();
+            if (savedPos) {
+                intendedLeft = savedPos.left;
+                intendedBottom = savedPos.bottom;
+            } else {
+                intendedLeft = 10;
+                intendedBottom = 55;
+            }
+            applyClampedPosition();
+
+            window.addEventListener('resize', applyClampedPosition);
+
+            const onDragStart = (e) => {
+                // 鼠标：只响应左键
+                if (e.button !== undefined && e.button !== 0) return;
+                const isTouch = !!e.touches;
+                const pos = getClientPos(e);
+                const rect = panel.getBoundingClientRect();
+                const state = {
+                    startX: pos.x, startY: pos.y,
+                    origLeft: rect.left, origTop: rect.top,
+                    isDragging: false,
+                    readyToDrag: !isTouch // 鼠标立即生效，触摸需等长按
+                };
+                dragState = state;
+
+                if (isTouch) {
+                    // 触摸：长按 0.5 秒后进入拖拽模式
+                    clearLongPress();
+                    longPressTimer = setTimeout(() => {
+                        state.readyToDrag = true;
+                        longPressTimer = null;
+                    }, 500);
+                }
+                // 不 preventDefault，让 click 事件能正常触发
+            };
+            const onDragMove = (e) => {
+                if (!dragState) return;
+                const pos = getClientPos(e);
+                const dx = pos.x - dragState.startX;
+                const dy = pos.y - dragState.startY;
+
+                // 还没进入就绪状态：移动超过阈值则取消（触摸时为防止长按后误触）
+                if (!dragState.readyToDrag) {
+                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                        clearLongPress();
+                        dragState = null;
+                    }
+                    return;
+                }
+
+                // 已就绪：进入拖拽状态
+                dragState.isDragging = true;
+                let newLeft = dragState.origLeft + dx;
+                let newTop = dragState.origTop + dy;
+                const clamped = clampPosition(newLeft, newTop);
+                panel.style.left = clamped.left + 'px';
+                panel.style.top = clamped.top + 'px';
+                panel.style.bottom = 'auto';
+                if (e.cancelable) e.preventDefault();
+            };
+            const onDragEnd = () => {
+                clearLongPress();
+                if (!dragState) return;
+                if (dragState.isDragging) {
+                    const rect = panel.getBoundingClientRect();
+                    const clamped = clampPosition(rect.left, rect.top);
+                    panel.style.left = clamped.left + 'px';
+                    panel.style.top = clamped.top + 'px';
+                    saveDragPosition();
+                    // 如果面板正展开着，拖拽后重新计算内容位置
+                    if (content.style.display === 'block') {
+                        setTimeout(() => adjustPanelPosition(content), 50);
+                    } else {
+                        // 面板关闭时拖拽了按钮，下次打开需要重新计算位置
+                        needsPositionRecalc = true;
+                    }
+                    // 标记本次拖拽，防止 click 触发面板切换
+                    trigger.dataset.dragged = 'true';
+                    setTimeout(() => { trigger.dataset.dragged = 'false'; }, 100);
+                }
+                dragState = null;
+            };
+
+            // 鼠标事件（立即拖拽）
+            trigger.addEventListener('mousedown', onDragStart);
+            document.addEventListener('mousemove', onDragMove);
+            document.addEventListener('mouseup', onDragEnd);
+
+            // 触摸事件（长按1秒后拖拽）
+            trigger.addEventListener('touchstart', onDragStart, { passive: true });
+            document.addEventListener('touchmove', onDragMove, { passive: false });
+            document.addEventListener('touchend', onDragEnd);
+
+            // 防止移动端长按弹出上下文菜单
+            trigger.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+
+            // 点击时区分拖拽和点击
+            trigger.addEventListener('click', (e) => {
+                if (trigger.dataset.dragged === 'true') {
+                    e.stopPropagation();
+                    return;
+                }
+                togglePanel(e);
+            });
 
             // 内容面板
             const content = document.createElement('div');
@@ -1296,6 +1558,7 @@
                 }
             };
 
+            // 面板位置自动适配视口（定义已移至 PanelUI 顶层作用域）
             const mainMenu = document.createElement('div');
             mainMenu.id = 'main-menu-container';
             const secondaryMenu = document.createElement('div');
@@ -1424,25 +1687,78 @@
             backBtn.style.backgroundColor = '#E91E63';
             backBtn.onclick = () => switchMenu(false);
 
-            secBtnGroup.append(
-                backBtn,
-                // 把原本在上面的“自定义运行时长”按钮放到这里
-                (() => {
-                    const btn = document.createElement('button');
-                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
-                    btn.id = 'auto-amount-toggle-btn';
-                    btn.textContent = '自定义运行时长: (等待加载)';
-                    btn.style.backgroundColor = '#607D8B';
-                    return btn;
-                })(),
-                createPageActionToggle('marketProfit', '交易所计算时利润'),
-                createPageActionToggle('contractProfit', '合同计算时利润'),
-                createPageActionToggle('executiveHistory', '显示高管培训记录'),
-                createPageActionToggle('formerExecEnhance', '前任高管更多信息'),
-                createPageActionToggle('outgoingMP', '出库合同MP-?%'),
-                createPageActionToggle('autoSelectBestMarketRow', '交易所自动选中高亮行', false)
-            );
+            secBtnGroup.append(backBtn);
+            // 分页渲染：所有开关项
+            const toggleItems = [
+                { type: 'factory', fn: () => {
+                    const b = document.createElement('button');
+                    b.className = 'SimcompaniesRetailCalculation-action-btn';
+                    b.id = 'auto-amount-toggle-btn';
+                    const refreshState = () => {
+                        try {
+                            const enabled = typeof window.isAutoAmountEnabled === 'function' && window.isAutoAmountEnabled();
+                            b.textContent = enabled ? '自定义运行时长: 🟢 已启用' : '自定义运行时长: 🔴 已禁用';
+                            b.style.backgroundColor = enabled ? '#4CAF50' : '#f44336';
+                        } catch (e) { b.textContent = '自定义运行时长: (加载中...)'; b.style.backgroundColor = '#607D8B'; }
+                    };
+                    refreshState();
+                    b.onclick = (ev) => {
+                        ev.stopPropagation();
+                        if (typeof window.isAutoAmountEnabled !== 'function') return;
+                        window.saveAutoAmountEnabled(!window.isAutoAmountEnabled());
+                        window.initAutoAmountButtons(true);
+                        refreshState();
+                    };
+                    return b;
+                }},
+                { type: 'toggle', key: 'marketProfit', label: '交易所计算时利润' },
+                { type: 'toggle', key: 'contractProfit', label: '合同计算时利润' },
+                { type: 'toggle', key: 'executiveHistory', label: '显示高管培训记录' },
+                { type: 'toggle', key: 'formerExecEnhance', label: '前任高管更多信息' },
+                { type: 'toggle', key: 'outgoingMP', label: '出库合同MP-?%' },
+                { type: 'toggle', key: 'autoSelectBestMarketRow', label: '交易所自动选中高亮行', defaultEnabled: false },
+                { type: 'toggle', key: 'warehouseProfit', label: '仓库时利润计算' },
+            ];
+            const ITEMS_PER_PAGE = 5;
+            let currentPage = 0;
+            const totalPages = Math.ceil(toggleItems.length / ITEMS_PER_PAGE);
+            function renderPage(page) {
+                secBtnGroup.querySelectorAll('.sc-toggle-item, .sc-page-controls').forEach(el => el.remove());
+                const startIdx = page * ITEMS_PER_PAGE;
+                const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, toggleItems.length);
+                for (let i = startIdx; i < endIdx; i++) {
+                    const item = toggleItems[i];
+                    let el;
+                    if (item.type === 'factory') { el = item.fn(); }
+                    else { el = createPageActionToggle(item.key, item.label, item.defaultEnabled !== false); }
+                    el.classList.add('sc-toggle-item');
+                    secBtnGroup.appendChild(el);
+                }
+                const controls = document.createElement('div');
+                controls.className = 'sc-page-controls';
+                controls.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;';
+                const prevBtn = document.createElement('button');
+                prevBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+                prevBtn.textContent = '◀ 上一页';
+                prevBtn.style.cssText = `background:${page === 0 ? '#607D8B' : '#2196F3'};color:white;border:none;padding:4px 8px;border-radius:3px;cursor:${page === 0 ? 'not-allowed' : 'pointer'};font-size:11px;flex:1;`;
+                prevBtn.disabled = page === 0;
+                prevBtn.onclick = (e) => { e.stopPropagation(); if (page > 0) { currentPage = page - 1; renderPage(currentPage); } };
+                const pageInfo = document.createElement('span');
+                pageInfo.textContent = `${page + 1} / ${totalPages}`;
+                pageInfo.style.cssText = 'font-size:12px;color:var(--sc-panel-fg,#efefef);white-space:nowrap;';
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+                nextBtn.textContent = '下一页 ▶';
+                nextBtn.style.cssText = `background:${page >= totalPages - 1 ? '#607D8B' : '#2196F3'};color:white;border:none;padding:4px 8px;border-radius:3px;cursor:${page >= totalPages - 1 ? 'not-allowed' : 'pointer'};font-size:11px;flex:1;`;
+                nextBtn.disabled = page >= totalPages - 1;
+                nextBtn.onclick = (e) => { e.stopPropagation(); if (page < totalPages - 1) { currentPage = page + 1; renderPage(currentPage); } };
+                controls.appendChild(prevBtn);
+                controls.appendChild(pageInfo);
+                controls.appendChild(nextBtn);
+                secBtnGroup.appendChild(controls);
+            }
             secondaryMenu.appendChild(secBtnGroup);
+            renderPage(0);
 
             // 插件信息区块（初始用默认暗色，首次打开面板时refreshPanelTheme更新为正确主题色）
             const info = document.createElement('div');
@@ -1503,18 +1819,29 @@
             const content = panelElement.querySelector('.SimcompaniesRetailCalculation-panel-content');
             const isCurrentlyVisible = content.style.display === 'block';
 
-            content.style.display = isCurrentlyVisible ? 'none' : 'block';
-
-            if (!isCurrentlyVisible) {
-                if (!panelThemeInited) refreshPanelTheme();
-                content.classList.remove('show-settings');
-                // 如果面板是打开的，刷新状态
-                refreshStatus();
-                // ⬇️ 修正：调用 initAutoAmountToggle 来刷新按钮状态 ⬇️
-                // initAutoAmountToggle 函数现在负责检查函数是否可用并更新按钮文本
-                initAutoAmountToggle();
-                refreshPageActionToggles();
+            if (isCurrentlyVisible) {
+                content.style.display = 'none';
+                return;
             }
+
+            // 先显示但隐藏，计算好位置后再可见，避免闪现
+            content.style.display = 'block';
+            content.style.visibility = 'hidden';
+
+            if (!panelThemeInited) refreshPanelTheme();
+            content.classList.remove('show-settings');
+            refreshStatus();
+            initAutoAmountToggle();
+            refreshPageActionToggles();
+
+            // 自动调整展开方向（仅页面刷新后首次/拖拽后首次）
+            if (needsPositionRecalc) {
+                adjustPanelPosition(content);
+                needsPositionRecalc = false;
+            }
+
+            // 位置计算完毕，显示面板
+            content.style.visibility = 'visible';
         };
 
         // 刷新状态显示
@@ -1952,12 +2279,21 @@
                 // 初始状态刷新
                 refreshStatus();
             },
-            initAutoAmountToggle: initAutoAmountToggle
+            initAutoAmountToggle: initAutoAmountToggle,
+            resetPanelPosition: resetPanelPosition
         };
     })();
 
     // 初始化界面
     PanelUI.init();
+
+    // 油猴菜单：还原按钮默认位置（保底操作）
+    const registerMenu = typeof GM_registerMenuCommand === 'function'
+        ? GM_registerMenuCommand
+        : (typeof GM !== 'undefined' && GM.registerMenuCommand ? GM.registerMenuCommand.bind(GM) : null);
+    if (registerMenu) {
+        registerMenu('还原按钮默认位置', () => PanelUI.resetPanelPosition());
+    }
 
     // ======================
     // 模块5-1：自定义运行时长
@@ -3011,7 +3347,9 @@
             });
         }
 
-        observeCardsForAutoPricing();
+        if (typeof window.isPageModuleEnabled === 'function' && window.isPageModuleEnabled('autoPricing')) {
+            observeCardsForAutoPricing();
+        }
     })();
 
     // ======================
@@ -7928,7 +8266,7 @@
         const observer = new MutationObserver(() => injectSaveButton());
 
         function init() {
-            // 常开模式，不设开关判断
+            if (typeof window.isPageModuleEnabled === 'function' && !window.isPageModuleEnabled('executiveSave')) return;
             observer.observe(document.body, { childList: true, subtree: true });
             injectSaveButton();
         }
@@ -8167,6 +8505,7 @@
         });
 
         function init() {
+            if (typeof window.isPageModuleEnabled === 'function' && !window.isPageModuleEnabled('cooProfit')) return;
             observer.observe(document.body, { childList: true, subtree: true });
             if (isExecPage()) injectCOOButton();
         }
@@ -9413,6 +9752,14 @@
         }
 
         function init() {
+            if (typeof window.isPageModuleEnabled === 'function' && !window.isPageModuleEnabled('warehouseProfit')) {
+                // 如果关闭，清理可能残留的元素
+                document.querySelectorAll('.sc-warehouse-profit').forEach(e => e.remove());
+                document.querySelectorAll('[data-warehouse-custom-toggle]').forEach(e => e.remove());
+                if (domObserver) { domObserver.disconnect(); domObserver = null; }
+                pendingItems.clear();
+                return;
+            }
             initRetries = 0;
             // 清理旧展示（SPA 切换物品时）
             document.querySelectorAll('.sc-warehouse-profit').forEach(e => e.remove());
@@ -9597,7 +9944,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修复出库MP-?%获取品质错误，优化增加交易所自动选中高亮行，交易所扫货模拟销售用时改为显示指定建筑等级用时。
+        // @changelog    增加仓库时利润计算功能开关，现在主菜单按钮可拖动
 
         fetch(scriptUrl)
             .then(res => res.text())
