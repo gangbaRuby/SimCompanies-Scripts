@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      2.3.1
+// @version      2.6.0
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -25,7 +25,8 @@
         CDN_BASE: 'https://scimg.22-7.top/images/',
         STATIC_ROOT: 'https://www.simcompanies.com/static/',
         STORAGE_KEY: 'SC_SKIN_SETTINGS',
-        THEME_KEY: 'SC_USER_THEME'
+        THEME_KEY: 'SC_USER_THEME',
+        FIRST_RUN_KEY: 'SC_SKIN_FIRST_RUN_DONE'
     };
 
     // 需要移除的遮挡物关键词
@@ -36,1018 +37,13 @@
         'forrest_nursery_tier04_front',
     ];
 
-    const DEFAULT_PATH_MAP = {
-        "hangar_tier01.png": "images/buildings/production/hangar_tier01.png",
-        "hangar_tier02.png": "images/buildings/production/hangar_tier02.png",
-        "hangar_tier03.png": "images/buildings/production/hangar_tier03.png",
-        "hangar_tier04.png": "images/buildings/production/hangar_tier04.png",
-        "hangar_tier05.png": "images/buildings/production/hangar_tier05.png",
-        "hangar_tier06.png": "images/buildings/production/hangar_tier06.png",
-        "carfactory-lvl1.png": "images/landscape/carfactory-lvl1.png",
-        "carfactory-lvl2.png": "images/landscape/carfactory-lvl2.png",
-        "car-dealership-lvl1.png": "images/landscape/car-dealership-lvl1.png",
-        "car-dealership-lvl2.png": "images/landscape/car-dealership-lvl2.png",
-        "castle-lvl1.png": "images/landscape/recreational/castle-lvl1.png",
-        "castle-lvl2.png": "images/landscape/recreational/castle-lvl2.png",
-        "castle-lvl3.png": "images/landscape/recreational/castle-lvl3.png",
-        "park-lvl1.png": "images/landscape/recreational/park-lvl1.png",
-        "park-lvl2.png": "images/landscape/recreational/park-lvl2.png",
-        "park-lvl3.png": "images/landscape/recreational/park-lvl3.png",
-        "lake2-lvl1.png": "images/landscape/recreational/lake2-lvl1.png",
-        "lake2-lvl2.png": "images/landscape/recreational/lake2-lvl2.png",
-        "lake2-lvl3.png": "images/landscape/recreational/lake2-lvl3.png",
-        "beverage_factory_tier01.png": "images/buildings/production/beverage_factory_tier01.png",
-        "beverage_factory_tier02.png": "images/buildings/production/beverage_factory_tier02.png",
-        "beverage_factory_tier03.png": "images/buildings/production/beverage_factory_tier03.png",
-        "beverage_factory_tier04.png": "images/buildings/production/beverage_factory_tier04.png",
-        "aerospace_factory_tier01.png": "images/buildings/production/aerospace_factory_tier01.png",
-        "aerospace_factory_tier02.png": "images/buildings/production/aerospace_factory_tier02.png",
-        "aerospace_factory_tier03.png": "images/buildings/production/aerospace_factory_tier03.png",
-        "aerospace_factory_tier04.png": "images/buildings/production/aerospace_factory_tier04.png",
-        "aerospace_factory_tier05.png": "images/buildings/production/aerospace_factory_tier05.png",
-        "aerospace_factory_tier06.png": "images/buildings/production/aerospace_factory_tier06.png",
-        "aerospace_electronics_tier01.png": "images/buildings/production/aerospace_electronics_tier01.png",
-        "aerospace_electronics_tier02.png": "images/buildings/production/aerospace_electronics_tier02.png",
-        "aerospace_electronics_tier03.png": "images/buildings/production/aerospace_electronics_tier03.png",
-        "aerospace_electronics_tier04.png": "images/buildings/production/aerospace_electronics_tier04.png",
-        "aerospace_electronics_tier05.png": "images/buildings/production/aerospace_electronics_tier05.png",
-        "aerospace_electronics_tier06.png": "images/buildings/production/aerospace_electronics_tier06.png",
-        "vertical_integration_facility_tier01.png": "images/buildings/production/vertical_integration_facility_tier01.png",
-        "vertical_integration_facility_tier02.png": "images/buildings/production/vertical_integration_facility_tier02.png",
-        "vertical_integration_facility_tier03.png": "images/buildings/production/vertical_integration_facility_tier03.png",
-        "vertical_integration_facility_tier04.png": "images/buildings/production/vertical_integration_facility_tier04.png",
-        "vertical_integration_facility_tier05.png": "images/buildings/production/vertical_integration_facility_tier05.png",
-        "vertical_integration_facility_tier06.png": "images/buildings/production/vertical_integration_facility_tier06.png",
-        "farm_tier01.png": "images/buildings/production/farm_tier01.png",
-        "farm_tier02.png": "images/buildings/production/farm_tier02.png",
-        "farm_tier03.png": "images/buildings/production/farm_tier03.png",
-        "farm_tier04.png": "images/buildings/production/farm_tier04.png",
-        "water_reservoir_tier01.png": "images/buildings/production/water_reservoir_tier01.png",
-        "water_reservoir_tier02.png": "images/buildings/production/water_reservoir_tier02.png",
-        "water_reservoir_tier03.png": "images/buildings/production/water_reservoir_tier03.png",
-        "water_reservoir_tier04.png": "images/buildings/production/water_reservoir_tier04.png",
-        "water_reservoir_tier05.png": "images/buildings/production/water_reservoir_tier05.png",
-        "water_reservoir_tier06.png": "images/buildings/production/water_reservoir_tier06.png",
-        "power_plant_tier01.png": "images/buildings/production/power_plant_tier01.png",
-        "power_plant_tier02.png": "images/buildings/production/power_plant_tier02.png",
-        "power_plant_tier03.png": "images/buildings/production/power_plant_tier03.png",
-        "power_plant_tier04.png": "images/buildings/production/power_plant_tier04.png",
-        "power_plant_tier05.png": "images/buildings/production/power_plant_tier05.png",
-        "power_plant_tier06.png": "images/buildings/production/power_plant_tier06.png",
-        "oil_rig_tier01.png": "images/buildings/production/oil_rig_tier01.png",
-        "oil_rig_tier02.png": "images/buildings/production/oil_rig_tier02.png",
-        "oil_rig_tier03.png": "images/buildings/production/oil_rig_tier03.png",
-        "oil_rig_tier04.png": "images/buildings/production/oil_rig_tier04.png",
-        "oil_rig_tier05.png": "images/buildings/production/oil_rig_tier05.png",
-        "oil_rig_tier06.png": "images/buildings/production/oil_rig_tier06.png",
-        "refinery_tier01.png": "images/buildings/production/refinery_tier01.png",
-        "refinery_tier02.png": "images/buildings/production/refinery_tier02.png",
-        "refinery_tier03.png": "images/buildings/production/refinery_tier03.png",
-        "refinery_tier04.png": "images/buildings/production/refinery_tier04.png",
-        "shipping_depot_tier01.png": "images/buildings/production/shipping_depot_tier01.png",
-        "shipping_depot_tier02.png": "images/buildings/production/shipping_depot_tier02.png",
-        "shipping_depot_tier03.png": "images/buildings/production/shipping_depot_tier03.png",
-        "shipping_depot_tier04.png": "images/buildings/production/shipping_depot_tier04.png",
-        "grocery_store_idle_tier01.png": "images/buildings/sales/grocery_store_idle_tier01.png",
-        "grocery_store_idle_tier02.png": "images/buildings/sales/grocery_store_idle_tier02.png",
-        "grocery_store_idle_tier03.png": "images/buildings/sales/grocery_store_idle_tier03.png",
-        "grocery_store_idle_tier04.png": "images/buildings/sales/grocery_store_idle_tier04.png",
-        "grocery_store_idle_tier05.png": "images/buildings/sales/grocery_store_idle_tier05.png",
-        "grocery_store_idle_tier06.png": "images/buildings/sales/grocery_store_idle_tier06.png",
-        "gas_station_tier01.png": "images/buildings/sales/gas_station_tier01.png",
-        "gas_station_tier02.png": "images/buildings/sales/gas_station_tier02.png",
-        "gas_station_tier03.png": "images/buildings/sales/gas_station_tier03.png",
-        "gas_station_tier04.png": "images/buildings/sales/gas_station_tier04.png",
-        "ranch_tier01.png": "images/buildings/production/ranch_tier01.png",
-        "ranch_tier02.png": "images/buildings/production/ranch_tier02.png",
-        "ranch_tier03.png": "images/buildings/production/ranch_tier03.png",
-        "ranch_tier04.png": "images/buildings/production/ranch_tier04.png",
-        "mine_tier01.png": "images/buildings/production/mine_tier01.png",
-        "mine_tier02.png": "images/buildings/production/mine_tier02.png",
-        "mine_tier03.png": "images/buildings/production/mine_tier03.png",
-        "mine_tier04.png": "images/buildings/production/mine_tier04.png",
-        "mine_tier05.png": "images/buildings/production/mine_tier05.png",
-        "mine_tier06.png": "images/buildings/production/mine_tier06.png",
-        "factory_tier01.png": "images/buildings/production/factory_tier01.png",
-        "factory_tier02.png": "images/buildings/production/factory_tier02.png",
-        "factory_tier03.png": "images/buildings/production/factory_tier03.png",
-        "factory_tier04.png": "images/buildings/production/factory_tier04.png",
-        "factory_tier05.png": "images/buildings/production/factory_tier05.png",
-        "factory_tier06.png": "images/buildings/production/factory_tier06.png",
-        "electronics_factory_tier01.png": "images/buildings/production/electronics_factory_tier01.png",
-        "electronics_factory_tier02.png": "images/buildings/production/electronics_factory_tier02.png",
-        "electronics_factory_tier03.png": "images/buildings/production/electronics_factory_tier03.png",
-        "electronics_factory_tier04.png": "images/buildings/production/electronics_factory_tier04.png",
-        "electronics_factory_tier05.png": "images/buildings/production/electronics_factory_tier05.png",
-        "electronics_factory_tier06.png": "images/buildings/production/electronics_factory_tier06.png",
-        "clothsfactory-lvl1.png": "images/landscape/clothsfactory-lvl1.png",
-        "clothsfactory-lvl2.png": "images/landscape/clothsfactory-lvl2.png",
-        "fashion-lvl1.png": "images/landscape/fashion-lvl1.png",
-        "fashion-lvl2.png": "images/landscape/fashion-lvl2.png",
-        "plantresearch.png": "images/landscape/plantresearch.png",
-        "physics-lab-lvl1.png": "images/landscape/physics-lab-lvl1.png",
-        "physics-lab-lvl2.png": "images/landscape/physics-lab-lvl2.png",
-        "physics-lab-lvl3.png": "images/landscape/physics-lab-lvl3.png",
-        "breeding-research-lvl1.png": "images/landscape/breeding-research-lvl1.png",
-        "breeding-research-lvl2.png": "images/landscape/breeding-research-lvl2.png",
-        "breeding-research-lvl3.png": "images/landscape/breeding-research-lvl3.png",
-        "chemistry-research-lvl1.png": "images/landscape/chemistry-research-lvl1.png",
-        "chemistry-research-lvl2.png": "images/landscape/chemistry-research-lvl2.png",
-        "chemistry-research-lvl3.png": "images/landscape/chemistry-research-lvl3.png",
-        "swresearch.png": "images/landscape/swresearch.png",
-        "race-track-lvl1.png": "images/landscape/race-track-lvl1.png",
-        "race-track-lvl2.png": "images/landscape/race-track-lvl2.png",
-        "race-track-lvl3.png": "images/landscape/race-track-lvl3.png",
-        "fashion-research-lvl1.png": "images/landscape/fashion-research-lvl1.png",
-        "fashion-research-lvl3.png": "images/landscape/fashion-research-lvl3.png",
-        "launchpad-lvl1.png": "images/landscape/launchpad-lvl1.png",
-        "launchpad-lvl2.png": "images/landscape/launchpad-lvl2.png",
-        "launchpad-lvl3.png": "images/landscape/launchpad-lvl3.png",
-        "kitchen-lvl1.png": "images/landscape/kitchen-lvl1.png",
-        "kitchen-lvl2.png": "images/landscape/kitchen-lvl2.png",
-        "kitchen-lvl3.png": "images/landscape/kitchen-lvl3.png",
-        "propulsion_factory_tier01.png": "images/buildings/production/propulsion_factory_tier01.png",
-        "propulsion_factory_tier02.png": "images/buildings/production/propulsion_factory_tier02.png",
-        "propulsion_factory_tier03.png": "images/buildings/production/propulsion_factory_tier03.png",
-        "propulsion_factory_tier04.png": "images/buildings/production/propulsion_factory_tier04.png",
-        "propulsion_factory_tier05.png": "images/buildings/production/propulsion_factory_tier05.png",
-        "propulsion_factory_tier06.png": "images/buildings/production/propulsion_factory_tier06.png",
-        "sales_offices_tier01.png": "images/buildings/sales/sales_offices_tier01.png",
-        "sales_offices_tier02.png": "images/buildings/sales/sales_offices_tier02.png",
-        "sales_offices_tier03.png": "images/buildings/sales/sales_offices_tier03.png",
-        "sales_offices_tier04.png": "images/buildings/sales/sales_offices_tier04.png",
-        "sales_offices_tier05.png": "images/buildings/sales/sales_offices_tier05.png",
-        "sales_offices_tier06.png": "images/buildings/sales/sales_offices_tier06.png",
-        "quarry_tier01.png": "images/buildings/production/quarry_tier01.png",
-        "quarry_tier02.png": "images/buildings/production/quarry_tier02.png",
-        "quarry_tier03.png": "images/buildings/production/quarry_tier03.png",
-        "quarry_tier04.png": "images/buildings/production/quarry_tier04.png",
-        "quarry_tier05.png": "images/buildings/production/quarry_tier05.png",
-        "quarry_tier06.png": "images/buildings/production/quarry_tier06.png",
-        "concrete_plant_tier01.png": "images/buildings/production/concrete_plant_tier01.png",
-        "concrete_plant_tier02.png": "images/buildings/production/concrete_plant_tier02.png",
-        "concrete_plant_tier03.png": "images/buildings/production/concrete_plant_tier03.png",
-        "concrete_plant_tier04.png": "images/buildings/production/concrete_plant_tier04.png",
-        "concrete_plant_tier05.png": "images/buildings/production/concrete_plant_tier05.png",
-        "concrete_plant_tier06.png": "images/buildings/production/concrete_plant_tier06.png",
-        "construction_factory_tier01.png": "images/buildings/production/construction_factory_tier01.png",
-        "construction_factory_tier02.png": "images/buildings/production/construction_factory_tier02.png",
-        "construction_factory_tier03.png": "images/buildings/production/construction_factory_tier03.png",
-        "construction_factory_tier04.png": "images/buildings/production/construction_factory_tier04.png",
-        "construction_factory_tier05.png": "images/buildings/production/construction_factory_tier05.png",
-        "construction_factory_tier06.png": "images/buildings/production/construction_factory_tier06.png",
-        "general_contractor_tier01.png": "images/buildings/production/general_contractor_tier01.png",
-        "general_contractor_tier02.png": "images/buildings/production/general_contractor_tier02.png",
-        "general_contractor_tier03.png": "images/buildings/production/general_contractor_tier03.png",
-        "general_contractor_tier04.png": "images/buildings/production/general_contractor_tier04.png",
-        "general_contractor_tier05.png": "images/buildings/production/general_contractor_tier05.png",
-        "general_contractor_tier06.png": "images/buildings/production/general_contractor_tier06.png",
-        "hardware_store_tier01.png": "images/buildings/sales/hardware_store_tier01.png",
-        "hardware_store_tier02.png": "images/buildings/sales/hardware_store_tier02.png",
-        "hardware_store_tier03.png": "images/buildings/sales/hardware_store_tier03.png",
-        "hardware_store_tier04.png": "images/buildings/sales/hardware_store_tier04.png",
-        "hardware_store_tier05.png": "images/buildings/sales/hardware_store_tier05.png",
-        "hardware_store_tier06.png": "images/buildings/sales/hardware_store_tier06.png",
-        "bank-lvl1.png": "images/landscape/bank-lvl1.png",
-        "bank-lvl2.png": "images/landscape/bank-lvl2.png",
-        "bank-lvl3.png": "images/landscape/bank-lvl3.png",
-        "slaughterhouse-lvl1.png": "images/landscape/slaughterhouse-lvl1.png",
-        "slaughterhouse-lvl2.png": "images/landscape/slaughterhouse-lvl2.png",
-        "slaughterhouse-lvl3.png": "images/landscape/slaughterhouse-lvl3.png",
-        "mill_tier01.png": "images/buildings/production/mill_tier01.png",
-        "mill_tier02.png": "images/buildings/production/mill_tier02.png",
-        "mill_tier03.png": "images/buildings/production/mill_tier03.png",
-        "mill_tier04.png": "images/buildings/production/mill_tier04.png",
-        "mill_tier05.png": "images/buildings/production/mill_tier05.png",
-        "mill_tier06.png": "images/buildings/production/mill_tier06.png",
-        "bakery-lvl1.png": "images/landscape/bakery-lvl1.png",
-        "bakery-lvl2.png": "images/landscape/bakery-lvl2.png",
-        "bakery-lvl3.png": "images/landscape/bakery-lvl3.png",
-        "food-processing-lvl1.png": "images/landscape/food-processing-lvl1.png",
-        "food-processing-lvl2.png": "images/landscape/food-processing-lvl2.png",
-        "food-processing-lvl3.png": "images/landscape/food-processing-lvl3.png",
-        "catering-lvl1.png": "images/landscape/catering-lvl1.png",
-        "catering-lvl2.png": "images/landscape/catering-lvl2.png",
-        "catering-lvl3.png": "images/landscape/catering-lvl3.png",
-        "restaurant-low-lvl1.png": "images/landscape/restaurant-low-lvl1.png",
-        "restaurant-low-lvl2.png": "images/landscape/restaurant-low-lvl2.png",
-        "restaurant-low-lvl3.png": "images/landscape/restaurant-low-lvl3.png",
-        "autumn-market-lvl1.png": "images/landscape/autumn-market-lvl1.png",
-        "autumn-market-lvl2.png": "images/landscape/autumn-market-lvl2.png",
-        "autumn-market-lvl3.png": "images/landscape/autumn-market-lvl3.png",
-        "xmas-market-lvl1.png": "images/landscape/xmas-market-lvl1.png",
-        "xmas-market-lvl2.png": "images/landscape/xmas-market-lvl2.png",
-        "xmas-market-lvl3.png": "images/landscape/xmas-market-lvl3.png",
-        "forrest_nursery_tier01_back.png": "images/buildings/production/forrest_nursery_tier01_back.png",
-        "forrest_nursery_tier02_back.png": "images/buildings/production/forrest_nursery_tier02_back.png",
-        "forrest_nursery_tier03_back.png": "images/buildings/production/forrest_nursery_tier03_back.png",
-        "forrest_nursery_tier04_back.png": "images/buildings/production/forrest_nursery_tier04_back.png",
-        "academy-lvl1.png": "images/landscape/academy-lvl1.png",
-        "academy-lvl2.png": "images/landscape/academy-lvl2.png",
-        "academy-lvl3.png": "images/landscape/academy-lvl3.png",
-        "academy-lvl4.png": "images/landscape/academy-lvl4.png",
-        "academy-lvl5.png": "images/landscape/academy-lvl5.png",
-        "beach-market-lvl1.png": "images/landscape/beach-market-lvl1.png",
-        "beach-market-lvl2.png": "images/landscape/beach-market-lvl2.png",
-        "beach-market-lvl3.png": "images/landscape/beach-market-lvl3.png",
-        "spring_market_tier01.png": "images/buildings/seasonal/spring_market_tier01.png",
-        "spring_market_tier02.png": "images/buildings/seasonal/spring_market_tier02.png",
-        "spring_market_tier03.png": "images/buildings/seasonal/spring_market_tier03.png",
+    // DEFAULT_PATH_MAP 已移除，改用远程配置中的 pathMap
 
-        "sc_background_main_dark_2k_v2.png": "images/sc_background_main_dark_2k_v2.png",
-        "sc_background_main_light_2k_v2.png": "images/sc_background_main_light_2k_v2.png",
-
-        "concrete-0000.png": "images/buildings/tiles/concrete-0000.png",
-        "concrete-0001.png": "images/buildings/tiles/concrete-0001.png",
-        "concrete-0010.png": "images/buildings/tiles/concrete-0010.png",
-        "concrete-0011.png": "images/buildings/tiles/concrete-0011.png",
-        "concrete-0100.png": "images/buildings/tiles/concrete-0100.png",
-        "concrete-0110.png": "images/buildings/tiles/concrete-0110.png",
-        "concrete-1000.png": "images/buildings/tiles/concrete-1000.png",
-        "concrete-1001.png": "images/buildings/tiles/concrete-1001.png",
-        "concrete-1100.png": "images/buildings/tiles/concrete-1100.png",
-        "concrete-1111.png": "images/buildings/tiles/concrete-1111.png",
-
-        "intersection.png": "images/buildings/roads/intersection.png",
-        "road-left-00.png": "images/buildings/roads/road-left-00.png",
-        "road-left-01.png": "images/buildings/roads/road-left-01.png",
-        "road-left-10.png": "images/buildings/roads/road-left-10.png",
-        "road-00.png": "images/buildings/roads/road-00.png",
-        "road-01.png": "images/buildings/roads/road-01.png",
-        "road-10.png": "images/buildings/roads/road-10.png",
-
-        "BFR.png": "images/resources/BFR.png",
-        "aero-research.png": "images/resources/aero-research.png",
-        "aluminium.png": "images/resources/aluminium.png",
-        "apple-cider.png": "images/resources/apple-cider.png",
-        "apple-pie.png": "images/resources/apple-pie.png",
-        "apples.png": "images/resources/apples.png",
-        "attitude-control.png": "images/resources/attitude-control.png",
-        "automotive-research.png": "images/resources/automotive-research.png",
-        "batteries.png": "images/resources/batteries.png",
-        "bauxite.png": "images/resources/bauxite.png",
-        "bread.png": "images/resources/bread.png",
-        "breeding-research.png": "images/resources/breeding-research.png",
-        "bricks.png": "images/resources/bricks.png",
-        "bulldozer.png": "images/resources/bulldozer.png",
-        "butter.png": "images/resources/butter.png",
-        "car-body.png": "images/resources/car-body.png",
-        "car-interior.png": "images/resources/car-interior.png",
-        "carbon-composite.png": "images/resources/carbon-composite.png",
-        "carbon-fiber.png": "images/resources/carbon-fiber.png",
-        "cement.png": "images/resources/cement.png",
-        "cheese.png": "images/resources/cheese.png",
-        "chemicals.png": "images/resources/chemicals.png",
-        "chemistry-research.png": "images/resources/chemistry-research.png",
-        "chocolate.png": "images/resources/chocolate.png",
-        "clay.png": "images/resources/clay.png",
-        "cockpit.png": "images/resources/cockpit.png",
-        "cocktails.png": "images/resources/cocktails.png",
-        "cocoa-beans.png": "images/resources/cocoa-beans.png",
-        "coffee-beans.png": "images/resources/coffee-beans.png",
-        "coffee-ground.png": "images/resources/coffee-ground.png",
-        "combustion-engine.png": "images/resources/combustion-engine.png",
-        "construction-units.png": "images/resources/construction-units.png",
-        "cotton.png": "images/resources/cotton.png",
-        "cow.png": "images/resources/cow.png",
-        "cream-egg.png": "images/resources/cream-egg.png",
-        "crude-oil.png": "images/resources/crude-oil.png",
-        "diesel.png": "images/resources/diesel.png",
-        "displays.png": "images/resources/displays.png",
-        "dough.png": "images/resources/dough.png",
-        "dress.png": "images/resources/dress.png",
-        "easter-bunny.png": "images/resources/easter-bunny.png",
-        "economy-car.png": "images/resources/economy-car.png",
-        "economy-e-car.png": "images/resources/economy-e-car.png",
-        "eggs.png": "images/resources/eggs.png",
-        "electric-motor.png": "images/resources/electric-motor.png",
-        "electronic-components.png": "images/resources/electronic-components.png",
-        "electronics-research.png": "images/resources/electronics-research.png",
-        "energy-research.png": "images/resources/energy-research.png",
-        "ethanol.png": "images/resources/ethanol.png",
-        "fabric.png": "images/resources/fabric.png",
-        "fashion-research.png": "images/resources/fashion-research.png",
-        "flight-computer.png": "images/resources/flight-computer.png",
-        "flour.png": "images/resources/flour.png",
-        "fodder.png": "images/resources/fodder.png",
-        "fuel-tank.png": "images/resources/fuel-tank.png",
-        "fuselage.png": "images/resources/fuselage.png",
-        "ginger-beer.png": "images/resources/ginger-beer.png",
-        "glass.png": "images/resources/glass.png",
-        "gloves.png": "images/resources/gloves.png",
-        "gold-ore.png": "images/resources/gold-ore.png",
-        "gold-watch.png": "images/resources/gold-watch.png",
-        "golden-bars.png": "images/resources/golden-bars.png",
-        "grain.png": "images/resources/grain.png",
-        "grapes.png": "images/resources/grapes.png",
-        "gravy-boat.png": "images/resources/gravy-boat.png",
-        "hamburger.png": "images/resources/hamburger.png",
-        "handbags.png": "images/resources/handbags.png",
-        "heat-shield.png": "images/resources/heat-shield.png",
-        "high-grade-e-components.png": "images/resources/high-grade-e-components.png",
-        "icecream-apple.png": "images/resources/icecream-apple.png",
-        "icecream-chocolate.png": "images/resources/icecream-chocolate.png",
-        "ion-drive.png": "images/resources/ion-drive.png",
-        "iron-ore.png": "images/resources/iron-ore.png",
-        "jack-o-lantern.png": "images/resources/jack-o-lantern.png",
-        "jet-engine.png": "images/resources/jet-engine.png",
-        "jumbojet.png": "images/resources/jumbojet.png",
-        "jumbojet2.png": "images/resources/jumbojet2.png",
-        "laptops.png": "images/resources/laptops.png",
-        "lasagna.png": "images/resources/lasagna.png",
-        "leather.png": "images/resources/leather.png",
-        "limestone.png": "images/resources/limestone.png",
-        "luxury-car-interior.png": "images/resources/luxury-car-interior.png",
-        "luxury-car.png": "images/resources/luxury-car.png",
-        "luxury-e-car.png": "images/resources/luxury-e-car.png",
-        "materials-research.png": "images/resources/materials-research.png",
-        "meatballs.png": "images/resources/meatballs.png",
-        "methane.png": "images/resources/methane.png",
-        "milk.png": "images/resources/milk.png",
-        "minerals.png": "images/resources/minerals.png",
-        "mining-research.png": "images/resources/mining-research.png",
-        "monitors.png": "images/resources/monitors.png",
-        "necklace.png": "images/resources/necklace.png",
-        "oil.png": "images/resources/oil.png",
-        "on-board-computer.png": "images/resources/on-board-computer.png",
-        "orange-juice.png": "images/resources/orange-juice.png",
-        "oranges.png": "images/resources/oranges.png",
-        "orbital-booster.png": "images/resources/orbital-booster.png",
-        "pasta.png": "images/resources/pasta.png",
-        "petrol.png": "images/resources/petrol.png",
-        "pig.png": "images/resources/pig.png",
-        "pizza.png": "images/resources/pizza.png",
-        "planks.png": "images/resources/planks.png",
-        "plant-research.png": "images/resources/plant-research.png",
-        "plastic.png": "images/resources/plastic.png",
-        "power.png": "images/resources/power.png",
-        "private-jet.png": "images/resources/private-jet.png",
-        "processors.png": "images/resources/processors.png",
-        "pumpkin-soup.png": "images/resources/pumpkin-soup.png",
-        "pumpkin.png": "images/resources/pumpkin.png",
-        "quadcopter.png": "images/resources/quadcopter.png",
-        "ramadan-sweets.png": "images/resources/ramadan-sweets.png",
-        "recipes.png": "images/resources/recipes.png",
-        "reinforced-concrete.png": "images/resources/reinforced-concrete.png",
-        "robots.png": "images/resources/robots.png",
-        "rocket-engine.png": "images/resources/rocket-engine.png",
-        "rocket-fuel.png": "images/resources/rocket-fuel.png",
-        "salad.png": "images/resources/salad.png",
-        "samosas.png": "images/resources/samosas.png",
-        "sand.png": "images/resources/sand.png",
-        "satellite.png": "images/resources/satellite.png",
-        "sausages.png": "images/resources/sausages.png",
-        "seeds.png": "images/resources/seeds.png",
-        "silicon.png": "images/resources/silicon.png",
-        "simmi-shoes.png": "images/resources/simmi-shoes.png",
-        "single-engine.png": "images/resources/single-engine.png",
-        "smart-phones.png": "images/resources/smart-phones.png",
-        "sneakers.png": "images/resources/sneakers.png",
-        "software.png": "images/resources/software.png",
-        "solid-rocket.png": "images/resources/solid-rocket.png",
-        "starship.png": "images/resources/starship.png",
-        "steak.png": "images/resources/steak.png",
-        "steel-beams.png": "images/resources/steel-beams.png",
-        "steel.png": "images/resources/steel.png",
-        "sub-orbital-rocket.png": "images/resources/sub-orbital-rocket.png",
-        "sub-orbital-rocket2.png": "images/resources/sub-orbital-rocket2.png",
-        "sub-orbital-second-stage.png": "images/resources/sub-orbital-second-stage.png",
-        "sugar.png": "images/resources/sugar.png",
-        "sugarcane.png": "images/resources/sugarcane.png",
-        "super-heavy-booster.png": "images/resources/super-heavy-booster.png",
-        "tablets.png": "images/resources/tablets.png",
-        "televisions.png": "images/resources/televisions.png",
-        "tools.png": "images/resources/tools.png",
-        "transport.png": "images/resources/transport.png",
-        "tree.png": "images/resources/tree.png",
-        "truck.png": "images/resources/truck.png",
-        "underwear.png": "images/resources/underwear.png",
-        "vegetable-oil.png": "images/resources/vegetable-oil.png",
-        "vegetables.png": "images/resources/vegetables.png",
-        "water.png": "images/resources/water.png",
-        "windows.png": "images/resources/windows.png",
-        "wing.png": "images/resources/wing.png",
-        "witch-costume.png": "images/resources/witch-costume.png",
-        "wood.png": "images/resources/wood.png",
-        "xmas-crackers.png": "images/resources/xmas-crackers.png",
-        "xmas-ornament.png": "images/resources/xmas-ornament.png",
-
-        "exchange_tier01.png": "images/buildings/other/exchange_tier01.png",
-        "exchange_tier02.png": "images/buildings/other/exchange_tier02.png",
-        "exchange_tier03.png": "images/buildings/other/exchange_tier03.png",
-        "exchange_tier04.png": "images/buildings/other/exchange_tier04.png",
-        "exchange_tier05.png": "images/buildings/other/exchange_tier05.png",
-        "exchange_tier06.png": "images/buildings/other/exchange_tier06.png",
-        "exchange_tier07.png": "images/buildings/other/exchange_tier07.png",
-        "exchange_tier08.png": "images/buildings/other/exchange_tier08.png",
-        "exchange_tier09.png": "images/buildings/other/exchange_tier09.png",
-        "exchange_tier10.png": "images/buildings/other/exchange_tier10.png",
-        "exchange_tier11.png": "images/buildings/other/exchange_tier11.png",
-        "exchange_tier12.png": "images/buildings/other/exchange_tier12.png",
-        "exchange_tier13.png": "images/buildings/other/exchange_tier13.png",
-        "exchange_tier14.png": "images/buildings/other/exchange_tier14.png",
-        "exchange_tier15.png": "images/buildings/other/exchange_tier15.png",
-        "exchange_tier16.png": "images/buildings/other/exchange_tier16.png",
-        "exchange_tier17.png": "images/buildings/other/exchange_tier17.png",
-        "exchange_tier18.png": "images/buildings/other/exchange_tier18.png",
-
-        "residential_02.png": "images/buildings/decoration/residential_02.png",
-        "forrest_02.png": "images/buildings/decoration/forrest_02.png",
-        "forrest_03.png": "images/buildings/decoration/forrest_03.png",
-        "residential_01.png": "images/buildings/decoration/residential_01.png",
-        "park_01.png": "images/buildings/decoration/park_01.png",
-        "construction_slot_01.png": "images/buildings/decoration/construction_slot_01.png",
-        "construction_slot_02.png": "images/buildings/decoration/construction_slot_02.png",
-        "forrest_04.png": "images/buildings/decoration/forrest_04.png",
-        "town_square_01.png": "images/buildings/decoration/town_square_01.png",
-
-
-    };
-
-    /**
-     * 三级菜单结构与图片定义 (来自 oldBuildingsGraphic1)
-     */
-    const DEFAULT_UI_MANIFEST = {
-        "建筑外观": {
-            "生产建筑": {
-                "机库": {
-                    "hangar_tier01.png": { name: "新1级机库", presets: [{ name: "旧1级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl1.png" }, { name: "旧2级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl2.png" }, { name: "旧3级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl3.png" }] },
-                    "hangar_tier02.png": { name: "新2级机库", presets: [{ name: "旧1级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl1.png" }, { name: "旧2级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl2.png" }, { name: "旧3级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl3.png" }] },
-                    "hangar_tier03.png": { name: "新3级机库", presets: [{ name: "旧1级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl1.png" }, { name: "旧2级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl2.png" }, { name: "旧3级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl3.png" }] },
-                    "hangar_tier04.png": { name: "新6级机库", presets: [{ name: "旧1级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl1.png" }, { name: "旧2级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl2.png" }, { name: "旧3级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl3.png" }] },
-                    "hangar_tier05.png": { name: "新10级机库", presets: [{ name: "旧1级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl1.png" }, { name: "旧2级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl2.png" }, { name: "旧3级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl3.png" }] },
-                    "hangar_tier06.png": { name: "新15级机库", presets: [{ name: "旧1级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl1.png" }, { name: "旧2级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl2.png" }, { name: "旧3级机库", url: "https://scimg.22-7.top/images/landscape/horizontal-integration-lvl3.png" }] }
-                },
-                "汽车厂": {
-                    "carfactory-lvl1.png": { name: "1级汽车厂", presets: [{ name: "旧1级汽车厂", url: "https://scimg.22-7.top/images/landscape/carfactory-lvl1.png" }, { name: "旧2级汽车厂", url: "https://scimg.22-7.top/images/landscape/carfactory-lvl2.png" }] },
-                    "carfactory-lvl2.png": { name: "2级汽车厂", presets: [{ name: "旧1级汽车厂", url: "https://scimg.22-7.top/images/landscape/carfactory-lvl1.png" }, { name: "旧2级汽车厂", url: "https://scimg.22-7.top/images/landscape/carfactory-lvl2.png" }] }
-                },
-                "饮料工厂": {
-                    "beverage_factory_tier01.png": { name: "新1级饮料工厂", presets: [{ name: "旧1级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl1.png" }, { name: "旧2级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl2.png" }, { name: "旧3级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl3.png" }] },
-                    "beverage_factory_tier02.png": { name: "新2级饮料工厂", presets: [{ name: "旧1级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl1.png" }, { name: "旧2级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl2.png" }, { name: "旧3级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl3.png" }] },
-                    "beverage_factory_tier03.png": { name: "新3级饮料工厂", presets: [{ name: "旧1级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl1.png" }, { name: "旧2级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl2.png" }, { name: "旧3级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl3.png" }] },
-                    "beverage_factory_tier04.png": { name: "新6级饮料工厂", presets: [{ name: "旧1级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl1.png" }, { name: "旧2级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl2.png" }, { name: "旧3级饮料工厂", url: "https://scimg.22-7.top/images/landscape/beverage-factory-lvl3.png" }] }
-                },
-                "航空航天厂": {
-                    "aerospace_factory_tier01.png": { name: "新1级航空航天厂", presets: [{ name: "旧1级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl1.png" }, { name: "旧2级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl2.png" }, { name: "旧3级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl3.png" }] },
-                    "aerospace_factory_tier02.png": { name: "新2级航空航天厂", presets: [{ name: "旧1级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl1.png" }, { name: "旧2级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl2.png" }, { name: "旧3级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl3.png" }] },
-                    "aerospace_factory_tier03.png": { name: "新3级航空航天厂", presets: [{ name: "旧1级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl1.png" }, { name: "旧2级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl2.png" }, { name: "旧3级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl3.png" }] },
-                    "aerospace_factory_tier04.png": { name: "新6级航空航天厂", presets: [{ name: "旧1级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl1.png" }, { name: "旧2级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl2.png" }, { name: "旧3级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl3.png" }] },
-                    "aerospace_factory_tier05.png": { name: "新10级航空航天厂", presets: [{ name: "旧1级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl1.png" }, { name: "旧2级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl2.png" }, { name: "旧3级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl3.png" }] },
-                    "aerospace_factory_tier06.png": { name: "新15级航空航天厂", presets: [{ name: "旧1级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl1.png" }, { name: "旧2级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl2.png" }, { name: "旧3级航空航天厂", url: "https://scimg.22-7.top/images/landscape/aerospace-2-lvl3.png" }] }
-                },
-                "航空电子器件厂": {
-                    "aerospace_electronics_tier01.png": { name: "新1级航空电子器件厂", presets: [{ name: "旧1级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl1.png" }, { name: "旧2级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl2.png" }, { name: "旧3级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl3.png" }] },
-                    "aerospace_electronics_tier02.png": { name: "新2级航空电子器件厂", presets: [{ name: "旧1级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl1.png" }, { name: "旧2级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl2.png" }, { name: "旧3级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl3.png" }] },
-                    "aerospace_electronics_tier03.png": { name: "新3级航空电子器件厂", presets: [{ name: "旧1级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl1.png" }, { name: "旧2级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl2.png" }, { name: "旧3级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl3.png" }] },
-                    "aerospace_electronics_tier04.png": { name: "新6级航空电子器件厂", presets: [{ name: "旧1级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl1.png" }, { name: "旧2级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl2.png" }, { name: "旧3级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl3.png" }] },
-                    "aerospace_electronics_tier05.png": { name: "新10级航空电子器件厂", presets: [{ name: "旧1级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl1.png" }, { name: "旧2级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl2.png" }, { name: "旧3级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl3.png" }] },
-                    "aerospace_electronics_tier06.png": { name: "新15级航空电子器件厂", presets: [{ name: "旧1级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl1.png" }, { name: "旧2级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl2.png" }, { name: "旧3级航空电子器件厂", url: "https://scimg.22-7.top/images/landscape/aero-electronics-2-lvl3.png" }] }
-                },
-                "垂直整合设施": {
-                    "vertical_integration_facility_tier01.png": { name: "新1级垂直整合设施", presets: [{ name: "旧1级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl1.png" }, { name: "旧2级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl2.png" }, { name: "旧3级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl3.png" }] },
-                    "vertical_integration_facility_tier02.png": { name: "新2级垂直整合设施", presets: [{ name: "旧1级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl1.png" }, { name: "旧2级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl2.png" }, { name: "旧3级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl3.png" }] },
-                    "vertical_integration_facility_tier03.png": { name: "新3级垂直整合设施", presets: [{ name: "旧1级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl1.png" }, { name: "旧2级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl2.png" }, { name: "旧3级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl3.png" }] },
-                    "vertical_integration_facility_tier04.png": { name: "新6级垂直整合设施", presets: [{ name: "旧1级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl1.png" }, { name: "旧2级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl2.png" }, { name: "旧3级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl3.png" }] },
-                    "vertical_integration_facility_tier05.png": { name: "新10级垂直整合设施", presets: [{ name: "旧1级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl1.png" }, { name: "旧2级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl2.png" }, { name: "旧3级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl3.png" }] },
-                    "vertical_integration_facility_tier06.png": { name: "新15级垂直整合设施", presets: [{ name: "旧1级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl1.png" }, { name: "旧2级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl2.png" }, { name: "旧3级垂直整合设施", url: "https://scimg.22-7.top/images/landscape/vertical-integration-lvl3.png" }] }
-                },
-                "农场": {
-                    "farm_tier01.png": { name: "新1级农场", presets: [{ name: "旧1级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl1.png" }, { name: "旧2级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl2.png" }, { name: "旧3级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl3.png" }] },
-                    "farm_tier02.png": { name: "新2级农场", presets: [{ name: "旧1级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl1.png" }, { name: "旧2级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl2.png" }, { name: "旧3级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl3.png" }] },
-                    "farm_tier03.png": { name: "新3级农场", presets: [{ name: "旧1级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl1.png" }, { name: "旧2级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl2.png" }, { name: "旧3级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl3.png" }] },
-                    "farm_tier04.png": { name: "新6级农场", presets: [{ name: "旧1级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl1.png" }, { name: "旧2级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl2.png" }, { name: "旧3级农场", url: "https://scimg.22-7.top/images/landscape/plantation-lvl3.png" }] }
-                },
-                "水库": {
-                    "water_reservoir_tier01.png": { name: "新1级水库", presets: [{ name: "旧1级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl1.png" }, { name: "旧2级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl2.png" }] },
-                    "water_reservoir_tier02.png": { name: "新2级水库", presets: [{ name: "旧1级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl1.png" }, { name: "旧2级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl2.png" }] },
-                    "water_reservoir_tier03.png": { name: "新3级水库", presets: [{ name: "旧1级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl1.png" }, { name: "旧2级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl2.png" }] },
-                    "water_reservoir_tier04.png": { name: "新6级水库", presets: [{ name: "旧1级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl1.png" }, { name: "旧2级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl2.png" }] },
-                    "water_reservoir_tier05.png": { name: "新10级水库", presets: [{ name: "旧1级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl1.png" }, { name: "旧2级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl2.png" }] },
-                    "water_reservoir_tier06.png": { name: "新15级水库", presets: [{ name: "旧1级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl1.png" }, { name: "旧2级水库", url: "https://scimg.22-7.top/images/landscape/reservoir-lvl2.png" }] }
-                },
-                "发电厂": {
-                    "power_plant_tier01.png": { name: "新1级发电厂", presets: [{ name: "旧1级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl1.png" }, { name: "旧2级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl2.png" }] },
-                    "power_plant_tier02.png": { name: "新2级发电厂", presets: [{ name: "旧1级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl1.png" }, { name: "旧2级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl2.png" }] },
-                    "power_plant_tier03.png": { name: "新3级发电厂", presets: [{ name: "旧1级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl1.png" }, { name: "旧2级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl2.png" }] },
-                    "power_plant_tier04.png": { name: "新6级发电厂", presets: [{ name: "旧1级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl1.png" }, { name: "旧2级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl2.png" }] },
-                    "power_plant_tier05.png": { name: "新10级发电厂", presets: [{ name: "旧1级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl1.png" }, { name: "旧2级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl2.png" }] },
-                    "power_plant_tier06.png": { name: "新15级发电厂", presets: [{ name: "旧1级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl1.png" }, { name: "旧2级发电厂", url: "https://scimg.22-7.top/images/landscape/powerplant-lvl2.png" }] }
-                },
-                "油井": {
-                    "oil_rig_tier01.png": { name: "新1级油井", presets: [{ name: "旧1级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl1.png" }, { name: "旧2级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl2.png" }] },
-                    "oil_rig_tier02.png": { name: "新2级油井", presets: [{ name: "旧1级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl1.png" }, { name: "旧2级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl2.png" }] },
-                    "oil_rig_tier03.png": { name: "新3级油井", presets: [{ name: "旧1级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl1.png" }, { name: "旧2级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl2.png" }] },
-                    "oil_rig_tier04.png": { name: "新6级油井", presets: [{ name: "旧1级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl1.png" }, { name: "旧2级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl2.png" }] },
-                    "oil_rig_tier05.png": { name: "新10级油井", presets: [{ name: "旧1级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl1.png" }, { name: "旧2级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl2.png" }] },
-                    "oil_rig_tier06.png": { name: "新15级油井", presets: [{ name: "旧1级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl1.png" }, { name: "旧2级油井", url: "https://scimg.22-7.top/images/landscape/oilrig-lvl2.png" }] }
-                },
-                "炼油厂": {
-                    "refinery_tier01.png": { name: "新1级炼油厂", presets: [{ name: "旧1级炼油厂", url: "https://scimg.22-7.top/images/landscape/refinery-lvl1.png" }, { name: "旧2级炼油厂", url: "https://scimg.22-7.top/images/landscape/refinery-lvl2.png" }] },
-                    "refinery_tier02.png": { name: "新2级炼油厂", presets: [{ name: "旧1级炼油厂", url: "https://scimg.22-7.top/images/landscape/refinery-lvl1.png" }, { name: "旧2级炼油厂", url: "https://scimg.22-7.top/images/landscape/refinery-lvl2.png" }] },
-                    "refinery_tier03.png": { name: "新3级炼油厂", presets: [{ name: "旧1级炼油厂", url: "https://scimg.22-7.top/images/landscape/refinery-lvl1.png" }, { name: "旧2级炼油厂", url: "https://scimg.22-7.top/images/landscape/refinery-lvl2.png" }] },
-                    "refinery_tier04.png": { name: "新6级炼油厂", presets: [{ name: "旧1级炼油厂", url: "https://scimg.22-7.top/images/landscape/refinery-lvl1.png" }, { name: "旧2级炼油厂", url: "https://scimg.22-7.top/images/landscape/refinery-lvl2.png" }] }
-                },
-                "货运站": {
-                    "shipping_depot_tier01.png": { name: "新1级货运站", presets: [{ name: "旧1级货运站", url: "https://scimg.22-7.top/images/landscape/shipping-lvl1.png" }, { name: "旧2级货运站", url: "https://scimg.22-7.top/images/landscape/shipping-lvl2.png" }] },
-                    "shipping_depot_tier02.png": { name: "新2级货运站", presets: [{ name: "旧1级货运站", url: "https://scimg.22-7.top/images/landscape/shipping-lvl1.png" }, { name: "旧2级货运站", url: "https://scimg.22-7.top/images/landscape/shipping-lvl2.png" }] },
-                    "shipping_depot_tier03.png": { name: "新3级货运站", presets: [{ name: "旧1级货运站", url: "https://scimg.22-7.top/images/landscape/shipping-lvl1.png" }, { name: "旧2级货运站", url: "https://scimg.22-7.top/images/landscape/shipping-lvl2.png" }] },
-                    "shipping_depot_tier04.png": { name: "新6级货运站", presets: [{ name: "旧1级货运站", url: "https://scimg.22-7.top/images/landscape/shipping-lvl1.png" }, { name: "旧2级货运站", url: "https://scimg.22-7.top/images/landscape/shipping-lvl2.png" }] }
-                },
-                "牧场": {
-                    "ranch_tier01.png": { name: "新1级牧场", presets: [{ name: "旧1级牧场", url: "https://scimg.22-7.top/images/landscape/farm-lvl1.png" }, { name: "旧2级牧场", url: "https://scimg.22-7.top/images/landscape/farm-lvl2.png" }] },
-                    "ranch_tier02.png": { name: "新2级牧场", presets: [{ name: "旧1级牧场", url: "https://scimg.22-7.top/images/landscape/farm-lvl1.png" }, { name: "旧2级牧场", url: "https://scimg.22-7.top/images/landscape/farm-lvl2.png" }] },
-                    "ranch_tier03.png": { name: "新3级牧场", presets: [{ name: "旧1级牧场", url: "https://scimg.22-7.top/images/landscape/farm-lvl1.png" }, { name: "旧2级牧场", url: "https://scimg.22-7.top/images/landscape/farm-lvl2.png" }] },
-                    "ranch_tier04.png": { name: "新6级牧场", presets: [{ name: "旧1级牧场", url: "https://scimg.22-7.top/images/landscape/farm-lvl1.png" }, { name: "旧2级牧场", url: "https://scimg.22-7.top/images/landscape/farm-lvl2.png" }] }
-                },
-                "矿井": {
-                    "mine_tier01.png": { name: "新1级矿井", presets: [{ name: "旧1级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl1.png" }, { name: "旧2级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl2.png" }] },
-                    "mine_tier02.png": { name: "新2级矿井", presets: [{ name: "旧1级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl1.png" }, { name: "旧2级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl2.png" }] },
-                    "mine_tier03.png": { name: "新3级矿井", presets: [{ name: "旧1级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl1.png" }, { name: "旧2级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl2.png" }] },
-                    "mine_tier04.png": { name: "新6级矿井", presets: [{ name: "旧1级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl1.png" }, { name: "旧2级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl2.png" }] },
-                    "mine_tier05.png": { name: "新10级矿井", presets: [{ name: "旧1级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl1.png" }, { name: "旧2级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl2.png" }] },
-                    "mine_tier06.png": { name: "新15级矿井", presets: [{ name: "旧1级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl1.png" }, { name: "旧2级矿井", url: "https://scimg.22-7.top/images/landscape/mine-lvl2.png" }] }
-                },
-                "材料加工厂": {
-                    "factory_tier01.png": { name: "新1级材料加工厂", presets: [{ name: "旧1级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl1.png" }, { name: "旧2级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl2.png" }] },
-                    "factory_tier02.png": { name: "新2级材料加工厂", presets: [{ name: "旧1级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl1.png" }, { name: "旧2级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl2.png" }] },
-                    "factory_tier03.png": { name: "新3级材料加工厂", presets: [{ name: "旧1级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl1.png" }, { name: "旧2级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl2.png" }] },
-                    "factory_tier04.png": { name: "新6级材料加工厂", presets: [{ name: "旧1级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl1.png" }, { name: "旧2级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl2.png" }] },
-                    "factory_tier05.png": { name: "新10级材料加工厂", presets: [{ name: "旧1级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl1.png" }, { name: "旧2级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl2.png" }] },
-                    "factory_tier06.png": { name: "新15级材料加工厂", presets: [{ name: "旧1级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl1.png" }, { name: "旧2级材料加工厂", url: "https://scimg.22-7.top/images/landscape/factory-lvl2.png" }] }
-                },
-                "电子产品厂": {
-                    "electronics_factory_tier01.png": { name: "新1级电子产品厂", presets: [{ name: "旧1级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl1.png" }, { name: "旧2级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl2.png" }, { name: "旧3级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl3.png" }] },
-                    "electronics_factory_tier02.png": { name: "新2级电子产品厂", presets: [{ name: "旧1级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl1.png" }, { name: "旧2级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl2.png" }, { name: "旧3级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl3.png" }] },
-                    "electronics_factory_tier03.png": { name: "新3级电子产品厂", presets: [{ name: "旧1级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl1.png" }, { name: "旧2级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl2.png" }, { name: "旧3级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl3.png" }] },
-                    "electronics_factory_tier04.png": { name: "新6级电子产品厂", presets: [{ name: "旧1级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl1.png" }, { name: "旧2级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl2.png" }, { name: "旧3级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl3.png" }] },
-                    "electronics_factory_tier05.png": { name: "新10级电子产品厂", presets: [{ name: "旧1级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl1.png" }, { name: "旧2级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl2.png" }, { name: "旧3级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl3.png" }] },
-                    "electronics_factory_tier06.png": { name: "新15级电子产品厂", presets: [{ name: "旧1级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl1.png" }, { name: "旧2级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl2.png" }, { name: "旧3级电子产品厂", url: "https://scimg.22-7.top/images/landscape/efactory4-lvl3.png" }] }
-                },
-                "时装厂": {
-                    "clothsfactory-lvl1.png": { name: "1级时装厂", presets: [{ name: "旧1级时装厂", url: "https://scimg.22-7.top/images/landscape/clothsfactory-lvl1.png" }, { name: "旧2级时装厂", url: "https://scimg.22-7.top/images/landscape/clothsfactory-lvl2.png" }] },
-                    "clothsfactory-lvl2.png": { name: "2级时装厂", presets: [{ name: "旧1级时装厂", url: "https://scimg.22-7.top/images/landscape/clothsfactory-lvl1.png" }, { name: "旧2级时装厂", url: "https://scimg.22-7.top/images/landscape/clothsfactory-lvl2.png" }] }
-                },
-                "推进器工厂": {
-                    "propulsion_factory_tier01.png": { name: "新1级推进器工厂", presets: [{ name: "旧1级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl1.png" }, { name: "旧2级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl2.png" }, { name: "旧3级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl3.png" }] },
-                    "propulsion_factory_tier02.png": { name: "新2级推进器工厂", presets: [{ name: "旧1级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl1.png" }, { name: "旧2级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl2.png" }, { name: "旧3级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl3.png" }] },
-                    "propulsion_factory_tier03.png": { name: "新3级推进器工厂", presets: [{ name: "旧1级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl1.png" }, { name: "旧2级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl2.png" }, { name: "旧3级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl3.png" }] },
-                    "propulsion_factory_tier04.png": { name: "新6级推进器工厂", presets: [{ name: "旧1级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl1.png" }, { name: "旧2级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl2.png" }, { name: "旧3级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl3.png" }] },
-                    "propulsion_factory_tier05.png": { name: "新10级推进器工厂", presets: [{ name: "旧1级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl1.png" }, { name: "旧2级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl2.png" }, { name: "旧3级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl3.png" }] },
-                    "propulsion_factory_tier06.png": { name: "新15级推进器工厂", presets: [{ name: "旧1级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl1.png" }, { name: "旧2级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl2.png" }, { name: "旧3级推进器工厂", url: "https://scimg.22-7.top/images/landscape/propulsion-2-lvl3.png" }] }
-                },
-                "采石场": {
-                    "quarry_tier01.png": { name: "新1级采石场", presets: [{ name: "旧1级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl1.png" }, { name: "旧2级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl2.png" }, { name: "旧3级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl3.png" }, { name: "旧4级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl4.png" }] },
-                    "quarry_tier02.png": { name: "新2级采石场", presets: [{ name: "旧1级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl1.png" }, { name: "旧2级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl2.png" }, { name: "旧3级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl3.png" }, { name: "旧4级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl4.png" }] },
-                    "quarry_tier03.png": { name: "新3级采石场", presets: [{ name: "旧1级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl1.png" }, { name: "旧2级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl2.png" }, { name: "旧3级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl3.png" }, { name: "旧4级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl4.png" }] },
-                    "quarry_tier04.png": { name: "新6级采石场", presets: [{ name: "旧1级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl1.png" }, { name: "旧2级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl2.png" }, { name: "旧3级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl3.png" }, { name: "旧4级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl4.png" }] },
-                    "quarry_tier05.png": { name: "新10级采石场", presets: [{ name: "旧1级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl1.png" }, { name: "旧2级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl2.png" }, { name: "旧3级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl3.png" }, { name: "旧4级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl4.png" }] },
-                    "quarry_tier06.png": { name: "新15级采石场", presets: [{ name: "旧1级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl1.png" }, { name: "旧2级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl2.png" }, { name: "旧3级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl3.png" }, { name: "旧4级采石场", url: "https://scimg.22-7.top/images/landscape/quarry-lvl4.png" }] }
-                },
-                "混凝土厂": {
-                    "concrete_plant_tier01.png": { name: "新1级混凝土厂", presets: [{ name: "旧1级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl1.png" }, { name: "旧2级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl2.png" }, { name: "旧3级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl3.png" }] },
-                    "concrete_plant_tier02.png": { name: "新2级混凝土厂", presets: [{ name: "旧1级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl1.png" }, { name: "旧2级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl2.png" }, { name: "旧3级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl3.png" }] },
-                    "concrete_plant_tier03.png": { name: "新3级混凝土厂", presets: [{ name: "旧1级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl1.png" }, { name: "旧2级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl2.png" }, { name: "旧3级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl3.png" }] },
-                    "concrete_plant_tier04.png": { name: "新6级混凝土厂", presets: [{ name: "旧1级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl1.png" }, { name: "旧2级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl2.png" }, { name: "旧3级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl3.png" }] },
-                    "concrete_plant_tier05.png": { name: "新10级混凝土厂", presets: [{ name: "旧1级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl1.png" }, { name: "旧2级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl2.png" }, { name: "旧3级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl3.png" }] },
-                    "concrete_plant_tier06.png": { name: "新15级混凝土厂", presets: [{ name: "旧1级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl1.png" }, { name: "旧2级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl2.png" }, { name: "旧3级混凝土厂", url: "https://scimg.22-7.top/images/landscape/concrete-plant-lvl3.png" }] }
-                },
-                "建材厂": {
-                    "construction_factory_tier01.png": { name: "新1级建材厂", presets: [{ name: "旧1级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl1.png" }, { name: "旧2级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl2.png" }, { name: "旧3级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl3.png" }, { name: "旧4级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl4.png" }] },
-                    "construction_factory_tier02.png": { name: "新2级建材厂", presets: [{ name: "旧1级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl1.png" }, { name: "旧2级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl2.png" }, { name: "旧3级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl3.png" }, { name: "旧4级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl4.png" }] },
-                    "construction_factory_tier03.png": { name: "新3级建材厂", presets: [{ name: "旧1级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl1.png" }, { name: "旧2级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl2.png" }, { name: "旧3级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl3.png" }, { name: "旧4级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl4.png" }] },
-                    "construction_factory_tier04.png": { name: "新6级建材厂", presets: [{ name: "旧1级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl1.png" }, { name: "旧2级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl2.png" }, { name: "旧3级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl3.png" }, { name: "旧4级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl4.png" }] },
-                    "construction_factory_tier05.png": { name: "新10级建材厂", presets: [{ name: "旧1级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl1.png" }, { name: "旧2级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl2.png" }, { name: "旧3级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl3.png" }, { name: "旧4级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl4.png" }] },
-                    "construction_factory_tier06.png": { name: "新15级建材厂", presets: [{ name: "旧1级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl1.png" }, { name: "旧2级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl2.png" }, { name: "旧3级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl3.png" }, { name: "旧4级建材厂", url: "https://scimg.22-7.top/images/landscape/construction-factory-lvl4.png" }] }
-                },
-                "总承包商": {
-                    "general_contractor_tier01.png": { name: "新1级总承包商", presets: [{ name: "旧1级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl1.png" }, { name: "旧2级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl2.png" }, { name: "旧3级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl3.png" }] },
-                    "general_contractor_tier02.png": { name: "新2级总承包商", presets: [{ name: "旧1级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl1.png" }, { name: "旧2级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl2.png" }, { name: "旧3级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl3.png" }] },
-                    "general_contractor_tier03.png": { name: "新3级总承包商", presets: [{ name: "旧1级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl1.png" }, { name: "旧2级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl2.png" }, { name: "旧3级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl3.png" }] },
-                    "general_contractor_tier04.png": { name: "新6级总承包商", presets: [{ name: "旧1级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl1.png" }, { name: "旧2级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl2.png" }, { name: "旧3级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl3.png" }] },
-                    "general_contractor_tier05.png": { name: "新10级总承包商", presets: [{ name: "旧1级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl1.png" }, { name: "旧2级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl2.png" }, { name: "旧3级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl3.png" }] },
-                    "general_contractor_tier06.png": { name: "新15级总承包商", presets: [{ name: "旧1级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl1.png" }, { name: "旧2级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl2.png" }, { name: "旧3级总承包商", url: "https://scimg.22-7.top/images/landscape/general-contractor-lvl3.png" }] }
-                },
-                "屠宰场": {
-                    "slaughterhouse-lvl1.png": { name: "1级屠宰场", presets: [{ name: "旧1级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl1.png" }, { name: "旧2级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl2.png" }, { name: "旧3级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl3.png" }] },
-                    "slaughterhouse-lvl2.png": { name: "2级屠宰场", presets: [{ name: "旧1级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl1.png" }, { name: "旧2级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl2.png" }, { name: "旧3级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl3.png" }] },
-                    "slaughterhouse-lvl3.png": { name: "3级屠宰场", presets: [{ name: "旧1级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl1.png" }, { name: "旧2级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl2.png" }, { name: "旧3级屠宰场", url: "https://scimg.22-7.top/images/landscape/slaughterhouse-lvl3.png" }] }
-                },
-                "磨坊": {
-                    "mill_tier01.png": { name: "新1级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
-                    "mill_tier02.png": { name: "新2级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
-                    "mill_tier03.png": { name: "新3级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
-                    "mill_tier04.png": { name: "新6级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
-                    "mill_tier05.png": { name: "新10级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
-                    "mill_tier06.png": { name: "新15级磨坊", presets: [{ name: "旧1级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl1.png" }, { name: "旧2级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl2.png" }, { name: "旧3级磨坊", url: "https://scimg.22-7.top/images/landscape/mill-lvl3.png" }] },
-                },
-                "烘焙厂": {
-                    "bakery-lvl1.png": { name: "1级烘焙厂", presets: [{ name: "旧1级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl1.png" }, { name: "旧2级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl2.png" }, { name: "旧3级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl3.png" }] },
-                    "bakery-lvl2.png": { name: "2级烘焙厂", presets: [{ name: "旧1级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl1.png" }, { name: "旧2级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl2.png" }, { name: "旧3级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl3.png" }] },
-                    "bakery-lvl3.png": { name: "3级烘焙厂", presets: [{ name: "旧1级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl1.png" }, { name: "旧2级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl2.png" }, { name: "旧3级烘焙厂", url: "https://scimg.22-7.top/images/landscape/bakery-lvl3.png" }] }
-                },
-                "食品加工厂": {
-                    "food-processing-lvl1.png": { name: "1级食品加工厂", presets: [{ name: "旧1级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl1.png" }, { name: "旧2级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl2.png" }, { name: "旧3级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl3.png" }] },
-                    "food-processing-lvl2.png": { name: "2级食品加工厂", presets: [{ name: "旧1级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl1.png" }, { name: "旧2级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl2.png" }, { name: "旧3级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl3.png" }] },
-                    "food-processing-lvl3.png": { name: "3级食品加工厂", presets: [{ name: "旧1级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl1.png" }, { name: "旧2级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl2.png" }, { name: "旧3级食品加工厂", url: "https://scimg.22-7.top/images/landscape/food-processing-lvl3.png" }] }
-                },
-                "中央厨房": {
-                    "catering-lvl1.png": { name: "1级中央厨房", presets: [{ name: "旧1级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl1.png" }, { name: "旧2级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl2.png" }, { name: "旧3级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl3.png" }] },
-                    "catering-lvl2.png": { name: "2级中央厨房", presets: [{ name: "旧1级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl1.png" }, { name: "旧2级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl2.png" }, { name: "旧3级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl3.png" }] },
-                    "catering-lvl3.png": { name: "3级中央厨房", presets: [{ name: "旧1级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl1.png" }, { name: "旧2级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl2.png" }, { name: "旧3级中央厨房", url: "https://scimg.22-7.top/images/landscape/catering-lvl3.png" }] }
-                },
-                "森林苗圃": {
-                    "forrest_nursery_tier01_back.png": { name: "新1级森林苗圃", presets: [{ name: "旧1级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl1.png" }, { name: "旧2级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl2.png" }, { name: "旧3级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl3.png" }] },
-                    "forrest_nursery_tier02_back.png": { name: "新2级森林苗圃", presets: [{ name: "旧1级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl1.png" }, { name: "旧2级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl2.png" }, { name: "旧3级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl3.png" }] },
-                    "forrest_nursery_tier03_back.png": { name: "新3级森林苗圃", presets: [{ name: "旧1级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl1.png" }, { name: "旧2级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl2.png" }, { name: "旧3级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl3.png" }] },
-                    "forrest_nursery_tier04_back.png": { name: "新6级森林苗圃", presets: [{ name: "旧1级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl1.png" }, { name: "旧2级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl2.png" }, { name: "旧3级森林苗圃", url: "https://scimg.22-7.top/images/landscape/forest-nursery/shed-lvl3.png" }] }
-                }
-            },
-            "零售建筑": {
-                "车行": {
-                    "car-dealership-lvl1.png": { name: "1级车行", presets: [{ name: "旧1级车行", url: "https://scimg.22-7.top/images/landscape/car-dealership-lvl1.png" }, { name: "旧2级车行", url: "https://scimg.22-7.top/images/landscape/car-dealership-lvl2.png" }] },
-                    "car-dealership-lvl2.png": { name: "2级车行", presets: [{ name: "旧1级车行", url: "https://scimg.22-7.top/images/landscape/car-dealership-lvl1.png" }, { name: "旧2级车行", url: "https://scimg.22-7.top/images/landscape/car-dealership-lvl2.png" }] }
-                },
-                "生鲜商店": {
-                    "grocery_store_idle_tier01.png": { name: "新1级生鲜商店", presets: [{ name: "旧1级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl1.png" }, { name: "旧2级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl2.png" }, { name: "旧3级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl3.png" }] },
-                    "grocery_store_idle_tier02.png": { name: "新2级生鲜商店", presets: [{ name: "旧1级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl1.png" }, { name: "旧2级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl2.png" }, { name: "旧3级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl3.png" }] },
-                    "grocery_store_idle_tier03.png": { name: "新3级生鲜商店", presets: [{ name: "旧1级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl1.png" }, { name: "旧2级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl2.png" }, { name: "旧3级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl3.png" }] },
-                    "grocery_store_idle_tier04.png": { name: "新6级生鲜商店", presets: [{ name: "旧1级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl1.png" }, { name: "旧2级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl2.png" }, { name: "旧3级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl3.png" }] },
-                    "grocery_store_idle_tier05.png": { name: "新10级生鲜商店", presets: [{ name: "旧1级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl1.png" }, { name: "旧2级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl2.png" }, { name: "旧3级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl3.png" }] },
-                    "grocery_store_idle_tier06.png": { name: "新15级生鲜商店", presets: [{ name: "旧1级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl1.png" }, { name: "旧2级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl2.png" }, { name: "旧3级生鲜商店", url: "https://scimg.22-7.top/images/landscape/grocery2-lvl3.png" }] }
-                },
-                "加油站": {
-                    "gas_station_tier01.png": { name: "新1级加油站", presets: [{ name: "旧1级加油站", url: "https://scimg.22-7.top/images/landscape/gasstation-lvl1.png" }, { name: "旧2级加油站", url: "https://scimg.22-7.top/images/landscape/gasstation-lvl2.png" }] },
-                    "gas_station_tier02.png": { name: "新2级加油站", presets: [{ name: "旧1级加油站", url: "https://scimg.22-7.top/images/landscape/gasstation-lvl1.png" }, { name: "旧2级加油站", url: "https://scimg.22-7.top/images/landscape/gasstation-lvl2.png" }] },
-                    "gas_station_tier03.png": { name: "新3级加油站", presets: [{ name: "旧1级加油站", url: "https://scimg.22-7.top/images/landscape/gasstation-lvl1.png" }, { name: "旧2级加油站", url: "https://scimg.22-7.top/images/landscape/gasstation-lvl2.png" }] },
-                    "gas_station_tier04.png": { name: "新6级加油站", presets: [{ name: "旧1级加油站", url: "https://scimg.22-7.top/images/landscape/gasstation-lvl1.png" }, { name: "旧2级加油站", url: "https://scimg.22-7.top/images/landscape/gasstation-lvl2.png" }] }
-                },
-                "时装商店": {
-                    "fashion-lvl1.png": { name: "1级时装商店", presets: [{ name: "旧1级时装商店", url: "https://scimg.22-7.top/images/landscape/fashion-lvl1.png" }, { name: "旧2级时装商店", url: "https://scimg.22-7.top/images/landscape/fashion-lvl2.png" }] },
-                    "fashion-lvl2.png": { name: "2级时装商店", presets: [{ name: "旧1级时装商店", url: "https://scimg.22-7.top/images/landscape/fashion-lvl1.png" }, { name: "旧2级时装商店", url: "https://scimg.22-7.top/images/landscape/fashion-lvl2.png" }] }
-                },
-                "销售办公室": {
-                    "sales_offices_tier01.png": { name: "新1级销售办公室", presets: [{ name: "旧1级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl1.png" }, { name: "旧2级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl2.png" }, { name: "旧3级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl3.png" }] },
-                    "sales_offices_tier02.png": { name: "新2级销售办公室", presets: [{ name: "旧1级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl1.png" }, { name: "旧2级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl2.png" }, { name: "旧3级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl3.png" }] },
-                    "sales_offices_tier03.png": { name: "新3级销售办公室", presets: [{ name: "旧1级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl1.png" }, { name: "旧2级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl2.png" }, { name: "旧3级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl3.png" }] },
-                    "sales_offices_tier04.png": { name: "新6级销售办公室", presets: [{ name: "旧1级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl1.png" }, { name: "旧2级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl2.png" }, { name: "旧3级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl3.png" }] },
-                    "sales_offices_tier05.png": { name: "新10级销售办公室", presets: [{ name: "旧1级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl1.png" }, { name: "旧2级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl2.png" }, { name: "旧3级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl3.png" }] },
-                    "sales_offices_tier06.png": { name: "新15级销售办公室", presets: [{ name: "旧1级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl1.png" }, { name: "旧2级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl2.png" }, { name: "旧3级销售办公室", url: "https://scimg.22-7.top/images/landscape/sales-offices-2-lvl3.png" }] }
-                },
-                "五金商店": {
-                    "hardware_store_tier01.png": { name: "新1级五金商店", presets: [{ name: "旧1级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl1.png" }, { name: "旧2级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl2.png" }, { name: "旧3级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl3.png" }] },
-                    "hardware_store_tier02.png": { name: "新2级五金商店", presets: [{ name: "旧1级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl1.png" }, { name: "旧2级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl2.png" }, { name: "旧3级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl3.png" }] },
-                    "hardware_store_tier03.png": { name: "新3级五金商店", presets: [{ name: "旧1级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl1.png" }, { name: "旧2级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl2.png" }, { name: "旧3级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl3.png" }] },
-                    "hardware_store_tier04.png": { name: "新6级五金商店", presets: [{ name: "旧1级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl1.png" }, { name: "旧2级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl2.png" }, { name: "旧3级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl3.png" }] },
-                    "hardware_store_tier05.png": { name: "新10级五金商店", presets: [{ name: "旧1级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl1.png" }, { name: "旧2级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl2.png" }, { name: "旧3级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl3.png" }] },
-                    "hardware_store_tier06.png": { name: "新15级五金商店", presets: [{ name: "旧1级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl1.png" }, { name: "旧2级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl2.png" }, { name: "旧3级五金商店", url: "https://scimg.22-7.top/images/landscape/hardware-store-lvl3.png" }] }
-                },
-                "餐馆": {
-                    "restaurant-low-lvl1.png": { name: "1级餐馆", presets: [{ name: "旧1级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl1.png" }, { name: "旧2级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl2.png" }, { name: "旧3级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl3.png" }] },
-                    "restaurant-low-lvl2.png": { name: "2级餐馆", presets: [{ name: "旧1级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl1.png" }, { name: "旧2级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl2.png" }, { name: "旧3级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl3.png" }] },
-                    "restaurant-low-lvl3.png": { name: "3级餐馆", presets: [{ name: "旧1级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl1.png" }, { name: "旧2级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl2.png" }, { name: "旧3级餐馆", url: "https://scimg.22-7.top/images/landscape/restaurant-low-lvl3.png" }] }
-                }
-            },
-            "休闲建筑": {
-                "城堡": {
-                    "castle-lvl1.png": { name: "1级城堡", presets: [{ name: "旧1级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl1.png" }, { name: "旧2级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl2.png" }, { name: "旧3级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl3.png" }] },
-                    "castle-lvl2.png": { name: "2级城堡", presets: [{ name: "旧1级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl1.png" }, { name: "旧2级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl2.png" }, { name: "旧3级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl3.png" }] },
-                    "castle-lvl3.png": { name: "3级城堡", presets: [{ name: "旧1级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl1.png" }, { name: "旧2级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl2.png" }, { name: "旧3级城堡", url: "https://scimg.22-7.top/images/landscape/recreational/castle-lvl3.png" }] }
-                },
-                "公园": {
-                    "park-lvl1.png": { name: "1级公园", presets: [{ name: "旧1级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl1.png" }, { name: "旧2级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl2.png" }, { name: "旧3级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl3.png" }] },
-                    "park-lvl2.png": { name: "2级公园", presets: [{ name: "旧1级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl1.png" }, { name: "旧2级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl2.png" }, { name: "旧3级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl3.png" }] },
-                    "park-lvl3.png": { name: "3级公园", presets: [{ name: "旧1级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl1.png" }, { name: "旧2级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl2.png" }, { name: "旧3级公园", url: "https://scimg.22-7.top/images/landscape/recreational/park-lvl3.png" }] }
-                },
-                "人工湖": {
-                    "lake2-lvl1.png": { name: "1级人工湖", presets: [{ name: "旧1级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl1.png" }, { name: "旧2级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl2.png" }, { name: "旧3级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl3.png" }] },
-                    "lake2-lvl2.png": { name: "2级人工湖", presets: [{ name: "旧1级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl1.png" }, { name: "旧2级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl2.png" }, { name: "旧3级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl3.png" }] },
-                    "lake2-lvl3.png": { name: "3级人工湖", presets: [{ name: "旧1级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl1.png" }, { name: "旧2级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl2.png" }, { name: "旧3级人工湖", url: "https://scimg.22-7.top/images/landscape/recreational/lake2-lvl3.png" }] }
-                }
-            },
-            "科研建筑": {
-                "作物研究中心": {
-                    "plantresearch.png": { name: "1级作物研究中心", presets: [{ name: "旧1级作物研究中心", url: "https://scimg.22-7.top/images/landscape/plantresearch.png" }] }
-                },
-                "物理学实验室": {
-                    "physics-lab-lvl1.png": { name: "1级物理学实验室", presets: [{ name: "旧1级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl1.png" }, { name: "旧2级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl2.png" }, { name: "旧3级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl3.png" }] },
-                    "physics-lab-lvl2.png": { name: "2级物理学实验室", presets: [{ name: "旧1级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl1.png" }, { name: "旧2级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl2.png" }, { name: "旧3级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl3.png" }] },
-                    "physics-lab-lvl3.png": { name: "3级物理学实验室", presets: [{ name: "旧1级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl1.png" }, { name: "旧2级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl2.png" }, { name: "旧3级物理学实验室", url: "https://scimg.22-7.top/images/landscape/physics-lab-lvl3.png" }] }
-                },
-                "畜牧实验室": {
-                    "breeding-research-lvl1.png": { name: "1级畜牧实验室", presets: [{ name: "旧1级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl1.png" }, { name: "旧2级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl2.png" }, { name: "旧3级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl3.png" }] },
-                    "breeding-research-lvl2.png": { name: "2级畜牧实验室", presets: [{ name: "旧1级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl1.png" }, { name: "旧2级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl2.png" }, { name: "旧3级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl3.png" }] },
-                    "breeding-research-lvl3.png": { name: "3级畜牧实验室", presets: [{ name: "旧1级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl1.png" }, { name: "旧2级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl2.png" }, { name: "旧3级畜牧实验室", url: "https://scimg.22-7.top/images/landscape/breeding-research-lvl3.png" }] }
-                },
-                "化学实验室": {
-                    "chemistry-research-lvl1.png": { name: "1级化学实验室", presets: [{ name: "旧1级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl1.png" }, { name: "旧2级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl2.png" }, { name: "旧3级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl3.png" }] },
-                    "chemistry-research-lvl2.png": { name: "2级化学实验室", presets: [{ name: "旧1级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl1.png" }, { name: "旧2级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl2.png" }, { name: "旧3级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl3.png" }] },
-                    "chemistry-research-lvl3.png": { name: "3级化学实验室", presets: [{ name: "旧1级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl1.png" }, { name: "旧2级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl2.png" }, { name: "旧3级化学实验室", url: "https://scimg.22-7.top/images/landscape/chemistry-research-lvl3.png" }] }
-                },
-                "软件研发院": {
-                    "swresearch.png": { name: "1级软件研发院", presets: [{ name: "旧1级软件研发院", url: "https://scimg.22-7.top/images/landscape/swresearch.png" }] }
-                },
-                "汽车研发所": {
-                    "race-track-lvl1.png": { name: "1级汽车研发所", presets: [{ name: "旧1级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl1.png" }, { name: "旧2级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl2.png" }, { name: "旧3级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl3.png" }] },
-                    "race-track-lvl2.png": { name: "2级汽车研发所", presets: [{ name: "旧1级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl1.png" }, { name: "旧2级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl2.png" }, { name: "旧3级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl3.png" }] },
-                    "race-track-lvl3.png": { name: "3级汽车研发所", presets: [{ name: "旧1级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl1.png" }, { name: "旧2级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl2.png" }, { name: "旧3级汽车研发所", url: "https://scimg.22-7.top/images/landscape/race-track-lvl3.png" }] }
-                },
-                "时装设计中心": {
-                    "fashion-research-lvl1.png": { name: "1级时装设计中心", presets: [{ name: "旧1级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl1.png" }, { name: "旧2级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl1.png" }, { name: "旧3级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl3.png" }] },
-                    "fashion-research-lvl1.png": { name: "2级时装设计中心", presets: [{ name: "旧1级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl1.png" }, { name: "旧2级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl1.png" }, { name: "旧3级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl3.png" }] },
-                    "fashion-research-lvl3.png": { name: "3级时装设计中心", presets: [{ name: "旧1级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl1.png" }, { name: "旧2级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl1.png" }, { name: "旧3级时装设计中心", url: "https://scimg.22-7.top/images/landscape/fashion-research-lvl3.png" }] }
-                },
-                "发射台": {
-                    "launchpad-lvl1.png": { name: "1级发射台", presets: [{ name: "旧1级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl1.png" }, { name: "旧2级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl2.png" }, { name: "旧3级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl3.png" }] },
-                    "launchpad-lvl2.png": { name: "2级发射台", presets: [{ name: "旧1级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl1.png" }, { name: "旧2级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl2.png" }, { name: "旧3级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl3.png" }] },
-                    "launchpad-lvl3.png": { name: "3级发射台", presets: [{ name: "旧1级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl1.png" }, { name: "旧2级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl2.png" }, { name: "旧3级发射台", url: "https://scimg.22-7.top/images/landscape/launchpad-lvl3.png" }] }
-                },
-                "厨房": {
-                    "kitchen-lvl1.png": { name: "1级厨房", presets: [{ name: "旧1级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl1.png" }, { name: "旧2级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl2.png" }, { name: "旧3级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl3.png" }] },
-                    "kitchen-lvl2.png": { name: "2级厨房", presets: [{ name: "旧1级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl1.png" }, { name: "旧2级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl2.png" }, { name: "旧3级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl3.png" }] },
-                    "kitchen-lvl3.png": { name: "3级厨房", presets: [{ name: "旧1级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl1.png" }, { name: "旧2级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl2.png" }, { name: "旧3级厨房", url: "https://scimg.22-7.top/images/landscape/kitchen-lvl3.png" }] }
-                }
-            },
-            "其他": {
-                "银行": {
-                    "bank-lvl1.png": { name: "1级银行", presets: [{ name: "旧1级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl1.png" }, { name: "旧2级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl2.png" }, { name: "旧3级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl3.png" }] },
-                    "bank-lvl2.png": { name: "2级银行", presets: [{ name: "旧1级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl1.png" }, { name: "旧2级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl2.png" }, { name: "旧3级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl3.png" }] },
-                    "bank-lvl3.png": { name: "3级银行", presets: [{ name: "旧1级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl1.png" }, { name: "旧2级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl2.png" }, { name: "旧3级银行", url: "https://scimg.22-7.top/images/landscape/bank-lvl3.png" }] }
-                },
-                "学院": {
-                    "academy-lvl1.png": { name: "1级学院", presets: [{ name: "旧1级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl1.png" }, { name: "旧2级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl2.png" }, { name: "旧3级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl3.png" }, { name: "旧4级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl4.png" }, { name: "旧5级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl5.png" }] },
-                    "academy-lvl2.png": { name: "2级学院", presets: [{ name: "旧1级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl1.png" }, { name: "旧2级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl2.png" }, { name: "旧3级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl3.png" }, { name: "旧4级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl4.png" }, { name: "旧5级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl5.png" }] },
-                    "academy-lvl3.png": { name: "3级学院", presets: [{ name: "旧1级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl1.png" }, { name: "旧2级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl2.png" }, { name: "旧3级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl3.png" }, { name: "旧4级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl4.png" }, { name: "旧5级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl5.png" }] },
-                    "academy-lvl4.png": { name: "4级学院", presets: [{ name: "旧1级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl1.png" }, { name: "旧2级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl2.png" }, { name: "旧3级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl3.png" }, { name: "旧4级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl4.png" }, { name: "旧5级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl5.png" }] },
-                    "academy-lvl5.png": { name: "5级学院", presets: [{ name: "旧1级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl1.png" }, { name: "旧2级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl2.png" }, { name: "旧3级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl3.png" }, { name: "旧4级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl4.png" }, { name: "旧5级学院", url: "https://scimg.22-7.top/images/landscape/academy-lvl5.png" }] }
-                }
-            },
-            "季节性设施": {
-                "万圣节集市": {
-                    "autumn-market-lvl1.png": { name: "1级万圣节集市", presets: [{ name: "旧1级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl1.png" }, { name: "旧2级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl2.png" }, { name: "旧3级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl3.png" }] },
-                    "autumn-market-lvl2.png": { name: "2级万圣节集市", presets: [{ name: "旧1级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl1.png" }, { name: "旧2级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl2.png" }, { name: "旧3级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl3.png" }] },
-                    "autumn-market-lvl3.png": { name: "3级万圣节集市", presets: [{ name: "旧1级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl1.png" }, { name: "旧2级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl2.png" }, { name: "旧3级万圣节集市", url: "https://scimg.22-7.top/images/landscape/autumn-market-lvl3.png" }] }
-                },
-                "Xmas市场": {
-                    "xmas-market-lvl1.png": { name: "1级Xmas市场", presets: [{ name: "旧1级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl1.png" }, { name: "旧2级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl2.png" }, { name: "旧3级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl3.png" }] },
-                    "xmas-market-lvl2.png": { name: "2级Xmas市场", presets: [{ name: "旧1级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl1.png" }, { name: "旧2级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl2.png" }, { name: "旧3级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl3.png" }] },
-                    "xmas-market-lvl3.png": { name: "3级Xmas市场", presets: [{ name: "旧1级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl1.png" }, { name: "旧2级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl2.png" }, { name: "旧3级Xmas市场", url: "https://scimg.22-7.top/images/landscape/xmas-market-lvl3.png" }] }
-                },
-                "沙滩集市": {
-                    "beach-market-lvl1.png": { name: "1级沙滩集市", presets: [{ name: "旧1级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl1.png" }, { name: "旧2级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl2.png" }, { name: "旧3级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl3.png" }] },
-                    "beach-market-lvl2.png": { name: "2级沙滩集市", presets: [{ name: "旧1级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl1.png" }, { name: "旧2级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl2.png" }, { name: "旧3级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl3.png" }] },
-                    "beach-market-lvl3.png": { name: "3级沙滩集市", presets: [{ name: "旧1级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl1.png" }, { name: "旧2级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl2.png" }, { name: "旧3级沙滩集市", url: "https://scimg.22-7.top/images/landscape/beach-market-lvl3.png" }] }
-                },
-                "春季集市": {
-                    "spring_market_tier01.png": { name: "1级春季集市", presets: [{ name: "旧1级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier01.png" }, { name: "旧2级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier02.png" }, { name: "旧3级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier03.png" }] },
-                    "spring_market_tier02.png": { name: "2级春季集市", presets: [{ name: "旧1级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier01.png" }, { name: "旧2级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier02.png" }, { name: "旧3级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier03.png" }] },
-                    "spring_market_tier03.png": { name: "3级春季集市", presets: [{ name: "旧1级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier01.png" }, { name: "旧2级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier02.png" }, { name: "旧3级春季集市", url: "https://scimg.22-7.top/images/buildings/seasonal/spring_market_tier03.png" }] }
-                }
-            }
-        },
-        "背景和环境": {
-            "全局背景": {
-                "背景": {
-                    "sc_background_main_light_2k_v2.png": { name: "浅色模式", presets: [{ name: "旧浅色模式", url: "https://scimg.22-7.top/images/background.png" }] },
-                    "sc_background_main_dark_2k_v2.png": { name: "深色模式", presets: [{ name: "旧深色模式", url: "https://scimg.22-7.top/images/background-dark.png" }] }
-                }
-            },
-            "地图上固定建筑": {
-                "交易所": {
-                    "exchange_tier01.png": { name: "1级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier02.png": { name: "2级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier03.png": { name: "3级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier04.png": { name: "4级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier05.png": { name: "5级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier06.png": { name: "7级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier07.png": { name: "9级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier08.png": { name: "12级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier09.png": { name: "15级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier10.png": { name: "20级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier11.png": { name: "25级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier12.png": { name: "30级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier13.png": { name: "35级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier14.png": { name: "40级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier15.png": { name: "45级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier16.png": { name: "50级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier17.png": { name: "55级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-                    "exchange_tier18.png": { name: "60级交易所", presets: [{ name: "旧交易所", url: "https://scimg.22-7.top/images/landscape/exchange.png" }] },
-
-                },
-                "其它": {
-                    "residential_02.png": { name: "residential_02", presets: [{ name: "residential21", url: "https://scimg.22-7.top/images/landscape/decorations/residential21.png" }] },
-                    "forrest_02.png": { name: "forrest_02", presets: [{ name: "residential31", url: "https://scimg.22-7.top/images/landscape/decorations/residential31.png" }] },
-                    "forrest_03.png": { name: "forrest_03", presets: [{ name: "residential4", url: "https://scimg.22-7.top/images/landscape/decorations/residential4.png" }] },
-                    "residential_01.png": { name: "residential_01", presets: [{ name: "residential11", url: "https://scimg.22-7.top/images/landscape/decorations/residential11.png" }] },
-                    "park_01.png": { name: "park_01", presets: [{ name: "park", url: "https://scimg.22-7.top/images/landscape/decorations/park.png" }] },
-                    "construction_slot_01.png": { name: "construction_slot_01", presets: [{ name: "empty", url: "https://scimg.22-7.top/images/landscape/decorations/empty.png" }] },
-                    "construction_slot_02.png": { name: "construction_slot_02", presets: [{ name: "empty2", url: "https://scimg.22-7.top/images/landscape/decorations/empty2.png" }] },
-                    "forrest_04.png": { name: "forrest_04", presets: [{ name: "trees", url: "https://scimg.22-7.top/images/landscape/decorations/trees.png" }] },
-                    "town_square_01.png": { name: "town_square_01", presets: [{ name: "plaza", url: "https://scimg.22-7.top/images/landscape/decorations/plaza.png" }] }
-                }
-            },
-            "季节性": {
-                "地块": {
-                    "concrete-0000.png": { name: "concrete-0000", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0000.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0000.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0000.png" }] },
-                    "concrete-0001.png": { name: "concrete-0001", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0001.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0001.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0001.png" }] },
-                    "concrete-0010.png": { name: "concrete-0010", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0010.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0010.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0010.png" }] },
-                    "concrete-0011.png": { name: "concrete-0011", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0011.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0011.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0011.png" }] },
-                    "concrete-0100.png": { name: "concrete-0100", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0100.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0100.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0100.png" }] },
-                    "concrete-0110.png": { name: "concrete-0110", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-0110.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-0110.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-0110.png" }] },
-                    "concrete-1000.png": { name: "concrete-1000", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1000.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1000.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1000.png" }] },
-                    "concrete-1001.png": { name: "concrete-1001", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1001.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1001.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1001.png" }] },
-                    "concrete-1100.png": { name: "concrete-1100", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1100.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1100.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1100.png" }] },
-                    "concrete-1111.png": { name: "concrete-1111", presets: [{ name: "万圣节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-halloween-1111.png" }, { name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-xmas-1111.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/tiles/seasonal/concrete-spring-1111.png" }] }
-                },
-                "道路": {
-                    "intersection.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/intersection-xmas.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/intersection-spring.png" }] },
-                    "road-left-00.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-00.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-spring-00.png" }] },
-                    "road-left-01.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-01.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-spring-01.png" }] },
-                    "road-left-10.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-xmas-10.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-left-spring-10.png" }] },
-                    "road-00.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-00.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-spring-00.png" }] },
-                    "road-01.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-01.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-spring-01.png" }] },
-                    "road-10.png": { name: "intersection", presets: [{ name: "圣诞节", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-xmas-10.png" }, { name: "春季", url: "https://scimg.22-7.top/images/buildings/roads/seasonal/road-spring-10.png" }] },
-                }
-            }
-        },
-        "资源": {
-            "农业": {
-                "种子": { "seeds.png": { name: "种子", presets: [{ name: "种子", url: "https://scimg.22-7.top/images/resources/seeds.png" }] } },
-                "苹果": { "apples.png": { name: "苹果", presets: [{ name: "苹果", url: "https://scimg.22-7.top/images/resources/apples.png" }] } },
-                "橘子": { "oranges.png": { name: "橘子", presets: [{ name: "橘子", url: "https://scimg.22-7.top/images/resources/oranges.png" }] } },
-                "葡萄": { "grapes.png": { name: "葡萄", presets: [{ name: "葡萄", url: "https://scimg.22-7.top/images/resources/grapes.png" }] } },
-                "谷物": { "grain.png": { name: "谷物", presets: [{ name: "谷物", url: "https://scimg.22-7.top/images/resources/grain.png" }] } },
-                "甘蔗": { "sugarcane.png": { name: "甘蔗", presets: [{ name: "甘蔗", url: "https://scimg.22-7.top/images/resources/sugarcane.png" }] } },
-                "棉花": { "cotton.png": { name: "棉花", presets: [{ name: "棉花", url: "https://scimg.22-7.top/images/resources/cotton.png" }] } },
-                "牛": { "cow.png": { name: "牛", presets: [{ name: "牛", url: "https://scimg.22-7.top/images/resources/cow.png" }] } },
-                "猪": { "pig.png": { name: "猪", presets: [{ name: "猪", url: "https://scimg.22-7.top/images/resources/pig.png" }] } },
-                "咖啡豆": { "coffee-beans.png": { name: "咖啡豆", presets: [{ name: "咖啡豆", url: "https://scimg.22-7.top/images/resources/coffee-beans.png" }] } },
-                "可可": { "cocoa-beans.png": { name: "可可", presets: [{ name: "可可", url: "https://scimg.22-7.top/images/resources/cocoa-beans.png" }] } },
-                "蔬菜": { "vegetables.png": { name: "蔬菜", presets: [{ name: "蔬菜", url: "https://scimg.22-7.top/images/resources/vegetables.png" }] } },
-                "动物饲料": { "fodder.png": { name: "动物饲料", presets: [{ name: "动物饲料", url: "https://scimg.22-7.top/images/resources/fodder.png" }] } }
-            },
-            "食品加工业": {
-                "面团": { "dough.png": { name: "面团", presets: [{ name: "面团", url: "https://scimg.22-7.top/images/resources/dough.png" }] } },
-                "酱汁": { "gravy-boat.png": { name: "酱汁", presets: [{ name: "酱汁", url: "https://scimg.22-7.top/images/resources/gravy-boat.png" }] } },
-                "牛排": { "steak.png": { name: "牛排", presets: [{ name: "牛排", url: "https://scimg.22-7.top/images/resources/steak.png" }] } },
-                "香肠": { "sausages.png": { name: "香肠", presets: [{ name: "香肠", url: "https://scimg.22-7.top/images/resources/sausages.png" }] } },
-                "鸡蛋": { "eggs.png": { name: "鸡蛋", presets: [{ name: "鸡蛋", url: "https://scimg.22-7.top/images/resources/eggs.png" }] } },
-                "牛奶": { "milk.png": { name: "牛奶", presets: [{ name: "牛奶", url: "https://scimg.22-7.top/images/resources/milk.png" }] } },
-                "咖啡粉": { "coffee-ground.png": { name: "咖啡粉", presets: [{ name: "咖啡粉", url: "https://scimg.22-7.top/images/resources/coffee-ground.png" }] } },
-                "面粉": { "flour.png": { name: "面粉", presets: [{ name: "面粉", url: "https://scimg.22-7.top/images/resources/flour.png" }] } },
-                "面包": { "bread.png": { name: "面包", presets: [{ name: "面包", url: "https://scimg.22-7.top/images/resources/bread.png" }] } },
-                "苹果派": { "apple-pie.png": { name: "苹果派", presets: [{ name: "苹果派", url: "https://scimg.22-7.top/images/resources/apple-pie.png" }] } },
-                "橙汁": { "orange-juice.png": { name: "橙汁", presets: [{ name: "橙汁", url: "https://scimg.22-7.top/images/resources/orange-juice.png" }] } },
-                "苹果汁": { "apple-cider.png": { name: "苹果汁", presets: [{ name: "苹果汁", url: "https://scimg.22-7.top/images/resources/apple-cider.png" }] } },
-                "姜汁啤酒": { "ginger-beer.png": { name: "姜汁啤酒", presets: [{ name: "姜汁啤酒", url: "https://scimg.22-7.top/images/resources/ginger-beer.png" }] } },
-                "披萨": { "pizza.png": { name: "披萨", presets: [{ name: "披萨", url: "https://scimg.22-7.top/images/resources/pizza.png" }] } },
-                "面条": { "pasta.png": { name: "面条", presets: [{ name: "面条", url: "https://scimg.22-7.top/images/resources/pasta.png" }] } },
-                "黄油": { "butter.png": { name: "黄油", presets: [{ name: "黄油", url: "https://scimg.22-7.top/images/resources/butter.png" }] } },
-                "芝士": { "cheese.png": { name: "芝士", presets: [{ name: "芝士", url: "https://scimg.22-7.top/images/resources/cheese.png" }] } },
-                "巧克力": { "chocolate.png": { name: "巧克力", presets: [{ name: "巧克力", url: "https://scimg.22-7.top/images/resources/chocolate.png" }] } },
-                "糖": { "sugar.png": { name: "糖", presets: [{ name: "糖", url: "https://scimg.22-7.top/images/resources/sugar.png" }] } },
-                "汉堡包": { "hamburger.png": { name: "汉堡包", presets: [{ name: "汉堡包", url: "https://scimg.22-7.top/images/resources/hamburger.png" }] } },
-                "千层面": { "lasagna.png": { name: "千层面", presets: [{ name: "千层面", url: "https://scimg.22-7.top/images/resources/lasagna.png" }] } },
-                "肉丸": { "meatballs.png": { name: "肉丸", presets: [{ name: "肉丸", url: "https://scimg.22-7.top/images/resources/meatballs.png" }] } },
-                "鸡尾酒": { "cocktails.png": { name: "鸡尾酒", presets: [{ name: "鸡尾酒", url: "https://scimg.22-7.top/images/resources/cocktails.png" }] } },
-                "植物油": { "vegetable-oil.png": { name: "植物油", presets: [{ name: "植物油", url: "https://scimg.22-7.top/images/resources/vegetable-oil.png" }] } },
-                "沙拉": { "salad.png": { name: "沙拉", presets: [{ name: "沙拉", url: "https://scimg.22-7.top/images/resources/salad.png" }] } },
-                "咖喱角": { "samosas.png": { name: "咖喱角", presets: [{ name: "咖喱角", url: "https://scimg.22-7.top/images/resources/samosas.png" }] } },
-                "南瓜汤": { "pumpkin-soup.png": { name: "南瓜汤", presets: [{ name: "南瓜汤", url: "https://scimg.22-7.top/images/resources/pumpkin-soup.png" }] } }
-            },
-            "建设": {
-                "木材": { "wood.png": { name: "木材", presets: [{ name: "木材", url: "https://scimg.22-7.top/images/resources/wood.png" }] } },
-                "钢筋混凝土": { "reinforced-concrete.png": { name: "钢筋混凝土", presets: [{ name: "钢筋混凝土", url: "https://scimg.22-7.top/images/resources/reinforced-concrete.png" }] } },
-                "砖块": { "bricks.png": { name: "砖块", presets: [{ name: "砖块", url: "https://scimg.22-7.top/images/resources/bricks.png" }] } },
-                "水泥": { "cement.png": { name: "水泥", presets: [{ name: "水泥", url: "https://scimg.22-7.top/images/resources/cement.png" }] } },
-                "黏土": { "clay.png": { name: "黏土", presets: [{ name: "黏土", url: "https://scimg.22-7.top/images/resources/clay.png" }] } },
-                "石灰石": { "limestone.png": { name: "石灰石", presets: [{ name: "石灰石", url: "https://scimg.22-7.top/images/resources/limestone.png" }] } },
-                "钢筋": { "steel-beams.png": { name: "钢筋", presets: [{ name: "钢筋", url: "https://scimg.22-7.top/images/resources/steel-beams.png" }] } },
-                "木板": { "planks.png": { name: "木板", presets: [{ name: "木板", url: "https://scimg.22-7.top/images/resources/planks.png" }] } },
-                "窗户": { "windows.png": { name: "窗户", presets: [{ name: "窗户", url: "https://scimg.22-7.top/images/resources/windows.png" }] } },
-                "工具": { "tools.png": { name: "工具", presets: [{ name: "工具", url: "https://scimg.22-7.top/images/resources/tools.png" }] } },
-                "建筑预构件": { "construction-units.png": { name: "建筑预构件", presets: [{ name: "建筑预构件", url: "https://scimg.22-7.top/images/resources/construction-units.png" }] } }
-            },
-            "时装业": {
-                "棉布": { "fabric.png": { name: "棉布", presets: [{ name: "棉布", url: "https://scimg.22-7.top/images/resources/fabric.png" }] } },
-                "皮革": { "leather.png": { name: "皮革", presets: [{ name: "皮革", url: "https://scimg.22-7.top/images/resources/leather.png" }] } },
-                "内衣": { "underwear.png": { name: "内衣", presets: [{ name: "内衣", url: "https://scimg.22-7.top/images/resources/underwear.png" }] } },
-                "手套": { "gloves.png": { name: "手套", presets: [{ name: "手套", url: "https://scimg.22-7.top/images/resources/gloves.png" }] } },
-                "裙子": { "dress.png": { name: "裙子", presets: [{ name: "裙子", url: "https://scimg.22-7.top/images/resources/dress.png" }] } },
-                "高跟鞋": { "simmi-shoes.png": { name: "高跟鞋", presets: [{ name: "高跟鞋", url: "https://scimg.22-7.top/images/resources/simmi-shoes.png" }] } },
-                "手袋": { "handbags.png": { name: "手袋", presets: [{ name: "手袋", url: "https://scimg.22-7.top/images/resources/handbags.png" }] } },
-                "运动鞋": { "sneakers.png": { name: "运动鞋", presets: [{ name: "运动鞋", url: "https://scimg.22-7.top/images/resources/sneakers.png" }] } },
-                "名牌手表": { "gold-watch.png": { name: "名牌手表", presets: [{ name: "名牌手表", url: "https://scimg.22-7.top/images/resources/gold-watch.png" }] } },
-                "项链": { "necklace.png": { name: "项链", presets: [{ name: "项链", url: "https://scimg.22-7.top/images/resources/necklace.png" }] } }
-            },
-            "能源行业": {
-                "原油": { "crude-oil.png": { name: "原油", presets: [{ name: "原油", url: "https://scimg.22-7.top/images/resources/crude-oil.png" }] } },
-                "汽油": { "petrol.png": { name: "汽油", presets: [{ name: "汽油", url: "https://scimg.22-7.top/images/resources/petrol.png" }] } },
-                "柴油": { "diesel.png": { name: "柴油", presets: [{ name: "柴油", url: "https://scimg.22-7.top/images/resources/diesel.png" }] } },
-                "电力": { "power.png": { name: "电力", presets: [{ name: "电力", url: "https://scimg.22-7.top/images/resources/power.png" }] } },
-                "乙醇": { "ethanol.png": { name: "乙醇", presets: [{ name: "乙醇", url: "https://scimg.22-7.top/images/resources/ethanol.png" }] } },
-                "甲烷": { "methane.png": { name: "甲烷", presets: [{ name: "甲烷", url: "https://scimg.22-7.top/images/resources/methane.png" }] } },
-                "火箭燃料": { "rocket-fuel.png": { name: "火箭燃料", presets: [{ name: "火箭燃料", url: "https://scimg.22-7.top/images/resources/rocket-fuel.png" }] } }
-            },
-            "电子产品制造业": {
-                "处理器": { "processors.png": { name: "处理器", presets: [{ name: "处理器", url: "https://scimg.22-7.top/images/resources/processors.png" }] } },
-                "电子元件": { "electronic-components.png": { name: "电子元件", presets: [{ name: "电子元件", url: "https://scimg.22-7.top/images/resources/electronic-components.png" }] } },
-                "电池": { "batteries.png": { name: "电池", presets: [{ name: "电池", url: "https://scimg.22-7.top/images/resources/batteries.png" }] } },
-                "显示屏": { "displays.png": { name: "显示屏", presets: [{ name: "显示屏", url: "https://scimg.22-7.top/images/resources/displays.png" }] } },
-                "智能手机": { "smart-phones.png": { name: "智能手机", presets: [{ name: "智能手机", url: "https://scimg.22-7.top/images/resources/smart-phones.png" }] } },
-                "平板电脑": { "tablets.png": { name: "平板电脑", presets: [{ name: "平板电脑", url: "https://scimg.22-7.top/images/resources/tablets.png" }] } },
-                "笔记本电脑": { "laptops.png": { name: "笔记本电脑", presets: [{ name: "笔记本电脑", url: "https://scimg.22-7.top/images/resources/laptops.png" }] } },
-                "显示器": { "monitors.png": { name: "显示器", presets: [{ name: "显示器", url: "https://scimg.22-7.top/images/resources/monitors.png" }] } },
-                "电视机": { "televisions.png": { name: "电视机", presets: [{ name: "电视机", url: "https://scimg.22-7.top/images/resources/televisions.png" }] } },
-                "精密电子元件": { "high-grade-e-components.png": { name: "精密电子元件", presets: [{ name: "精密电子元件", url: "https://scimg.22-7.top/images/resources/high-grade-e-components.png" }] } },
-                "无人机": { "quadcopter.png": { name: "无人机", presets: [{ name: "无人机", url: "https://scimg.22-7.top/images/resources/quadcopter.png" }] } },
-                "机器人": { "robots.png": { name: "机器人", presets: [{ name: "机器人", url: "https://scimg.22-7.top/images/resources/robots.png" }] } }
-            },
-            "汽车制造业": {
-                "车载电脑": { "on-board-computer.png": { name: "车载电脑", presets: [{ name: "车载电脑", url: "https://scimg.22-7.top/images/resources/on-board-computer.png" }] } },
-                "电动马达": { "electric-motor.png": { name: "电动马达", presets: [{ name: "电动马达", url: "https://scimg.22-7.top/images/resources/electric-motor.png" }] } },
-                "豪华车内饰": { "luxury-car-interior.png": { name: "豪华车内饰", presets: [{ name: "豪华车内饰", url: "https://scimg.22-7.top/images/resources/luxury-car-interior.png" }] } },
-                "基本内饰": { "car-interior.png": { name: "基本内饰", presets: [{ name: "基本内饰", url: "https://scimg.22-7.top/images/resources/car-interior.png" }] } },
-                "车身": { "car-body.png": { name: "车身", presets: [{ name: "车身", url: "https://scimg.22-7.top/images/resources/car-body.png" }] } },
-                "内燃机": { "combustion-engine.png": { name: "内燃机", presets: [{ name: "内燃机", url: "https://scimg.22-7.top/images/resources/combustion-engine.png" }] } },
-                "经济电动车": { "economy-e-car.png": { name: "经济电动车", presets: [{ name: "经济电动车", url: "https://scimg.22-7.top/images/resources/economy-e-car.png" }] } },
-                "豪华电动车": { "luxury-e-car.png": { name: "豪华电动车", presets: [{ name: "豪华电动车", url: "https://scimg.22-7.top/images/resources/luxury-e-car.png" }] } },
-                "经济燃油车": { "economy-car.png": { name: "经济燃油车", presets: [{ name: "经济燃油车", url: "https://scimg.22-7.top/images/resources/economy-car.png" }] } },
-                "豪华燃油车": { "luxury-car.png": { name: "豪华燃油车", presets: [{ name: "豪华燃油车", url: "https://scimg.22-7.top/images/resources/luxury-car.png" }] } },
-                "卡车": { "truck.png": { name: "卡车", presets: [{ name: "卡车", url: "https://scimg.22-7.top/images/resources/truck.png" }] } },
-                "推土机": { "bulldozer.png": { name: "推土机", presets: [{ name: "推土机", url: "https://scimg.22-7.top/images/resources/bulldozer.png" }] } }
-            },
-            "航空航天制造业": {
-                "机身": { "fuselage.png": { name: "机身", presets: [{ name: "机身", url: "https://scimg.22-7.top/images/resources/fuselage.png" }] } },
-                "机翼": { "wing.png": { name: "机翼", presets: [{ name: "机翼", url: "https://scimg.22-7.top/images/resources/wing.png" }] } },
-                "飞行计算机": { "flight-computer.png": { name: "飞行计算机", presets: [{ name: "飞行计算机", url: "https://scimg.22-7.top/images/resources/flight-computer.png" }] } },
-                "座舱": { "cockpit.png": { name: "座舱", presets: [{ name: "座舱", url: "https://scimg.22-7.top/images/resources/cockpit.png" }] } },
-                "姿态控制器": { "attitude-control.png": { name: "姿态控制器", presets: [{ name: "姿态控制器", url: "https://scimg.22-7.top/images/resources/attitude-control.png" }] } },
-                "燃料储罐": { "fuel-tank.png": { name: "燃料储罐", presets: [{ name: "燃料储罐", url: "https://scimg.22-7.top/images/resources/fuel-tank.png" }] } },
-                "固体燃料助推器": { "solid-rocket.png": { name: "固体燃料助推器", presets: [{ name: "固体燃料助推器", url: "https://scimg.22-7.top/images/resources/solid-rocket.png" }] } },
-                "火箭发动机": { "rocket-engine.png": { name: "火箭发动机", presets: [{ name: "火箭发动机", url: "https://scimg.22-7.top/images/resources/rocket-engine.png" }] } },
-                "隔热板": { "heat-shield.png": { name: "隔热板", presets: [{ name: "隔热板", url: "https://scimg.22-7.top/images/resources/heat-shield.png" }] } },
-                "离子推进器": { "ion-drive.png": { name: "离子推进器", presets: [{ name: "离子推进器", url: "https://scimg.22-7.top/images/resources/ion-drive.png" }] } },
-                "喷气发动机": { "jet-engine.png": { name: "喷气发动机", presets: [{ name: "喷气发动机", url: "https://scimg.22-7.top/images/resources/jet-engine.png" }] } },
-                "亚轨道火箭": { "sub-orbital-rocket2.png": { name: "亚轨道火箭", presets: [{ name: "亚轨道火箭", url: "https://scimg.22-7.top/images/resources/sub-orbital-rocket2.png" }] } },
-                "BFR": { "BFR.png": { name: "BFR", presets: [{ name: "BFR", url: "https://scimg.22-7.top/images/resources/BFR.png" }] } },
-                "喷气客机": { "jumbojet2.png": { name: "喷气客机", presets: [{ name: "喷气客机", url: "https://scimg.22-7.top/images/resources/jumbojet2.png" }] } },
-                "豪华飞机": { "private-jet.png": { name: "豪华飞机", presets: [{ name: "豪华飞机", url: "https://scimg.22-7.top/images/resources/private-jet.png" }] } },
-                "单引擎飞机": { "single-engine.png": { name: "单引擎飞机", presets: [{ name: "单引擎飞机", url: "https://scimg.22-7.top/images/resources/single-engine.png" }] } },
-                "人造卫星": { "satellite.png": { name: "人造卫星", presets: [{ name: "人造卫星", url: "https://scimg.22-7.top/images/resources/satellite.png" }] } },
-            },
-            "原材料加工业": {
-                "水": { "water.png": { name: "水", presets: [{ name: "水", url: "https://scimg.22-7.top/images/resources/water.png" }] } },
-                "运输单位": { "transport.png": { name: "运输单位", presets: [{ name: "运输单位", url: "https://scimg.22-7.top/images/resources/transport.png" }] } },
-                "矿物": { "minerals.png": { name: "矿物", presets: [{ name: "矿物", url: "https://scimg.22-7.top/images/resources/minerals.png" }] } },
-                "铝土矿": { "bauxite.png": { name: "铝土矿", presets: [{ name: "铝土矿", url: "https://scimg.22-7.top/images/resources/bauxite.png" }] } },
-                "硅材": { "silicon.png": { name: "硅材", presets: [{ name: "硅材", url: "https://scimg.22-7.top/images/resources/silicon.png" }] } },
-                "化合物": { "chemicals.png": { name: "化合物", presets: [{ name: "化合物", url: "https://scimg.22-7.top/images/resources/chemicals.png" }] } },
-                "铝材": { "aluminium.png": { name: "铝材", presets: [{ name: "铝材", url: "https://scimg.22-7.top/images/resources/aluminium.png" }] } },
-                "塑料": { "plastic.png": { name: "塑料", presets: [{ name: "塑料", url: "https://scimg.22-7.top/images/resources/plastic.png" }] } },
-                "铁矿石": { "iron-ore.png": { name: "铁矿石", presets: [{ name: "铁矿石", url: "https://scimg.22-7.top/images/resources/iron-ore.png" }] } },
-                "钢材": { "steel.png": { name: "钢材", presets: [{ name: "钢材", url: "https://scimg.22-7.top/images/resources/steel.png" }] } },
-                "沙子": { "sand.png": { name: "沙子", presets: [{ name: "沙子", url: "https://scimg.22-7.top/images/resources/sand.png" }] } },
-                "玻璃": { "glass.png": { name: "玻璃", presets: [{ name: "玻璃", url: "https://scimg.22-7.top/images/resources/glass.png" }] } },
-                "金矿石": { "gold-ore.png": { name: "金矿石", presets: [{ name: "金矿石", url: "https://scimg.22-7.top/images/resources/gold-ore.png" }] } },
-                "金条": { "golden-bars.png": { name: "金条", presets: [{ name: "金条", url: "https://scimg.22-7.top/images/resources/golden-bars.png" }] } },
-                "碳纤维": { "carbon-fiber.png": { name: "碳纤维", presets: [{ name: "碳纤维", url: "https://scimg.22-7.top/images/resources/carbon-fiber.png" }] } },
-                "碳纤复合材": { "carbon-composite.png": { name: "碳纤复合材", presets: [{ name: "碳纤复合材", url: "https://scimg.22-7.top/images/resources/carbon-composite.png" }] } }
-            },
-            "科研行业": {
-                "作物研究": { "plant-research.png": { name: "作物研究", presets: [{ name: "作物研究", url: "https://scimg.22-7.top/images/resources/plant-research.png" }] } },
-                "能源研究": { "energy-research.png": { name: "能源研究", presets: [{ name: "能源研究", url: "https://scimg.22-7.top/images/resources/energy-research.png" }] } },
-                "采矿研究": { "mining-research.png": { name: "采矿研究", presets: [{ name: "采矿研究", url: "https://scimg.22-7.top/images/resources/mining-research.png" }] } },
-                "电器研究": { "electronics-research.png": { name: "电器研究", presets: [{ name: "电器研究", url: "https://scimg.22-7.top/images/resources/electronics-research.png" }] } },
-                "畜牧研究": { "breeding-research.png": { name: "畜牧研究", presets: [{ name: "畜牧研究", url: "https://scimg.22-7.top/images/resources/breeding-research.png" }] } },
-                "化学研究": { "chemistry-research.png": { name: "化学研究", presets: [{ name: "化学研究", url: "https://scimg.22-7.top/images/resources/chemistry-research.png" }] } },
-                "软件": { "software.png": { name: "软件", presets: [{ name: "软件", url: "https://scimg.22-7.top/images/resources/software.png" }] } },
-                "汽车研究": { "automotive-research.png": { name: "汽车研究", presets: [{ name: "汽车研究", url: "https://scimg.22-7.top/images/resources/automotive-research.png" }] } },
-                "时装研究": { "fashion-research.png": { name: "时装研究", presets: [{ name: "时装研究", url: "https://scimg.22-7.top/images/resources/fashion-research.png" }] } },
-                "航空航天研究": { "aero-research.png": { name: "航空航天研究", presets: [{ name: "航空航天研究", url: "https://scimg.22-7.top/images/resources/aero-research.png" }] } },
-                "材料研究": { "materials-research.png": { name: "材料研究", presets: [{ name: "材料研究", url: "https://scimg.22-7.top/images/resources/materials-research.png" }] } },
-                "食谱": { "recipes.png": { name: "食谱", presets: [{ name: "食谱", url: "https://scimg.22-7.top/images/resources/recipes.png" }] } }
-            },
-            "季节性": {
-                "南瓜": { "pumpkin.png": { name: "南瓜", presets: [{ name: "南瓜", url: "https://scimg.22-7.top/images/resources/pumpkin.png" }] } },
-                "复活节兔兔": { "easter-bunny.png": { name: "复活节兔兔", presets: [{ name: "旧复活节兔兔", url: "https://scimg.22-7.top/images/resources/easter-bunny_old01.png" }] } },
-                "奶油鸡蛋": { "cream-egg.png": { name: "奶油鸡蛋", presets: [{ name: "Cream egg", url: "https://scimg.22-7.top/images/resources/cream-egg.png" }] } },
-                "圣诞爆竹": { "xmas-crackers.png": { name: "圣诞爆竹", presets: [{ name: "旧圣诞爆竹", url: "https://scimg.22-7.top/images/resources/xmas-crackers_old01.png" }] } },
-                "圣诞装饰品": { "xmas-ornament.png": { name: "圣诞装饰品", presets: [{ name: "旧圣诞装饰品", url: "https://scimg.22-7.top/images/resources/xmas-ornament_old01.png" }] } },
-                "杰克灯笼": { "jack-o-lantern.png": { name: "杰克灯笼", presets: [{ name: "杰克灯笼", url: "https://scimg.22-7.top/images/resources/jack-o-lantern.png" }] } },
-                "女巫服": { "witch-costume.png": { name: "女巫服", presets: [{ name: "女巫服", url: "https://scimg.22-7.top/images/resources/witch-costume.png" }] } },
-                "树": { "tree.png": { name: "树", presets: [{ name: "树", url: "https://scimg.22-7.top/images/resources/tree.png" }] } },
-                "斋月糖果": { "ramadan-sweets.png": { name: "斋月糖果", presets: [{ name: "斋月糖果", url: "https://scimg.22-7.top/images/resources/ramadan-sweets.png" }] } },
-                "巧克力冰淇淋": { "icecream-chocolate.png": { name: "巧克力冰淇淋", presets: [{ name: "巧克力冰淇淋", url: "https://scimg.22-7.top/images/resources/icecream-chocolate.png" }] } },
-                "苹果冰淇淋": { "icecream-apple.png": { name: "苹果冰淇淋", presets: [{ name: "苹果冰淇淋", url: "https://scimg.22-7.top/images/resources/icecream-apple.png" }] } }
-            }
-        }
-    };
-
+    // DEFAULT_UI_MANIFEST 已移除，改用远程配置中的 uiManifest
 
     // 声明为 let，允许被外部配置覆盖
-    let PATH_MAP = { ...DEFAULT_PATH_MAP };
-    let UI_MANIFEST = JSON.parse(JSON.stringify(DEFAULT_UI_MANIFEST));
+    let PATH_MAP = {}; // 由远程配置填充
+    let UI_MANIFEST = {}; // 由远程配置填充
 
     // ==========================================
     // 新增：远程配置与数据管理器
@@ -1103,10 +99,13 @@
                     // ==========================================
                     // 🔥 核心：热替换 (Hot Reload) 逻辑
                     // ==========================================
-                    // 1. 重新解析全新的 UI_MANIFEST，提取最新的图片 Key 列表
-                    Settings.init();
+                    // 1. 仅刷新 key 列表，不清除用户设置
+                    Settings.refreshKeys();
 
-                    // 2. 如果设置面板当前已经存在于页面上，强制刷新它的 UI
+                    // 2. 清理已失效的用户设置（原图已不存在的项）
+                    Settings.cleanup();
+
+                    // 3. 如果设置面板当前已经存在于页面上，强制刷新它的 UI
                     if (typeof SCobgUIManager !== 'undefined' && SCobgUIManager.panel) {
                         SCobgUIManager.renderSidebar(); // 重新生成左侧树形菜单
 
@@ -1121,7 +120,7 @@
                         }
                     }
 
-                    // 3. 触发全局扫描器，瞬间替换游戏地图和背景上的图片！
+                    // 4. 触发全局扫描器，瞬间替换游戏地图和背景上的图片！
                     if (typeof Scheduler !== 'undefined') {
                         Scheduler.scanAll();
                     }
@@ -1142,9 +141,10 @@
     const Settings = {
         data: {}, // 存储用户的自定义设置 { "power_plant_tier01.png": { enabled: true, target: "url" } }
         allKeys: [], // 存储所有在 UI_MANIFEST 中定义的图片 key
+        _keyMap: null, // 缓存：baseKey.toLowerCase() -> key
 
-        init() {
-            // 1. 加载本地存储的用户设置
+        /** 从 localStorage 加载用户设置（不刷新 key 列表） */
+        load() {
             try {
                 const localRaw = localStorage.getItem(CONSTANTS.STORAGE_KEY);
                 if (localRaw) {
@@ -1156,8 +156,10 @@
                 console.error('[SC-Skin] 加载配置失败，将使用默认配置:', e);
                 this.data = {};
             }
+        },
 
-            // 2. 从 UI_MANIFEST 递归提取所有图片 key
+        /** 从 UI_MANIFEST 重新提取所有图片 key */
+        refreshKeys() {
             this.allKeys = [];
             const traverse = (obj) => {
                 for (let k in obj) {
@@ -1169,7 +171,41 @@
                 }
             };
             traverse(UI_MANIFEST);
+            // 重建快速查找 Map
+            this._keyMap = new Map();
+            for (const key of this.allKeys) {
+                const baseKey = key.replace('.png', '').toLowerCase();
+                this._keyMap.set(baseKey, key);
+            }
+        },
+
+        /** 完整初始化 = 加载设置 + 刷新 key 列表 + 清理过期项 */
+        init() {
+            this.load();
+            this.refreshKeys();
+            // 仅当远端配置已就绪时才清理（避免误删用户数据）
+            if (this.allKeys.length > 0) this.cleanup();
             console.log('[SC-Skin] 配置已加载');
+        },
+
+        /** 清理 settings 中已不再存在于 UI_MANIFEST 的过期 key */
+        cleanup() {
+            if (this.allKeys.length === 0) {
+                console.warn('[SC-Skin] 跳过清理：当前 key 列表为空，远端配置尚未就绪');
+                return;
+            }
+            const validKeys = new Set(this.allKeys);
+            let changed = false;
+            for (const key of Object.keys(this.data)) {
+                if (!validKeys.has(key)) {
+                    delete this.data[key];
+                    changed = true;
+                }
+            }
+            if (changed) {
+                this.save();
+                console.log('[SC-Skin] 已清理过期设置项');
+            }
         },
 
         save() {
@@ -1177,26 +213,30 @@
         },
 
         /**
-         * 核心：通过原文件名获取新 CDN URL (逻辑来自 oldBuildingsGraphic)
+         * 核心：通过原文件名获取新 CDN URL
+         * 1. 先用精确文件名匹配
+         * 2. 若未命中则降级为模糊匹配（包容 "-dmg" 等后缀变体）
          * @param {string} originalUrl - 原始图片 URL
          * @returns {string|null} - 替换后的 URL 或 null
          */
         getReplacementUrl(originalUrl) {
             if (!originalUrl) return null;
             const fullFileName = originalUrl.split('/').pop().split('?')[0].toLowerCase();
+            const fileNameNoExt = fullFileName.replace('.png', '');
 
+            // 1. 精确匹配
+            const exactKey = this._keyMap && this._keyMap.get(fileNameNoExt);
+            if (exactKey) {
+                const cfg = this.data[exactKey];
+                if (cfg && cfg.enabled && cfg.target) return cfg.target;
+            }
+
+            // 2. 模糊匹配（应对文件名有额外后缀如 -dmg 的情况）
             for (const key of this.allKeys) {
-                // 只有当 manifest 里的 key (如 construction_factory_tier06) 
-                // 确实出现在文件名中时才继续
                 const baseKey = key.replace('.png', '').toLowerCase();
-
                 if (fullFileName.includes(baseKey)) {
-                    const config = this.data[key];
-                    if (config && config.enabled && config.target) {
-                        // 如果需要验证逻辑，可以在此处 append Token
-                        return config.target;
-                    }
-                    // 注意：这里不要 return null，因为可能后续的 key 才是真正匹配的
+                    const cfg = this.data[key];
+                    if (cfg && cfg.enabled && cfg.target) return cfg.target;
                 }
             }
             return null;
@@ -1528,68 +568,70 @@
                 /* ================================ */
                 @media screen and (max-width: 768px) {
                     #scobg-panel { 
-                        width: 100vw; height: 100vh; max-height: 100vh; 
-                        top: 0; left: 0; transform: none; border-radius: 0; 
+                        width: 96vw; height: 92vh; max-height: 92vh; 
+                        top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                        border-radius: 16px; 
                     }
     
-                    /* 头部：允许换行，增加高度 */
+                    /* 头部：更紧凑 */
                     .scobg-header { 
-                        height: auto; min-height: 50px; 
-                        flex-wrap: wrap; gap: 8px; 
-                        padding: 8px 12px;
+                        height: auto; min-height: 44px; 
+                        flex-wrap: wrap; gap: 4px; 
+                        padding: 6px 10px;
                     }
-                    .scobg-header-title { font-size: 14px; }
-                    /* 隐藏长链接文字，仅保留短文案 */
-                    .scobg-header-title a { font-size: 11px; margin-left: 4px !important; }
+                    .scobg-header-title { font-size: 13px; }
+                    .scobg-header-title a { display: none; } /* 隐藏链接节省空间 */
     
-                    /* 按钮缩小间距 */
-                    .scobg-header-actions { gap: 5px; }
+                    /* 按钮缩小 */
+                    .scobg-header-actions { gap: 4px; }
                     .scobg-header-actions .scobg-btn-blue { 
-                        padding: 5px 8px; font-size: 11px; 
+                        padding: 6px 10px; font-size: 11px; 
+                        min-height: 32px; /* 增大触控目标 */
                     }
-                    /* 关闭按钮加大触控区 */
                     .scobg-header-actions #scobg-close { 
-                        font-size: 24px; padding: 5px 8px; 
+                        font-size: 22px; padding: 4px 8px; 
+                        min-height: 32px; display: flex; align-items: center;
                     }
     
                     .scobg-body { flex-direction: column; }
                     
-                    /* 侧边栏：占据上方 35%，增大触控区域 */
+                    /* 侧边栏：30% 让更多空间给内容 */
                     .scobg-sidebar { 
-                        width: 100%; min-height: 120px; height: 35%; 
+                        width: 100%; min-height: 100px; height: 30%; 
                         border-right: none; border-bottom: 1px solid #2a2f3a; 
                         overflow-y: auto; 
                     }
-                    .scobg-content { height: 65%; overflow-y: auto; }
+                    .scobg-content { height: 70%; overflow-y: auto; }
     
                     /* 树形菜单：增大触控区域 */
                     .scobg-tree-item { 
-                        padding: 14px 15px; font-size: 14px; 
-                        min-height: 46px; 
+                        padding: 12px 12px; font-size: 13px; 
+                        min-height: 44px; 
                     }
                     .scobg-l2 { padding-left: 28px; }
                     .scobg-l3 { padding-left: 48px; }
+                    .scobg-l3.active { border-left-width: 3px; }
     
                     /* 行：垂直堆叠 */
                     .scobg-row { 
                         flex-direction: column; align-items: flex-start; 
-                        gap: 14px; padding: 14px;
+                        gap: 12px; padding: 12px;
                     }
                     .scobg-info { width: 100%; }
+                    .scobg-check input { width: 20px; height: 20px; }
                     .scobg-imgs { width: 100%; justify-content: space-around; }
-                    /* 图片预览缩小 */
-                    .scobg-ui-img { width: 70px; height: 48px; }
+                    .scobg-ui-img { width: 64px; height: 44px; }
     
                     /* 弹窗菜单 */
                     .scobg-menu { 
-                        max-width: 280px; 
+                        max-width: 300px; 
                         grid-template-columns: repeat(2, 1fr); 
                         gap: 8px; padding: 10px;
                     }
+                    .scobg-menu-item { padding: 4px; }
                     .scobg-menu-item img { height: 42px; }
                     .scobg-menu-item span { font-size: 10px; }
     
-                    /* 空状态提示 */
                     .scobg-content-empty { font-size: 14px; }
                     .scobg-content-empty span:first-child { font-size: 32px !important; }
                 }
@@ -1598,69 +640,79 @@
                 /* 📱 小屏手机端 (≤480px)            */
                 /* ================================ */
                 @media screen and (max-width: 480px) {
-                    /* 头部变为两行：标题独占一行，按钮独占第二行 */
+                    /* 头部单行极简 */
                     .scobg-header { 
-                        flex-direction: column; 
-                        align-items: stretch;
-                        padding: 8px 10px; gap: 6px;
+                        padding: 6px 8px; gap: 4px;
+                        min-height: 40px;
                     }
                     .scobg-header-title { 
-                        text-align: center; width: 100%; 
-                        font-size: 13px;
+                        font-size: 12px; flex: 1; 
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
                     }
-                    .scobg-header-title a { display: none; }
-                    .scobg-header-actions { 
-                        width: 100%; justify-content: center; 
-                        gap: 4px; flex-wrap: wrap;
-                    }
-                    /* 按钮进一步缩小 */
                     .scobg-header-actions .scobg-btn-blue { 
-                        padding: 6px 8px; font-size: 10px; 
-                        border-radius: 4px;
+                        padding: 4px 6px; font-size: 10px; 
+                        min-height: 28px; border-radius: 3px;
+                    }
+                    /* 默认隐藏导入/导出，由 ··· 按钮控制显示 */
+                    .scobg-header-actions #scobg-import-btn,
+                    .scobg-header-actions #scobg-export { 
+                        display: none; 
+                    }
+                    /* ··· 更多按钮和帮助按钮始终可见 */
+                    .scobg-header-actions #scobg-more-btn,
+                    .scobg-header-actions #scobg-help-btn { 
+                        display: inline-flex !important; 
                     }
     
-                    /* 侧边栏占 35% */
-                    .scobg-sidebar { height: 35%; min-height: 100px; }
-                    .scobg-content { height: 65%; }
+                    /* 侧边栏占 30% */
+                    .scobg-sidebar { height: 30%; min-height: 80px; }
+                    .scobg-content { height: 70%; }
     
-                    /* 树形菜单 */
+                    /* 树形菜单：更紧凑 */
                     .scobg-tree-item { 
-                        padding: 12px 12px; font-size: 13px; 
-                        min-height: 44px;
+                        padding: 10px 10px; font-size: 12px; 
+                        min-height: 40px;
                     }
-                    .scobg-l2 { padding-left: 24px; }
-                    .scobg-l3 { padding-left: 40px; }
+                    .scobg-l2 { padding-left: 22px; }
+                    .scobg-l3 { padding-left: 36px; }
+                    .scobg-l3.active { border-left-width: 3px; }
     
-                    /* 行 */
-                    .scobg-row { padding: 12px; gap: 12px; }
-                    .scobg-grid { padding: 8px; }
-                    .scobg-name { font-size: 13px; }
-                    .scobg-check { font-size: 12px; }
-                    .scobg-check input { width: 20px; height: 20px; }
+                    /* 行卡片 */
+                    .scobg-row { padding: 10px; gap: 10px; }
+                    .scobg-grid { padding: 6px; }
+                    .scobg-name { font-size: 12px; }
+                    .scobg-check { font-size: 11px; }
+                    .scobg-check input { width: 22px; height: 22px; }
     
-                    /* 图片进一步缩小 */
-                    .scobg-imgs { gap: 8px; }
-                    .scobg-ui-img { width: 56px; height: 38px; }
+                    /* 图片紧凑 */
+                    .scobg-imgs { gap: 6px; }
+                    .scobg-ui-img { width: 50px; height: 34px; }
     
-                    /* 弹窗菜单全屏化 */
+                    /* 弹窗菜单：底部全宽 sheet */
                     .scobg-menu { 
-                        width: 94vw; max-width: 94vw; 
+                        width: 100vw; max-width: 100vw; 
                         grid-template-columns: repeat(3, 1fr); 
-                        gap: 6px; padding: 10px;
+                        gap: 6px; padding: 12px;
                         border-radius: 16px 16px 0 0;
-                        left: 3vw !important; top: auto !important;
+                        left: 0 !important; top: auto !important;
                         bottom: 0 !important; transform: none !important;
+                        max-height: 50vh; overflow-y: auto;
                     }
-                    .scobg-menu-item img { height: 40px; }
-                    .scobg-menu-item span { font-size: 10px; margin-top: 3px; }
-                    /* 自定义链接输入区域：极小屏下占满 3 列 */
+                    .scobg-menu-item { padding: 6px; }
+                    .scobg-menu-item img { height: 38px; }
+                    .scobg-menu-item span { font-size: 10px; margin-top: 2px; }
                     .scobg-menu-foot { 
                         grid-column: span 3 !important; 
                     }
+                    .scobg-menu-foot input { 
+                        padding: 8px !important; font-size: 14px !important; 
+                    }
     
-                    /* 内容面包屑 */
                     .scobg-content > div:first-child { 
-                        padding: 10px 12px !important; 
+                        padding: 8px 10px !important; 
+                    }
+                    .scobg-content > div:first-child > div:first-child { 
+                        font-size: 10px !important; 
                     }
                 }
             `;
@@ -1680,6 +732,8 @@
                         <button id="scobg-export" class="scobg-btn-blue scobg-btn-sm" style="background:#d35400;">导出配置</button>
                         <button id="scobg-save" class="scobg-btn-blue scobg-btn-sm" style="background:#2ecc71;">保存</button>
                         <button id="scobg-apply" class="scobg-btn-blue scobg-btn-sm">刷新</button>
+                        <button id="scobg-help-btn" class="scobg-btn-blue scobg-btn-sm" style="background:#555;font-weight:bold;font-size:14px;">?</button>
+                        <button id="scobg-more-btn" class="scobg-btn-blue scobg-btn-sm" style="display:none;background:#555;font-weight:bold;">···</button>
                         <div id="scobg-close" style="padding:5px; cursor:pointer; font-size:22px; color:#777; line-height:1;">✕</div>
                     </div>
                 </div>
@@ -1697,6 +751,7 @@
 
             // 绑定基础事件
             this.panel.querySelector('#scobg-close').onclick = () => this.togglePanel();
+            this.panel.querySelector('#scobg-help-btn').onclick = () => { if (typeof InstructionsManager !== 'undefined') InstructionsManager.show(); };
             this.panel.querySelector('#scobg-apply').onclick = () => location.reload();
             this.panel.querySelector('#scobg-save').onclick = (e) => {
                 if (typeof Settings !== 'undefined') {
@@ -1709,15 +764,20 @@
             };
 
             // =====================================
-            // 新增事件绑定：强制更新
+            // 手机端 "···" 更多操作弹出菜单
             // =====================================
-            // this.panel.querySelector('#scobg-force-update').onclick = () => {
-            //     const btn = this.panel.querySelector('#scobg-force-update');
-            //     btn.textContent = '更新中...';
-            //     ConfigManager.forceUpdateRemoteData().finally(() => {
-            //         btn.textContent = '强制更新数据';
-            //     });
-            // };
+            const moreBtn = this.panel.querySelector('#scobg-more-btn');
+            const importBtn = this.panel.querySelector('#scobg-import-btn');
+            const exportBtn = this.panel.querySelector('#scobg-export');
+            let moreOpen = false; // 用变量跟踪状态，避免 style.display 读不到 CSS 设置
+            moreBtn.onclick = (e) => {
+                e.stopPropagation();
+                moreOpen = !moreOpen;
+                importBtn.style.display = moreOpen ? 'inline-flex' : 'none';
+                exportBtn.style.display = moreOpen ? 'inline-flex' : 'none';
+                moreBtn.textContent = moreOpen ? '✕' : '···';
+                moreBtn.style.background = moreOpen ? '#e67e22' : '#555';
+            };
 
             // =====================================
             // 新增事件绑定：导出用户配置
@@ -2140,7 +1200,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    修改管理面板以适配不同屏幕尺寸
+            // @changelog    新增首次用户引导；优化手机端面板布局
 
             fetch(scriptUrl)
                 .then(res => res.text())
@@ -2183,7 +1243,127 @@
 
 
     // ==========================================
-    // 9. 启动 & 全局暴露
+    // 9. 使用说明与首次引导
+    // ==========================================
+    const InstructionsManager = {
+        overlay: null,
+        panel: null,
+
+        /** 使用说明的 HTML 内容 */
+        getHTML() {
+            return `
+                <div id="scobg-help" style="
+                    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+                    width:92vw; max-width:700px; max-height:85vh; overflow-y:auto;
+                    background:#1a1e26; border:1px solid #444; border-radius:12px;
+                    z-index:200000; color:#fff; font-family:-apple-system,system-ui,sans-serif;
+                    box-shadow:0 20px 60px rgba(0,0,0,0.9); display:none; flex-direction:column;
+                ">
+                    <div style="
+                        padding:16px 20px; border-bottom:1px solid #2a2f3a;
+                        display:flex; justify-content:space-between; align-items:center;
+                        background:#21262e; border-radius:12px 12px 0 0; position:sticky; top:0;
+                    ">
+                        <span style="font-size:16px; font-weight:bold;">📖 使用说明</span>
+                        <span id="scobg-help-close" style="
+                            cursor:pointer; font-size:22px; color:#777; padding:5px; line-height:1;
+                        ">✕</span>
+                    </div>
+                    <div style="padding:20px; font-size:14px; line-height:1.7; color:#ccc;">
+
+                        <h3 style="color:#fff; margin:0 0 8px 0;">🎯 这是什么？</h3>
+                        <p>本脚本可以替换 SimCompanies 游戏中的建筑图案、背景和资源图标，
+                        让你使用旧版建筑外观或自定义皮肤。</p>
+
+                        <h3 style="color:#fff; margin:20px 0 8px 0;">🚀 快速开始</h3>
+                        <ol style="margin:0; padding-left:20px;">
+                            <li>打开 SimCompanies 游戏页面</li>
+                            <li>点击 Tampermonkey 菜单 → <b>🎨 皮肤管理面板</b></li>
+                            <li>在左侧（手机上为上方）选择分类</li>
+                            <li>勾选 "<b>使用自定义皮肤</b>" 启用替换</li>
+                            <li>点击右侧预览图，选择你喜欢的皮肤图案</li>
+                            <li>也可以粘贴自定义图片链接</li>
+                        </ol>
+
+                        <h3 style="color:#fff; margin:20px 0 8px 0;">🖼️ 面板功能说明</h3>
+                        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                            <tr><td style="padding:6px 8px; border-bottom:1px solid #333; color:#2ecc71;">💾 保存</td><td style="padding:6px 8px; border-bottom:1px solid #333;">立即保存当前设置</td></tr>
+                            <tr><td style="padding:6px 8px; border-bottom:1px solid #333; color:#2196f3;">🔄 刷新</td><td style="padding:6px 8px; border-bottom:1px solid #333;">刷新页面使新皮肤生效</td></tr>
+                            <tr><td style="padding:6px 8px; border-bottom:1px solid #333; color:#e67e22;">📥 导入配置</td><td style="padding:6px 8px; border-bottom:1px solid #333;">从 JSON 文件恢复设置</td></tr>
+                            <tr><td style="padding:6px 8px; border-bottom:1px solid #333; color:#d35400;">📤 导出配置</td><td style="padding:6px 8px; border-bottom:1px solid #333;">备份当前设置到 JSON 文件</td></tr>
+                            <tr><td style="padding:6px 8px; border-bottom:1px solid #333;">🎨 预览图</td><td style="padding:6px 8px; border-bottom:1px solid #333;">左侧为原图，右侧点击可更换皮肤</td></tr>
+                        </table>
+
+                        <h3 style="color:#fff; margin:20px 0 8px 0;">📱 手机用户提示</h3>
+                        <ul style="margin:0; padding-left:20px;">
+                            <li>面板打开后，<b>上方为分类列表</b>，下方为详细设置</li>
+                            <li>点击分类名称展开子分类</li>
+                            <li>选择皮肤预设时弹出底部菜单</li>
+                            <li>导入/导出按钮在 <b>···</b> 更多菜单中</li>
+                        </ul>
+
+                        <h3 style="color:#fff; margin:20px 0 8px 0;">🔄 自动更新</h3>
+                        <p>脚本启动后会自动从服务器获取最新皮肤数据。
+                        发现新版本时会有更新提示，皮肤库也会实时热替换。</p>
+
+                        <h3 style="color:#fff; margin:20px 0 8px 0;">❓ 常见问题</h3>
+                        <p><b>Q:</b> 设置后没有变化？<br>
+                        <b>A:</b> 点击面板中的「刷新」按钮或手动刷新页面。</p>
+                        <p><b>Q:</b> 如何恢复原始外观？<br>
+                        <b>A:</b> 取消勾选 "使用自定义皮肤" 即可<u>立即恢复</u>，无需刷新页面（勾选/取消的瞬间就会自动生效）。</p>
+                        <p><b>Q:</b> 自定义链接支持哪些格式？<br>
+                        <b>A:</b> 任何可直接访问的图片 URL（支持 PNG / JPG / WebP / GIF 等浏览器常见格式）。</p>
+
+                        <div style="text-align:center; margin-top:24px; padding-top:16px; border-top:1px solid #333; color:#555; font-size:12px;">
+                            SC背景图案替换插件 v${localVersion}
+                        </div>
+                    </div>
+                </div>
+            `;
+        },
+
+        show() {
+            if (!this.panel) {
+                this.panel = document.createElement('div');
+                this.panel.innerHTML = this.getHTML();
+                document.body.appendChild(this.panel);
+
+                // 遮罩
+                this.overlay = document.createElement('div');
+                this.overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:199999; display:none;';
+                this.overlay.onclick = () => this.hide();
+                document.body.appendChild(this.overlay);
+
+                document.getElementById('scobg-help-close').onclick = () => this.hide();
+            }
+
+            const helpPanel = document.getElementById('scobg-help');
+            if (helpPanel) {
+                helpPanel.style.display = 'flex';
+                this.overlay.style.display = 'block';
+            }
+        },
+
+        hide() {
+            const helpPanel = document.getElementById('scobg-help');
+            if (helpPanel) helpPanel.style.display = 'none';
+            if (this.overlay) this.overlay.style.display = 'none';
+        },
+
+        /** 首次运行检查，返回 true 表示首次运行 */
+        checkFirstRun() {
+            const done = localStorage.getItem(CONSTANTS.FIRST_RUN_KEY);
+            if (!done) {
+                localStorage.setItem(CONSTANTS.FIRST_RUN_KEY, '1');
+                return true;
+            }
+            return false;
+        }
+    };
+
+
+    // ==========================================
+    // 10. 启动 & 全局暴露
     // ==========================================
     function main() {
         ConfigManager.init(); // 1. 先读取本地缓存的最新的 UI_MANIFEST (如果有)
@@ -2193,6 +1373,19 @@
         SCobgUIManager.init();
         UpdateChecker.init();
 
+        // 首次运行自动弹出使用说明
+        if (InstructionsManager.checkFirstRun()) {
+            setTimeout(() => InstructionsManager.show(), 1500);
+        }
+
+        // 注册 Tampermonkey 菜单（使用说明）
+        if (typeof GM_registerMenuCommand !== 'undefined') {
+            GM_registerMenuCommand('📖 使用说明', () => InstructionsManager.show());
+        }
+
+        // 暴露到全局，方便调试
+        window.SC_Instructions = InstructionsManager;
+
         observer.observe(document.body, {
             childList: true,
             subtree: true,
@@ -2201,6 +1394,9 @@
         });
 
         Scheduler.run();
+
+        // 页面关闭前确保设置已保存
+        window.addEventListener('beforeunload', () => Settings.save());
 
         window.SC_Skin_Manager = {
             settings: Settings,
