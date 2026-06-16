@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.20
+// @version      1.32.21
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -8734,24 +8734,8 @@
                 '[class*="fa-star"]',
             ];
 
-            // 策略1：从百科链接向上逐级搜索（最多8层），品质星星与百科链接在同一棵子树内
-            if (encLink) {
-                let el = encLink.parentElement;
-                for (let i = 0; i < 8 && el; i++) {
-                    for (const sel of starSelectors) {
-                        try {
-                            const stars = el.querySelectorAll(sel);
-                            if (stars.length > 0) {
-                                const q = countStarsFromList(stars);
-                                if (q > 0) return q;
-                            }
-                        } catch (e) { /* 选择器无效则跳过 */ }
-                    }
-                    el = el.parentElement;
-                }
-            }
-
-            // 策略2：从价格输入框附近的表单区域搜索（sell/contract 页面专用）
+            // 策略1（优先）：从价格输入框附近的表单区域搜索（sell/contract 页面专用）
+            // 对于 Q0 物品，当前区域没有星星，直接返回 0，避免被页面其他位置的星星误导
             const priceInput = document.querySelector('input[name="price"]');
             if (priceInput) {
                 let formEl = priceInput.parentElement;
@@ -8766,6 +8750,25 @@
                         } catch (e) { /* 选择器无效则跳过 */ }
                     }
                     formEl = formEl.parentElement;
+                }
+                // 在价格输入框区域完全没找到星星 → Q0
+                return 0;
+            }
+
+            // 策略2：从百科链接向上逐级搜索（最多8层），品质星星与百科链接在同一棵子树内
+            if (encLink) {
+                let el = encLink.parentElement;
+                for (let i = 0; i < 8 && el; i++) {
+                    for (const sel of starSelectors) {
+                        try {
+                            const stars = el.querySelectorAll(sel);
+                            if (stars.length > 0) {
+                                const q = countStarsFromList(stars);
+                                if (q > 0) return q;
+                            }
+                        } catch (e) { /* 选择器无效则跳过 */ }
+                    }
+                    el = el.parentElement;
                 }
             }
 
@@ -9444,6 +9447,7 @@
         profitWorker.onmessage = function (e) {
             const results = e.data;
             if (!Array.isArray(results)) return;
+            if (!Array.isArray(results)) return;
 
             for (const item of results) {
                 const { idx, maxProfit, bestPrice } = item;
@@ -9944,7 +9948,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加仓库时利润计算功能开关，现在主菜单按钮可拖动
+        // @changelog    修复出库计算获取Q0价格错误的问题
 
         fetch(scriptUrl)
             .then(res => res.text())
