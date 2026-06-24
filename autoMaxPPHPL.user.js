@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.22
+// @version      1.32.23
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -9921,6 +9921,9 @@
 
         // 给所有符合条件的聊天室 header 添加切换按钮
         function addToggleButtons() {
+            // 功能开关未开启则不显示按钮
+            if (!isEnabled()) return;
+
             const headers = document.querySelectorAll('div.well-header.text-uppercase.css-12ztnbp');
             headers.forEach(header => {
                 // 查重
@@ -10156,7 +10159,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加英文、中文交易，航天交易聊天室颜色圆圈切换成单字显示功能，默认关闭。
+        // @changelog    确保聊天室色弱辅助的按钮仅在开启时显示。
 
         fetch(scriptUrl)
             .then(res => res.text())
