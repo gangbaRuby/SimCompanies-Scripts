@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.23
+// @version      1.32.24
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -4196,7 +4196,7 @@
                     if (!dropdownMenu) return;
                     const items = dropdownMenu.querySelectorAll('li a');
                     for (const item of items) {
-                        if (item.textContent?.trim() === '全部') {
+                        if (item.textContent?.trim() === '全部' || item.textContent?.trim() === 'All') {
                             item.click();
                             // 品质切换后游戏会自动请求新市场数据，正常流程会触发 updateGlobalSimulation
                             return;
@@ -8701,78 +8701,67 @@
 
         // 解析品质：低星=多个star SVG，高星=数字+单个star SVG
         // 限定在百科链接同级容器内查找，避免误抓页面其他位置的星星图标
-        function parseQuality() {
-            const encLink = document.querySelector('a[href*="/encyclopedia/"][href*="/resource/"]');
+        async function parseQuality() {
+            const startUrl = location.href;
+            const MAX_WAIT = 12000;
+            const RETRY_INTERVAL = 200;
+            const startTime = Date.now();
 
-            // 辅助函数：从 star SVG 列表中解析品质
-            const countStarsFromList = (stars) => {
-                if (stars.length === 0) return 0;
-                const groups = new Map();
-                stars.forEach(svg => {
-                    const p = svg.parentElement;
-                    if (!groups.has(p)) groups.set(p, []);
-                    groups.get(p).push(svg);
-                });
-                let maxQ = 0;
-                for (const [parent, svgs] of groups) {
-                    const txt = parent.textContent?.trim() || '';
-                    const numMatch = txt.match(/^(\d+)/);
-                    if (numMatch) {
-                        const q = parseInt(numMatch[1], 10);
-                        if (q > maxQ) maxQ = q;
-                    } else if (svgs.length > maxQ) {
-                        maxQ = svgs.length;
+            // 多语言匹配文本
+            const SELL_ORDER_TEXTS = ['当前交易所卖单', 'Current exchange orders', '當前交易所賣單'];
+            const FILTER_BTN_TEXTS = ['按品质过滤', 'Filter by quality', '按品質過濾'];
+            const AVG_PRICE_TITLES = ['平均零售价格', 'Average retail price', '平均零售價格'];
+
+            while (Date.now() - startTime < MAX_WAIT) {
+                if (location.href !== startUrl) return 0;
+
+                // === 策略1：从交易所卖单文字提取品质 ===
+                let s1Quality = null;
+                let s1FilterBtn = false;
+                const allSpans = document.querySelectorAll('span');
+                for (const span of allSpans) {
+                    const b = span.querySelector('b');
+                    if (!b) continue;
+                    const text = b.textContent?.trim() || '';
+                    if (SELL_ORDER_TEXTS.some(t => text.includes(t))) {
+                        const qMatch = text.match(/^Q(\d+)\+/);
+                        if (qMatch) { s1Quality = parseInt(qMatch[1], 10); }
+                        const btnText = span.querySelector('button')?.textContent || '';
+                        s1FilterBtn = FILTER_BTN_TEXTS.some(t => btnText.includes(t));
+                        break;
                     }
                 }
-                return maxQ;
-            };
 
-            // 多选择器尝试匹配星星图标（兼容不同版本的 Font Awesome 及可能的 UI 变更）
-            const starSelectors = [
-                'svg[data-icon="star"]',
-                'svg.fa-star',
-                '.fa-star',
-                '[class*="fa-star"]',
-            ];
-
-            // 策略1（优先）：从价格输入框附近的表单区域搜索（sell/contract 页面专用）
-            // 对于 Q0 物品，当前区域没有星星，直接返回 0，避免被页面其他位置的星星误导
-            const priceInput = document.querySelector('input[name="price"]');
-            if (priceInput) {
-                let formEl = priceInput.parentElement;
-                for (let i = 0; i < 8 && formEl; i++) {
-                    for (const sel of starSelectors) {
-                        try {
-                            const stars = formEl.querySelectorAll(sel);
-                            if (stars.length > 0) {
-                                const q = countStarsFromList(stars);
-                                if (q > 0) return q;
-                            }
-                        } catch (e) { /* 选择器无效则跳过 */ }
+                // === 策略2：从平均零售价格后一个兄弟元素数星星 ===
+                let s2Quality = null;
+                const titleSelector = AVG_PRICE_TITLES.map(t => `[title="${t}"]`).join(', ');
+                const avgPriceEl = document.querySelector(titleSelector);
+                if (avgPriceEl) {
+                    const sibling = avgPriceEl.nextElementSibling;
+                    if (sibling) {
+                        const txt = sibling.textContent?.trim() || '';
+                        const numMatch = txt.match(/^(\d+)/);
+                        if (numMatch) {
+                            s2Quality = parseInt(numMatch[1], 10);
+                        } else {
+                            const stars = sibling.querySelectorAll('svg[data-icon="star"], svg.fa-star, .fa-star');
+                            if (stars.length > 0) s2Quality = stars.length;
+                        }
                     }
-                    formEl = formEl.parentElement;
                 }
-                // 在价格输入框区域完全没找到星星 → Q0
-                return 0;
+
+                // === 比对 ===
+                if (s1Quality !== null || s2Quality !== null) {
+                    // 策略1可信（有Q前缀、或无过滤按钮=Q0），优先用策略1
+                    if (s1Quality !== null && !s1FilterBtn) return s1Quality;
+                    // 策略1不可信（有过滤按钮），用策略2
+                    if (s2Quality !== null) return s2Quality;
+                    // 策略1不可信且策略2无效，用策略1的原始值
+                    if (s1Quality !== null) return s1Quality;
+                }
+
+                await new Promise(r => setTimeout(r, RETRY_INTERVAL));
             }
-
-            // 策略2：从百科链接向上逐级搜索（最多8层），品质星星与百科链接在同一棵子树内
-            if (encLink) {
-                let el = encLink.parentElement;
-                for (let i = 0; i < 8 && el; i++) {
-                    for (const sel of starSelectors) {
-                        try {
-                            const stars = el.querySelectorAll(sel);
-                            if (stars.length > 0) {
-                                const q = countStarsFromList(stars);
-                                if (q > 0) return q;
-                            }
-                        } catch (e) { /* 选择器无效则跳过 */ }
-                    }
-                    el = el.parentElement;
-                }
-            }
-
             return 0;
         }
 
@@ -8894,7 +8883,7 @@
             if (prevParent) delete prevParent.dataset.outgoingMpAdded;
 
             const resourceId = parseResourceId();
-            const quality = parseQuality();
+            const quality = await parseQuality();
             const realmId = getRealmIdFromLink();
             if (!resourceId || realmId === null) return;
 
@@ -9103,7 +9092,7 @@
             setTimeout(calcAndDisplayProfit, 300);
         }
 
-        function calcAndDisplayProfit() {
+        async function calcAndDisplayProfit() {
             // 清理旧展示前，记住展开状态
             const oldDisplay = document.querySelector('.sc-profit-display');
             if (oldDisplay) {
@@ -9126,7 +9115,7 @@
 
             // 获取资源ID、品质
             const resourceId = parseResourceId();
-            const quality = parseQuality();
+            const quality = await parseQuality();
             if (!resourceId) { /* console.log('[利润明细] 未识别到资源ID'); */ return; }
             /* console.log('[利润明细] 开始计算', { resourceId, quality, price, quantity, isContract }); */
 
@@ -10159,7 +10148,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    确保聊天室色弱辅助的按钮仅在开启时显示。
+        // @changelog    修改出库合同MP-?%的获取品质逻辑
 
         fetch(scriptUrl)
             .then(res => res.text())
