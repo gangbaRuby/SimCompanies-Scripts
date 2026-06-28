@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.26
+// @version      1.32.27
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1719,6 +1719,7 @@
                 { type: 'toggle', key: 'autoSelectBestMarketRow', label: '交易所自动选中高亮行', defaultEnabled: false },
                 { type: 'toggle', key: 'warehouseProfit', label: '仓库时利润计算' },
                 { type: 'toggle', key: 'chatAccessibility', label: '聊天室色弱辅助', defaultEnabled: false },
+                { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
             ];
             const ITEMS_PER_PAGE = 5;
             let currentPage = 0;
@@ -5951,6 +5952,14 @@
                         }, delay);
                     };
                     tryInit(300, 3); // 300ms → 600ms → 1200ms → 2400ms
+                }
+            },
+            landscapePage: { //地图页面空闲建筑高亮
+                pattern: /\/landscape\/?$/,
+                action: () => {
+                    setTimeout(() => {
+                        LandscapeIdleBuildingHighlight.init();
+                    }, 500);
                 }
             },
         };
@@ -10375,6 +10384,120 @@
     })();
 
     // ======================
+    // 模块21：地图空闲建筑高亮
+    // ======================
+    const LandscapeIdleBuildingHighlight = (function () {
+        const EXCLUDED_KINDS = ['n', 'y', '3', '4', '5'];
+
+        // 获取当前领域的建筑数据
+        function getBuildingsData() {
+            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            if (realmId === null) return null;
+            try {
+                const raw = localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`);
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                return data.buildings || null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function processBuildings() {
+            // 检查功能开关
+            if (typeof window.isPageModuleEnabled === 'function' && !window.isPageModuleEnabled('landscapeHighlight')) {
+                return;
+            }
+
+            const excludedKinds = EXCLUDED_KINDS;
+            const buildingsData = getBuildingsData();
+            const links = document.querySelectorAll('a[href*="/b/"]');
+            console.log('[景观高亮] 找到 a[href*="/b/"] 数量:', links.length);
+            if (links.length === 0) {
+                console.log('[景观高亮] 未找到建筑链接，1秒后重试');
+                setTimeout(processBuildings, 1000);
+                return;
+            }
+
+            links.forEach((link, index) => {
+                let buildingKind = null;
+                let kindSource = '';
+
+                // 1. 尝试从 class 中提取 test-building-X（支持字母数字）
+                const classMatch = link.className.match(/test-building-([A-Za-z0-9])/);
+                if (classMatch) {
+                    buildingKind = classMatch[1];
+                    kindSource = 'class';
+                } else {
+                    // 2. 从 href 提取建筑 ID，到 buildingsData 中查找 kind
+                    const hrefMatch = link.href.match(/\/b\/(\d+)\/?/);
+                    if (hrefMatch && buildingsData) {
+                        const buildingId = parseInt(hrefMatch[1], 10);
+                        const bData = buildingsData.find(b => b.id === buildingId);
+                        if (bData) {
+                            buildingKind = bData.kind;
+                            kindSource = 'data';
+                        }
+                    }
+                }
+
+                console.log(`[景观高亮] #${index} href="${link.pathname || link.href.substring(0,40)}" class="${link.className}" kind=${buildingKind} source=${kindSource}`);
+
+                if (!buildingKind) {
+                    console.log(`[景观高亮] #${index} 无法确定建筑类型，跳过`);
+                    return;
+                }
+
+                // 检查是否在排除列表中（不区分大小写）
+                const isExcluded = excludedKinds.some(k => k.toUpperCase() === buildingKind.toUpperCase());
+                console.log(`[景观高亮] #${index} 类型=${buildingKind} 排除列表=[${excludedKinds}] 是否排除=${isExcluded}`);
+                if (isExcluded) return;
+
+                // 查找包含 "lvl 数字" 文本的 span（只在 a 标签自身内部搜索，避免误判其他建筑）
+                const lvlSpan = Array.from(link.querySelectorAll('span')).find(span => /lvl\s+\d+/i.test(span.textContent));
+                if (lvlSpan) {
+                    console.log(`[景观高亮] #${index} 找到空闲建筑(lvl)`);
+                    const spanParent = lvlSpan.parentElement;
+                    if (spanParent) {
+                        Array.from(spanParent.children).forEach(child => {
+                            if (child.tagName === 'SPAN') {
+                                child.dataset.scLandscapeHighlight = 'true';
+                                child.style.backgroundColor = '#FFEB3B';
+                                child.style.color = '#333';
+                                child.style.padding = '1px 4px';
+                                child.style.borderRadius = '3px';
+                                child.style.fontWeight = 'bold';
+                            }
+                        });
+                    }
+                } else {
+                    console.log(`[景观高亮] #${index} 未找到 lvl 标记（非空闲建筑或无此元素）`);
+                }
+            });
+        }
+
+        // 清除已有的高亮
+        function clearHighlights() {
+            document.querySelectorAll('[data-sc-landscape-highlight]').forEach(el => {
+                el.style.backgroundColor = '';
+                el.style.color = '';
+                el.style.padding = '';
+                el.style.borderRadius = '';
+                el.style.fontWeight = '';
+                delete el.dataset.scLandscapeHighlight;
+            });
+        }
+
+        function init() {
+            if (!/\/landscape\/?$/.test(location.href)) return;
+            // 延迟处理等待 DOM 就绪
+            setTimeout(processBuildings, 500);
+        }
+
+        return { init };
+    })();
+
+    // ======================
     // 检测更新模块
     // ======================
     function compareVersions(v1, v2) {
@@ -10515,7 +10638,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修复出库合同MP-?%的品质获取问题，优化性能问题
+        // @changelog    增加高亮空闲建筑，默认开启
 
         fetch(scriptUrl)
             .then(res => res.text())
