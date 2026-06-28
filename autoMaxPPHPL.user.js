@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.25
+// @version      1.32.26
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3366,6 +3366,11 @@
         let _autoSelectTimer = null; // 自动选中最佳订单行的定时器
         let _pendingAutoSelect = null; // { targetQuality, startTime } 品质切换后等待API数据刷新再选中
         let _pendingAutoSelectPollTimer = null; // 等待API返回的轮询定时器
+        let _globalObserver = null; // 全局 MutationObserver（跨 init 调用复用防泄漏）
+        let _tableObserver = null; // 表格行变化 MutationObserver
+        let _quantityCheckInterval = null; // 数量输入框脏检查定时器ID
+        let _formClickHandler = null; // 表单按钮点击处理函数引用
+        let _initDone = false; // 标记是否已成功初始化，避免 observer 反复执行 tryInit
 
         // Worker 代码 —— 批量处理版本：一次接收所有行，共享数据只传一次
         const workerCode = `
@@ -3499,6 +3504,19 @@
         const allProfitSpans = new Set();
         let isShowingProfit = true;
 
+        // 清理定时器和监听器（切换物品时调用）
+        function cleanupInputListeners() {
+            if (_quantityCheckInterval) {
+                clearInterval(_quantityCheckInterval);
+                _quantityCheckInterval = null;
+            }
+            const oldInput = document.querySelector('input[name="quantity"]');
+            if (oldInput) {
+                oldInput.removeAttribute('data-calc-listener');
+            }
+            // 表单点击监听器由 init 统一管理，每次 init 会重新绑定
+        }
+
         // 专门用于监听顶部输入框
         function attachInputListener() {
             const input = document.querySelector('input[name="quantity"]');
@@ -3514,7 +3532,7 @@
                 // 2. 针对“自动填入”：使用定时器进行“脏检查”
                 // 每 500ms 检查一次输入框的值是否变化
                 let lastValue = input.value;
-                setInterval(() => {
+                _quantityCheckInterval = setInterval(() => {
                     if (input.value !== lastValue) {
                         lastValue = input.value;
                         updateGlobalSimulation();
@@ -3525,12 +3543,17 @@
                 // 游戏中的按钮通常在 input 的父级或兄弟级
                 const parentForm = input.closest('form');
                 if (parentForm) {
-                    parentForm.addEventListener('click', (e) => {
+                    // 先移除旧的监听器（通过标记清理）
+                    if (_formClickHandler) {
+                        parentForm.removeEventListener('click', _formClickHandler);
+                    }
+                    _formClickHandler = (e) => {
                         // 如果点击了按钮，延迟一会等待值更新后执行计算
                         if (e.target.tagName === 'BUTTON') {
                             setTimeout(updateGlobalSimulation, 50);
                         }
-                    });
+                    };
+                    parentForm.addEventListener('click', _formClickHandler);
                 }
             }
         }
@@ -3988,6 +4011,12 @@
                     }
 
                     allProfitSpans.add(span);
+                    // 定期清理 Set 中已脱离 DOM 的 span，防止内存泄漏
+                    if (allProfitSpans.size > 200) {
+                        for (const s of allProfitSpans) {
+                            if (!s.isConnected) allProfitSpans.delete(s);
+                        }
+                    }
                 }
             }
 
@@ -4121,6 +4150,8 @@
                     if (oldTd) oldTd.remove();
                 });
                 allProfitSpans.clear();
+                // 清理 pendingRows 中残留的条目（Worker 再回来时 rowId 已失效）
+                pendingRows.clear();
             }
 
             const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
@@ -4156,6 +4187,11 @@
                     PROFIT_PER_BUILDING_LEVEL,
                     RETAIL_ADJUSTMENT
                 });
+            } else if (pendingRows.size > 0) {
+                // 清理 pendingRows 中已从 DOM 脱离的行（DOM 刷新后残留）
+                for (const [rid, row] of pendingRows) {
+                    if (!row.isConnected) pendingRows.delete(rid);
+                }
             }
 
             // 重算模拟结果
@@ -4236,13 +4272,51 @@
 
         return {
             init(resourceId) {
+                // ---- 清理上一次初始化的残留 ----
+                // 1. 清理定时器
+                clearTimeout(_autoSelectTimer);
+                _autoSelectTimer = null;
+                if (_pendingAutoSelectPollTimer) {
+                    clearTimeout(_pendingAutoSelectPollTimer);
+                    _pendingAutoSelectPollTimer = null;
+                }
+                _pendingAutoSelect = null;
+                cleanupInputListeners();
+
+                // 2. 断开旧的 MutationObserver（防止累积！）
+                if (_globalObserver) {
+                    _globalObserver.disconnect();
+                    _globalObserver = null;
+                }
+                if (_tableObserver) {
+                    _tableObserver.disconnect();
+                    _tableObserver = null;
+                }
+
+                // 3. 重置初始化标记，允许重新初始化
+                _initDone = false;
+                // 【修复】rowIdCounter 不清零，而是使用递增计数器避免新旧 Worker 响应冲突
+                // 旧 Worker 响应到达时 pendingRows 已空会被跳过，但 ID 空间始终保持递增
+
+                // 4. 清理 pendingRows 中残留的行引用（防止 DOM 元素无法 GC）
+                pendingRows.clear();
+                allProfitSpans.clear();
+
+                // 5. 清除所有旧 form 上的 data-market-calc-initialized 标记
+                // 【关键修复】防止 SPA 切换时残留属性导致新页面跳过初始化
+                document.querySelectorAll('form[data-market-calc-initialized]').forEach(f => {
+                    f.removeAttribute('data-market-calc-initialized');
+                });
+
+                // 6. 清除旧 summaryDisplay 避免 DOM 碎片
+                if (summaryDisplay && summaryDisplay.parentNode) {
+                    summaryDisplay.remove();
+                }
+                summaryDisplay = null;
+
+                // ---- 新页面初始化 ----
                 currentResourceId = resourceId;
                 currentRealmId = null;
-                clearTimeout(_autoSelectTimer);
-                if (_pendingAutoSelectPollTimer) { clearTimeout(_pendingAutoSelectPollTimer); _pendingAutoSelectPollTimer = null; }
-                _pendingAutoSelect = null;
-                let globalObserver = null;
-                let tableObserver = null;
 
                 // --- 核心优化 1: 启动即判断零售属性 ---
                 let currentIsRetail = false;
@@ -4254,19 +4328,26 @@
 
                 // 如果不是零售商品，直接退出，不设置任何监听，不注入任何 UI
                 if (!currentIsRetail) {
-                    if (summaryDisplay) summaryDisplay.style.display = "none";
                     return;
                 }
 
                 const tryInit = () => {
+                    // 如果已经初始化完成，不再重复执行（优化：避免 observer 反复调用）
+                    if (_initDone) return;
+
                     const tbody = findValidTbody();
                     const form = document.querySelector('form');
 
                     // 1. 基础检查
                     if (!tbody || !form) return;
 
-                    // 2. 防止重复注入
-                    if (form.hasAttribute('data-market-calc-initialized')) return;
+                    // 2. 检测是否已初始化（其他卡片已先完成），是则跳过
+                    // 【安全】不设置 _initDone，不清除 observer——因为上一个 init 已清理了残留属性
+                    // 如果真的是已初始化的页面，form 不应该有该属性（已被 cleanup 移除）
+                    // 如果是其他竞争条件，observer 会在后续 DOM 变化时再尝试
+                    if (form.hasAttribute('data-market-calc-initialized')) {
+                        return;
+                    }
 
                     // 3. 提取 Realm ID
                     extractRealmIdOnce(tbody);
@@ -4534,35 +4615,44 @@
                         form.setAttribute('data-market-calc-initialized', 'true');
                     }
 
-                    // 5. 初始执行：此时确认为零售，直接处理
+                    // 5. 标记初始化完成（必须在 processNewRows 之前设置，避免重复调用）
+                    _initDone = true;
+
+                    // 6. 初始执行：此时确认为零售，直接处理
                     processNewRows(tbody);
 
-                    // 6. 开启表格行监听
-                    if (tableObserver) tableObserver.disconnect();
-                    tableObserver = new MutationObserver(() => {
+                    // 7. 开启表格行监听（使用模块级变量，确保断开旧的）
+                    if (_tableObserver) _tableObserver.disconnect();
+                    _tableObserver = new MutationObserver(() => {
                         requestAnimationFrame(() => processNewRows(tbody));
                     });
-                    tableObserver.observe(tbody, { childList: true });
+                    _tableObserver.observe(tbody, { childList: true });
 
-                    // 7. 初始化成功，停止全局 document 监听
-                    if (globalObserver) {
-                        globalObserver.disconnect();
-                        globalObserver = null;
+                    // 8. 初始化成功，停止全局 document 监听
+                    if (_globalObserver) {
+                        _globalObserver.disconnect();
+                        _globalObserver = null;
                     }
                 };
 
                 // --- 核心优化 2: 仅在零售模式下启动监听 ---
                 tryInit();
 
-                globalObserver = new MutationObserver((mutations) => {
-                    for (const mutation of mutations) {
-                        if (mutation.addedNodes.length) {
-                            tryInit();
-                            break;
+                // 如果 tryInit 已标记完成（初始化已存在），不再创建全局 observer
+                if (!_initDone) {
+                    // 使用模块级 _globalObserver，确保之前已断开
+                    _globalObserver = new MutationObserver((mutations) => {
+                        // 如果已经初始化完成，不再执行昂贵的 tryInit
+                        if (_initDone) return;
+                        for (const mutation of mutations) {
+                            if (mutation.addedNodes.length) {
+                                tryInit();
+                                break;
+                            }
                         }
-                    }
-                });
-                globalObserver.observe(document.body, { childList: true, subtree: true });
+                    });
+                    _globalObserver.observe(document.body, { childList: true, subtree: true });
+                }
             }
         };
     })();
@@ -5239,6 +5329,8 @@
                 clearTimeout(processDebounceTimer);
                 processDebounceTimer = null;
             }
+            // 清理 pendingCards 中残留的 DOM 引用
+            pendingCards.clear();
             removeWarningNotice();
         }
 
@@ -7720,17 +7812,30 @@
             }
         }
 
-        // --- 拦截部分保持不变 ---
+        // --- 拦截部分（优化：仅匹配目标URL时才处理响应体） ---
         const _fetch = window.fetch;
         window.fetch = async function (...args) {
             const res = await _fetch.apply(this, args);
             const url = typeof args[0] === 'string' ? args[0] : (args[0].url || "");
-            res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) { } });
+            // 仅当URL匹配目标时才克隆响应体，避免每次请求的性能开销
+            if (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url)) {
+                res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) { } });
+            }
             return res;
         };
         const _open = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function (m, url) {
-            this.addEventListener("load", () => { try { processData(url, JSON.parse(this.responseText)); } catch (e) { } });
+            // 仅当URL匹配目标时才添加load监听
+            if (typeof url === 'string' && (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url))) {
+                this.addEventListener("load", function () {
+                    try {
+                        if (this.responseText) {
+                            const d = JSON.parse(this.responseText);
+                            processData(url, d);
+                        }
+                    } catch (e) { }
+                });
+            }
             return _open.apply(this, arguments);
         };
 
@@ -7811,18 +7916,29 @@
             }
         }
 
-        // --- 拦截网络请求 ---
+        // --- 拦截网络请求（优化：仅匹配目标URL时才处理响应体） ---
         const _fetch = window.fetch;
         window.fetch = async function (...args) {
             const res = await _fetch.apply(this, args);
             const url = typeof args[0] === 'string' ? args[0] : (args[0].url || "");
-            res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) { } });
+            if (FORMER_EXEC_API_REGEX.test(url)) {
+                res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) { } });
+            }
             return res;
         };
 
         const _open = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function (m, url) {
-            this.addEventListener("load", () => { try { processData(url, JSON.parse(this.responseText)); } catch (e) { } });
+            if (typeof url === 'string' && FORMER_EXEC_API_REGEX.test(url)) {
+                this.addEventListener("load", function () {
+                    try {
+                        if (this.responseText) {
+                            const d = JSON.parse(this.responseText);
+                            processData(url, d);
+                        }
+                    } catch (e) { }
+                });
+            }
             return _open.apply(this, arguments);
         };
 
@@ -8754,22 +8870,65 @@
                     }
                 }
 
-                // === 策略2：从平均零售价格后一个兄弟元素数星星 ===
+                // 辅助：从DOM元素提取品质（先试文本数字，否则数SVG星星）
+                const extractQualityFromEl = (el) => {
+                    const txt = el.textContent?.trim() || '';
+                    const numMatch = txt.match(/^(\d+)/);
+                    if (numMatch) return parseInt(numMatch[1], 10);
+                    // 没有数字：数SVG星星个数（.fa-star）
+                    const svgCount = el.querySelectorAll('.svg-inline--fa.fa-star').length;
+                    return svgCount > 0 ? svgCount : null;
+                };
+
+                // === 策略2：有平均零售价格从平均零售价格找；没有则从合并成本附近找 ===
                 let s2Quality = null;
                 let s2RawTxt = '';    // 调试用
                 const titleSelector = AVG_PRICE_TITLES.map(t => `[title="${t}"]`).join(', ');
                 const avgPriceEl = document.querySelector(titleSelector);
                 if (avgPriceEl) {
+                    // 有平均零售价格：从其下个兄弟元素提取品质
                     const sibling = avgPriceEl.nextElementSibling;
                     if (sibling) {
-                        const txt = sibling.textContent?.trim() || '';
-                        s2RawTxt = txt;
-                        const numMatch = txt.match(/^(\d+)/);
-                        if (numMatch) {
-                            s2Quality = parseInt(numMatch[1], 10);
-                        } else {
-                            const stars = sibling.querySelectorAll('svg[data-icon="star"], svg.fa-star, .fa-star');
-                            if (stars.length > 0) s2Quality = stars.length;
+                        s2RawTxt = sibling.textContent?.trim() || '';
+                        s2Quality = extractQualityFromEl(sibling);
+                    }
+                } else {
+                    // 无平均零售价格：从"合并成本"文本节点自身往后找品质元素
+                    let qualityEl = null;
+                    const allEls = document.querySelectorAll('*');
+                    for (const el of allEls) {
+                        for (const node of el.childNodes) {
+                            if (node.nodeType === 3 && node.textContent?.includes('合并成本')) {
+                                // 从这个文本节点往后遍历兄弟节点，找第一个元素
+                                let next = node.nextSibling;
+                                while (next) {
+                                    if (next.nodeType === 1) {
+                                        qualityEl = next;
+                                        break;
+                                    }
+                                    next = next.nextSibling;
+                                }
+                                // 如果紧跟着的是<br>等无效元素，继续往后找
+                                if (qualityEl) {
+                                    let q = extractQualityFromEl(qualityEl);
+                                    let fallback = qualityEl.nextElementSibling;
+                                    while (q === null && fallback) {
+                                        qualityEl = fallback;
+                                        q = extractQualityFromEl(fallback);
+                                        if (q !== null) break;
+                                        fallback = fallback.nextElementSibling;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                        if (qualityEl) break;
+                    }
+                    if (qualityEl) {
+                        s2RawTxt = qualityEl.textContent?.trim() || '';
+                        s2Quality = extractQualityFromEl(qualityEl);
+                        if (s2Quality !== null) {
+                            mpLog('策略2 从合并成本后兄弟元素:', s2Quality, 'txt:', s2RawTxt.substring(0,30));
                         }
                     }
                 }
@@ -8782,7 +8941,7 @@
                     ' btn="' + (s1BtnRaw || '').substring(0,30) + '"' +
                     ' showAll=' + s1ShowAllBtn +
                     ' filter=' + s1FilterBtn +
-                    ' s2El=' + (avgPriceEl?'found':'null') +
+                    ' s2El=' + (avgPriceEl?'avgprice':'cost') +
                     ' s2Txt="' + (s2RawTxt || '').substring(0,30) + '"' +
                     ' s2Q=' + s2Quality);
 
@@ -8957,7 +9116,7 @@
         }
 
         // === DEBUG 日志辅助 ===
-        const MP_DEBUG = true;
+        const MP_DEBUG = false;
         function mpLog(...args) { if (MP_DEBUG) console.log('[MP-DEBUG]', Date.now(), '|', ...args); }
 
         async function initButtons() {
@@ -10356,7 +10515,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修复出库合同MP-?%的渲染问题
+        // @changelog    修复出库合同MP-?%的品质获取问题，优化性能问题
 
         fetch(scriptUrl)
             .then(res => res.text())
