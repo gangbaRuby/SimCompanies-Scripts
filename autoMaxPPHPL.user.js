@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.27
+// @version      1.32.28
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -10448,8 +10448,8 @@
                     return;
                 }
 
-                // 检查是否在排除列表中（不区分大小写）
-                const isExcluded = excludedKinds.some(k => k.toUpperCase() === buildingKind.toUpperCase());
+                // 检查是否在排除列表中（严格区分大小写）
+                const isExcluded = excludedKinds.includes(buildingKind);
                 console.log(`[景观高亮] #${index} 类型=${buildingKind} 排除列表=[${excludedKinds}] 是否排除=${isExcluded}`);
                 if (isExcluded) return;
 
@@ -10638,7 +10638,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加高亮空闲建筑，默认开启
+        // @changelog    修复高亮空闲建筑未严格区分建筑种类大小写问题
 
         fetch(scriptUrl)
             .then(res => res.text())
