@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.30
+// @version      1.32.31
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1721,6 +1721,7 @@
                 { type: 'toggle', key: 'chatAccessibility', label: '聊天室色弱辅助', defaultEnabled: false },
                 { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: false },
+                { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: false },
             ];
             const ITEMS_PER_PAGE = 5;
             let currentPage = 0;
@@ -10947,6 +10948,146 @@
     })();
 
     // ======================
+    // 模块23：Snipboard图片预览
+    // ======================
+    (function () {
+        'use strict';
+
+        var MODULE_KEY = 'snipboardPreview';
+
+        function isEnabled() {
+            return window.isPageModuleEnabled ? window.isPageModuleEnabled(MODULE_KEY) : true;
+        }
+
+        // 查找聊天容器（与模块20相同逻辑）
+        function findChatContainers() {
+            var byClass = document.querySelectorAll('div.css-xo2rg1.e1llepen2');
+            if (byClass.length > 0) return byClass;
+            return document.querySelectorAll('div[style*="column-reverse"][style*="overflow"]');
+        }
+
+        // 判断链接是否为图片URL
+        function isImageUrl(href) {
+            return /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(href);
+        }
+
+        // 处理单个链接
+        function processLink(link) {
+            var href = link.getAttribute('href');
+            if (!href) return;
+
+            // 只处理 snipboard.io 链接
+            if (!href.includes('snipboard.io')) return;
+
+            // 避免重复处理
+            if (link.getAttribute('data-snipboard-processed') === '1') return;
+
+            var imgUrl = href;
+            // 如果URL不以图片格式结尾，添加 .jpg（snipboard默认）
+            if (!isImageUrl(imgUrl)) {
+                imgUrl = imgUrl.replace(/\/?$/, '.jpg');
+            }
+
+            link.setAttribute('data-snipboard-processed', '1');
+
+            var img = document.createElement('img');
+            img.src = imgUrl;
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = '100%';
+            img.style.height = 'auto';
+            img.setAttribute('data-sc-original-src', imgUrl);
+            img.addEventListener('click', function (e) {
+                e.stopPropagation();
+                window.open(href, '_blank');
+            });
+
+            // 在链接后面插入图片
+            link.parentNode.insertBefore(img, link.nextSibling);
+        }
+
+        // 扫描容器中的 snipboard 链接
+        function scanContainer(container) {
+            if (!isEnabled()) return;
+            var links = container.querySelectorAll('a[href*="snipboard.io"]');
+            for (var i = 0; i < links.length; i++) {
+                processLink(links[i]);
+            }
+        }
+
+        // 扫描所有聊天容器
+        function scanAll() {
+            if (!isEnabled()) return;
+            var containers = findChatContainers();
+            for (var i = 0; i < containers.length; i++) {
+                scanContainer(containers[i]);
+            }
+        }
+
+        // 初始化
+        var observer = null;
+        var initAttempted = false;
+
+        function init() {
+            if (initAttempted) return;
+            initAttempted = true;
+
+            if (!isEnabled()) return;
+
+            // 扫描现有内容
+            scanAll();
+
+            // 监听变化
+            if (observer) observer.disconnect();
+
+            observer = new MutationObserver(function (mutations) {
+                if (!isEnabled()) return;
+                for (var mi = 0; mi < mutations.length; mi++) {
+                    var m = mutations[mi];
+                    for (var ni = 0; ni < m.addedNodes.length; ni++) {
+                        var n = m.addedNodes[ni];
+                        if (n.nodeType === 1) {
+                            // 查找新增节点中的 snipboard 链接
+                            var links = n.querySelectorAll ? n.querySelectorAll('a[href*="snipboard.io"]') : [];
+                            for (var li = 0; li < links.length; li++) {
+                                processLink(links[li]);
+                            }
+                            // 如果新增节点本身是链接
+                            if (n.tagName === 'A' && n.href && n.href.indexOf('snipboard.io') !== -1) {
+                                processLink(n);
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 观察聊天容器
+            var containers = findChatContainers();
+            for (var i = 0; i < containers.length; i++) {
+                observer.observe(containers[i], { childList: true, subtree: true });
+            }
+
+            // 也观察整个页面以捕获动态加载的容器
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
+
+        // SPA 导航监听
+        var lastUrl = location.href;
+        new MutationObserver(function () {
+            if (lastUrl !== location.href) {
+                lastUrl = location.href;
+                initAttempted = false;
+                if (observer) { observer.disconnect(); observer = null; }
+                setTimeout(init, 300);
+            }
+        }).observe(document, { subtree: true, childList: true });
+
+        // 延迟启动
+        setTimeout(init, 500);
+
+        return { init };
+    })();
+
+    // ======================
     // 检测更新模块
     // ======================
     function compareVersions(v1, v2) {
@@ -11087,7 +11228,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加PA任务答案功能，默认关闭
+        // @changelog    增加Snipboard图片预览功能，默认关闭；增加PA任务答案功能，默认关闭
 
         fetch(scriptUrl)
             .then(res => res.text())
