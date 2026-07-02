@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.29
+// @version      1.32.30
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -10558,8 +10558,12 @@
         // 优先看问题是否完整出现在文本中（qToT），
         // 再用文本→问题方向防止短文本片段误匹配长问题
         function calcMatchRate(text, question) {
-            const t = text.toLowerCase().replace(/\s+/g, '');
-            const q = question.toLowerCase().replace(/\s+/g, '');
+            // 先剔除 $%s、%(...)s 等占位符模式（避免s/d字母残留），
+            // 再只保留中文字和英文字母，抛弃数字和特殊符号
+            const t = text.toLowerCase().replace(/\s+/g, '').replace(/[^a-z\u4e00-\u9fff]/g, '');
+            const q = question.toLowerCase().replace(/\s+/g, '')
+                .replace(/\$%s/g, '').replace(/%\([\w]+\)\w/g, '')
+                .replace(/[^a-z\u4e00-\u9fff]/g, '');
             if (!q || !t) return 0;
 
             // 问题→文本：问题的字符在文本中有多少按顺序出现
