@@ -1,0 +1,479 @@
+[
+  {
+    "q_en": "Boss, the local general contractor introduced himself and is offering 3 Construction units for free, no strings attached.",
+    "q_sc": "老板，本地的一位施工总承包商登门拜访，免费提供3个建筑预构件，没有附带任何条件！你想要吗？",
+    "q_tc": "老闆，本地的一位施工總承包商登門拜訪，免費提供3個建築預構件，沒有附帶任何條件！你想要嗎？",
+    "a_en": "That's perfect, that would cover half of the farm build up or upgrade cost",
+    "a_sc": "太好了，这或许可以支付农场建设成本或升级的一半费用",
+    "a_tc": "太好了，這或許可以支付農場建設成本或升級的一半費用",
+    "effect": "获得三个建筑预构件"
+  },
+  {
+    "q_en": "There's a trader by the door wanting to sell 4,000 units of water for $0.13 a unit, do you want it? Boss, even if we can't use it, we can sell it on the market for a lot more.",
+    "q_sc": "门口有个商人向以$0.13的价格出售4000水单位，你想要吗？老板，即使我们不能使用它，我们也可以以更高的价格在市场上出售它。你要买吗？",
+    "q_tc": "門口有個商人向以$0.13的價格出售4000水單位，你想要嗎？老闆，即使我們不能使用它，我們也可以以更高的價格在市場上出售它。你要買嗎？",
+    "a_en": "Of course, please write him a check",
+    "a_sc": "当然，请给他一张支票。",
+    "a_tc": "當然，請給他一張支票。",
+    "effect": "获得4,000单位水"
+  },
+  {
+    "q_en": "There's a vineyard owner short on his harvest this year, offering to pay $%(money)s for %(units)s units of grapes. It looks like he needs them badly.",
+    "q_sc": "今年有一位葡萄园所有者的葡萄守城短缺，他愿意以$%(money)s买%(units)s个葡萄。看来他急需那些葡萄。你要不要帮他一下忙？",
+    "q_tc": "今年有一位葡萄園所有者的葡萄守城短缺，他願意以$%(money)s買%(units)s個葡萄。看來他急需那些葡萄。你要不要幫他一下忙？",
+    "a_en": "It's his lucky day! Get the grapes from warehouse",
+    "a_sc": "今天是他的幸运日！从我们的仓库里拿葡萄。",
+    "a_tc": "今天是他的幸運日！從我們的倉庫拿葡萄。",
+    "effect": "出售200单位葡萄(仅限葡萄成本低于收购价的情况选择)"
+  },
+  {
+    "q_en": "Boss, just a heads-up: having more than one account in the same realm is not allowed. We want to keep the playing field even for everyone, right? In case you want to learn more, I've prepared %(fpa)s and %(tac)s for you.",
+    "q_sc": "老板，请注意：同一领域不允许拥有多个帐户。我们希望为每个人保持公平的竞争环境，对吗？如果您想了解更多信息，我已经为您准备了 %(fpa)s 和 %(tac)s。",
+    "q_tc": "老闆，請注意：同一領域不允許擁有多個帳戶。我們希望為每個人保持公平的競爭環境，對嗎？如果您想了解更多信息，我已經為您準備了 %(fpa)s 和 %(tac)s。",
+    "a_en": "Good to know, thanks for letting me know.",
+    "a_sc": "很高兴知道，谢谢你让我知道。",
+    "a_tc": "很高興知道，謝謝你讓我知道。",
+    "effect": "无效果"
+  },
+  {
+    "q_en": "Boss, a close relative of yours came by down on their luck and looking for a job.",
+    "q_sc": "老板，你的一位亲戚正在找工作，说想来我们这里碰碰运气。该怎么办？",
+    "q_tc": "老闆，你的一位親戚正在找工作，說想來我們這裡碰運氣。怎麼辦？",
+    "a_en": "I don't believe in nepotism. Have them submit a resume to HR like everyone else.",
+    "a_sc": "我不喜欢裙带关系。让他像其他所有人一样向HR提交简历。",
+    "a_tc": "我不喜歡裙帶關係。讓他像其他人一樣向HR提交簡歷。",
+    "effect": "无效果"
+  },
+  {
+    "q_en": "There's a bum by the door offering to sell 3 brand new tablets for $100 each, it's very obvious he has stolen them. Do you want them?",
+    "q_sc": "门口来了一个流浪汉，他说他可以卖3个全新的平板电脑，每个$100。很明显，这些平板是他偷的。是否向他购买这些平板？",
+    "q_tc": "門口來了一個流浪漢，他說他可以賣3個全新的平板電腦，每個$100。很明顯，這些平板是他偷的。是否向他購買這些平板？",
+    "a_en": "Get the tablets and tell him to never to come back here again",
+    "a_sc": "购买那些平板，然后把他赶走，并告诉他再也不要回到这里来",
+    "a_tc": "購買那些平板，然後把他趕走，並告訴他再也不要回到這裡來",
+    "effect": "获得3单位平板电脑"
+  },
+  {
+    "q_en": "You have a visitor, he claims to be a refugee scientist offering to sell research he has stolen from his country. It's 20 units at $10 a piece. Boss, that's way below the value, you should buy it and sell it on the market right away.",
+    "q_sc": "老板，来了一位客人。他声称是一名难民科学家，愿意出售他从祖国带来的研究。他有20单位，每单位$10。该怎么做？老板，这可比市场价格低多了，你应该立即同意并在交易所出售。",
+    "q_tc": "老闆，來了一位客人。他聲稱是難民科學家，願意出售他從祖國帶來的研究。他有20單位，每單位$10。該怎麼做？老闆，這可比市場價格低多了，你應該立即同意並在交易所出售。",
+    "a_en": "Great idea, tell him we buy it",
+    "a_sc": "好主意，告诉他我们同意买。",
+    "a_tc": "好主意，告訴他我們同意買。",
+    "effect": "获得20单位随机研究"
+  },
+  {
+    "q_en": "Boss, local farmers are sourcing more seeds for this season. They will pay $%(price)s per unit",
+    "q_sc": "老板，当地农民正在为这个季节采购更多的种子。他们将支付每单位 $%(price)s",
+    "q_tc": "老闆，當地農民正在為這個季節購買更多的種子。他們將支付每單位 $%(price)s",
+    "a_en": "That's amazing! Please, send 50k.",
+    "a_sc": "太好了！来，发送50,000单位。",
+    "a_tc": "太好了！來，發送50,000單位。",
+    "effect": "出售50,000单位种子(仅限种子成本低于收购价的情况选择)"
+  },
+  {
+    "q_en": "A charity called, asking for a $%s donation towards hurricane relief in caribbean. What do you think?",
+    "q_sc": "一家慈善机构打了电话，要求向加勒比捐款$%s来帮助他们从飓风灾害恢复。该怎么办？",
+    "q_tc": "一家慈善機構打了電話，要求向加勒比海捐款$%s來幫助他們從颶風災害復原。怎麼辦？",
+    "a_en": "Em... maybe later, you see I already gave money to cancer something yesterday",
+    "a_sc": "呃……还是算了吧。我昨天已经给某个什么癌症组织捐过钱了",
+    "a_tc": "呃……還是算了吧。我昨天已經捐過錢給某個什麼癌症組織了",
+    "effect": "无效果(另一选项花费$1,000且同样无效果)"
+  },
+  {
+    "q_en": "There's a group of immigrant construction workers bad on their luck, claiming they will increase one level of one of your buildings for just food. Boss, let's get them 200 sausages, this is an amazing deal for us.",
+    "q_sc": "外头有一群可怜的建筑工人，领头的人说只要你给他们食物，他们就可以为你升级一座建筑。老板，不如给他们200香肠？对我们来说可是血赚。",
+    "q_tc": "外面有一群可憐的建築工人，領頭的人說只要你給他們食物，他們就可以為你升級一棟建築。老闆，不如給他們200香腸？對我們來說可是血賺。",
+    "a_en": "When can they start?",
+    "a_sc": "他们什么时候能开始干活？",
+    "a_tc": "他們什麼時候能開始工作？",
+    "effect": "随机升级一个不处于“建造中”或者“升级中”的建筑。为了拿免费建材的最优解是只让一级物理学实验室升级，拆除后获得建材。"
+  },
+  {
+    "q_en": "Boss, your employees want to have a Christmas party, will you pay for it? It's gonna cost $%(price1)s or maybe $%(price2)s.",
+    "q_sc": "老板，雇员们想开一个圣诞派对，你能报销吗？派对大概要花%(price1)s到%(price2)s",
+    "q_tc": "老闆，員工們想開一個聖誕派對，你能報銷嗎？派對大概要花%(price1)s到%(price2)s",
+    "a_en": "Tell them to get back to work!",
+    "a_sc": "叫他们滚回去上班，别想有的没的！",
+    "a_tc": "叫他們滾回去上班，別想有的沒的！",
+    "effect": "无效果(另一选项花费$2,000且同样无效果)"
+  },
+  {
+    "q_en": "Boss, the school in the block is preparing for Easter, they need eggs.",
+    "q_sc": "老板，附近的学校正在为复活节做准备，他们需要鸡蛋。该怎么办？",
+    "q_tc": "老闆，附近的學校正在為復活節做準備，他們需要雞蛋。怎麼辦？",
+    "a_en": "We can send them %(amount)s for $%(price)s each",
+    "a_sc": "我们可以送他们%(amount)s，每单位$%(price)s。",
+    "a_tc": "我們可以送他們%(amount)s，每單位$%(price)s。",
+    "effect": "出售5,000单位鸡蛋(仅限鸡蛋成本低于收购价的情况选择)。捐赠鸡蛋可以获得一个Q7的鸡蛋。选择与我何干不会有任何效果。"
+  },
+  {
+    "q_en": "A man who is believed to be the local mafia boss is asking for our help with transporting \"stuff\" out of the country. He stressed that it's all \"perfectly legal\". This will cost us 2,000 transportation units and he promised to pay us $4,500.",
+    "q_sc": "一个我们认为是当地黑手党老板的人在寻求我们的帮助，要我们把”东西“运出国。他强调，这件事情完全是”合法的“。如果你同意，我们得使用2000运输单位，他答应向我们支付$4500。我们该怎么办？",
+    "q_tc": "一個我們認為是當地黑手黨老闆的人在尋求我們的幫助，要我們把」東西「運出國。他強調，這件事情完全是」合法的「。如果你同意，我們得使用2000貨櫃，他答應向我們支付$4500。我們該怎麼辦？",
+    "a_en": "For that kind of money, I will drive the truck myself",
+    "a_sc": "这种活儿我得亲自出手，我来开卡车！",
+    "a_tc": "這種活兒我得親自出手，我來開卡車！",
+    "effect": "获得$1,700"
+  },
+  {
+    "q_en": "Boss, for the yearly fair they are looking for fruits and sausages. Are we able to supply them?",
+    "q_sc": "老板，年度商展会正在寻找水果和香肠供应商。我们能给他们提供吗？",
+    "q_tc": "老闆，年度貿易展正在尋找水果和香腸供應商。我們能提供給他們嗎？",
+    "a_en": "Yes, send %(amount)s apples @$%(price)s a unit",
+    "a_sc": "可以，向他们送%(amount)s苹果，每单位$%(price)s",
+    "a_tc": "可以，送%(amount)s蘋果，每單位$%(price)s",
+    "effect": "仅限苹果或者香肠成本低于收购价的情况选择，否则直接拒绝"
+  },
+  {
+    "q_en": "There's a politician on the phone: \"I will make a lot of people happy, it's gonna be huge. I just need your money to make billions and billions of dollars for this country.\"",
+    "q_sc": "电话上有一位政客正在夸夸而谈：“我将让许许多多人安居乐业。这是个大工程，大事业！只要你的一点点投入，我可以给全国带来亿万计的收入！”该怎么办？",
+    "q_tc": "電話上有一位政客正在誇誇而談：「我將讓許許多多人安居樂業。這是個大工程，大事業！只要你的一點點投入，我可以給全國帶來億萬計的收入！」該怎麼辦？",
+    "a_en": "Are you for real? (Hang up)",
+    "a_sc": "你是不是没睡醒？（挂断）",
+    "a_tc": "你是不是沒睡醒？ （掛斷電話）",
+    "effect": "无效果(另一选项花费$1,000且同样无效果)"
+  },
+  {
+    "q_en": "You have a visitor, he looks like the wall street type, he said: \"I have a once in a lifetime investment opportunity for you. I deal in a new equity derivative instrument, it's very similar to a call option on a basket of ETFs, but has fluctuating strike price dependent on settlement price of unrelated commodity futures.\"",
+    "q_sc": "公司来了一位访客，穿着考究，一看就是某种金融精英人士。他说：“我手头刚好有一个很好的投资机会——你这辈子可能都没这种机会了。实际上，我做的是某种股权衍生品产品，它的产品逻辑跟一篮子ETF产品的看涨期权很像，只不过行权价格是波动的。行权价格是基于某些不相关的商品期货收盘价。”你会怎么办？",
+    "q_tc": "公司來了一位訪客，穿著考究，一看就是某種金融菁英人士。他說：「我手頭剛好有一個很好的投資機會——你這輩子可能都沒這種機會了。實際上，我做的是某種股權衍生品產品，它的產品邏輯跟一籃子ETF產品的買權很像，只不過行使價格是波動的。",
+    "a_en": "Well .. what? Em.. that sounds like a great idea. I am in! Here's $%s",
+    "a_sc": "哦……我有点听不懂。嗯……听起来像个好主意。我同意！请给他$%s",
+    "a_tc": "喔……我有點聽不懂。嗯……聽起來是個好主意。我同意！請給他$%s",
+    "effect": "获得$80"
+  },
+  {
+    "q_en": "Boss, business is going well. The sales department wants to celebrate. Maybe we could organize something for them?",
+    "q_sc": "老板，我觉得我们最近运到好商业运气。公司销售部门想举办一个派对，我们或许可以给他们安排一些活动。你的想法是什么？",
+    "q_tc": "老闆，我覺得我們最近運到好商業運氣。公司銷售部門想舉辦一個派對，我們或許可以為他們安排一些活動。你的想法是什麼？",
+    "a_en": "No time for parties at this moment, we should all focus on the business.",
+    "a_sc": "现在可不是开派对的时候。这会儿我们都得以工作为最优先",
+    "a_tc": "現在可不是開派對的時候。這會兒我們都得以工作為最優先",
+    "effect": "无效果(另一选项花费$3,000且同样无效果)"
+  },
+  {
+    "q_en": "Boss, SimConstruction called to ask for a favor. They urgently need %s :re-102: to avoid breaking a contract and paying a penalty. They offered a free service in exchange.",
+    "q_sc": "老板，SimConstruction 公司打电话来求你帮个忙。他们急需 %s :re-102: 以避免毁约和支付违约金。作为交换，他们提供了一项免费服务。",
+    "q_tc": "老闆，SimConstruction 公司打電話來求你幫個忙。他們急需 %s :re-102: 以避免毀約和支付違約金。作為交換，他們提供了一項免費服務。",
+    "a_en": "Sure, I can help out, send the bricks.",
+    "a_sc": "行吧，多个朋友多条路，现在发货吧。",
+    "a_tc": "行吧，多個朋友多條路，現在出貨吧。",
+    "effect": "下一次升级建筑花费的时间减半"
+  },
+  {
+    "q_en": "Boss, there will be an event in our city, my brother-in-law is one of the organizers. They could really use a sponsor donation of $%s.",
+    "q_sc": "老板，城里马上将举办一个庆典，我的姐夫也是组织者。他们很希望找到能够出资$%s的赞助方，请问……",
+    "q_tc": "老闆，城裡馬上將舉辦慶典，我的姊夫也是組織者。他們很希望找到能夠出資$%s的贊助方，請問…",
+    "a_en": "Your family is my family, of course, maybe we can even get good advertisement out of it",
+    "a_sc": "你的家人就是我的家人。当然了！我们甚至可以靠这次活动打开市场，提升知名度",
+    "a_tc": "你的家人就是我的家人。當然了！我們甚至可以靠這次活動打開市場，提升知名度",
+    "effect": "获得1%销售速度加成，此加成可以通过simboot洗成生产速度加成，如错过此处赞助，可在公司等级23级时花费$150,000赞助另一庆典以弥补。"
+  },
+  {
+    "q_en": "Boss, an employee found this envelope full of cash. It's $%s.",
+    "q_sc": "老板，一位雇员捡到了这个现金信封。里面有$%s，要不……",
+    "q_tc": "老闆，一位員工撿到了這個現金信封。裡面有$%s，要不…",
+    "a_en": "Please take the money to the police, otherwise it's technically a \"theft by finding\".",
+    "a_sc": "请把信封交给警察局，不与取之，即为偷盗",
+    "a_tc": "請把信封交給警察局，不與取之，即為偷",
+    "effect": "获得$2,300"
+  },
+  {
+    "q_en": "I just heard, our workers are voting to form a Union. I'm not sure if we want to do anything.",
+    "q_sc": "老板老板，出大事了，我们的工人正在策划建立工会。要不……",
+    "q_tc": "老闆老闆，出大事了，我們的員工正在策劃建立工會。要不…",
+    "a_en": "If they want to Unionize I'm OK with that, we'll stay out of it and negotiate with them fairly.",
+    "a_sc": "如果工人要求组建工会，那我当然OK。合理诉求嘛。我们就静观其变，再跟他们公平谈判就好。",
+    "a_tc": "如果員工要求組成工會，那我當然OK。合理訴求嘛。我們就靜觀其變，再跟他們公平談判就好。",
+    "effect": "花费$4,000，无效果"
+  },
+  {
+    "q_en": "Hi boss, your son is here. He wants to buy a brand new eye-phone which costs almost $%s. What would you like to do?",
+    "q_sc": "老板，你儿子来了。他想买一个全新的eye-Phone，价格$%s。该怎么办？",
+    "q_tc": "老闆，你兒子來了。他想買一個全新的eye-Phone，價格$%s。怎麼辦？",
+    "a_en": "What does he want?! Nevermind, tell him to get a job.",
+    "a_sc": "他想要什么？！没关系，告诉他找工作。",
+    "a_tc": "他想要什麼？ ！沒關係，告訴他找工作。",
+    "effect": "无效果"
+  },
+  {
+    "q_en": "Boss, our transport company is asking if we can help with a new truck? They can pay just $%s.",
+    "q_sc": "老板，我们的运输合作方求助。他们想让我们帮他们购买一辆新卡车，但他们目前只能付我们$%s。要帮他们吗？",
+    "q_tc": "老闆，我們的運輸合作方求助。他們想讓我們幫他們買一輛新卡車，但他們目前只能付我們$%s。要幫他們嗎？",
+    "a_en": "Ok, I think we can do that. Send them 1 truck.",
+    "a_sc": "嗯嗯，我觉得问题不大。一辆卡车就给他们送去吧。",
+    "a_tc": "嗯嗯，我覺得問題不大。一輛卡車就給他們送去吧。",
+    "effect": "额外获得20,000运输单位"
+  },
+  {
+    "q_en": "We are facing a patent lawsuit and have received an offer to settle for $%s.",
+    "q_sc": "老板，不好了！我们被控侵犯专利权，对方提出可以缴纳$%s庭外和解。怎么办？",
+    "q_tc": "布豪！我們被控侵害專利權，對方提議可以繳$%s庭外和解。怎麼辦？",
+    "a_en": "I won't settle. It's a frivolous lawsuit. Let's fight it no matter what it costs!",
+    "a_sc": "恶意诉讼，打就打，谁怕谁！以斗争求团结则团结存，我们要不计成本，打出风格、打出水平！",
+    "a_tc": "惡意訴訟，打就打，誰怕誰！以鬥爭求團結則團結存，我們要不計成本，打出風格、打出水平！",
+    "effect": "无效果"
+  },
+  {
+    "q_en": "Hey boss, there's a salesman from a mobile network company. They are offering us a business package which includes a very low rate and 6 Smartphones for $%s.",
+    "q_sc": "老板，一位电信公司的销售来上门拜访。他们说可以给我们商务套餐，外加6部合约机，总价是$%s。该怎么回复他们？",
+    "q_tc": "老闆，一位電信公司的銷售來上門拜訪。他們說可以給我們商務套餐，外加6部合約機，總價是$%s。該怎麼回覆他們？",
+    "a_en": "Yes, sounds great, accept it.",
+    "a_sc": "嗯嗯嗯，价格很合理，可以接受。",
+    "a_tc": "嗯嗯嗯，價格很合理，可以接受。",
+    "effect": "获得6单位手机"
+  },
+  {
+    "q_en": "Boss, I need the %s steaks for the company barbecue. You remember right?",
+    "q_sc": "老板，上次你答应给公司烧烤聚餐准备%s份牛排的，你别忘了吧？",
+    "q_tc": "老闆，上次你答應給公司烤肉聚餐準備%s份牛排的，你別忘了吧？",
+    "a_en": "Sure, take steaks from our warehouse!",
+    "a_sc": "哎记着呢，直接去仓库取吧！",
+    "a_tc": "哎記著呢，直接去倉庫拿吧！",
+    "effect": "随机完成一个生产中或零售中的建筑，最优解是只运行一个建筑拉满48小时然后提交任务。"
+  },
+  {
+    "q_en": "Boss, sales department sees opportunities in selling at the millionaires fair this week. What do you think?",
+    "q_sc": "销售部老板在本周的百万富翁博览会上看到了销售机会。你怎么认为？",
+    "q_tc": "銷售部老闆在本週的百萬富翁博覽會上看到了銷售機會。你怎麼認為？",
+    "a_en": "Great idea! send them with 10 watches and 10 necklaces",
+    "a_sc": "很好！那就让他们带10块名表、10条项链去试试！",
+    "a_tc": "很好！那就讓他們帶10塊名錶、10條項鍊去試試看！",
+    "effect": "获得$40,000"
+  },
+  {
+    "q_en": "Boss, the workers are asking for a \"Bring Your Pet To Work Day\" but the facilities people are concerned about the mess and it might reduce production that day.",
+    "q_sc": "老板，工人们要求“把宠物带到工作日”，但人们担心这些设施会混乱，这可能会减少当天的产量。",
+    "q_tc": "老闆，員工們要求“把寵物帶到工作日”，但人們擔心這些設施會混亂，這可能會減少當天的產量。",
+    "a_en": "Let's allow it, but all pets will be kept in one central area and we'll give them extra breaks to visit them.",
+    "a_sc": "允许吧，但是所有宠物都将被存放在一个中央区域，我们将给他们额外的休息时间来探访它们。",
+    "a_tc": "允許吧，但是所有寵物都將被存放在一個中央區域，我們將給他們額外的休息時間來探訪它們。",
+    "effect": "无效果"
+  },
+  {
+    "q_en": "I just learned that the company we pay to haul off our trash is having a strike and won't be around for awhile. Their competitors are trying to gouge us to take on the work temporarily demanding an extra $%s.",
+    "q_sc": "我刚刚得知，我们花钱请来拖走垃圾的公司正在进行罢工，暂时不会提供服务。他们的竞争对手正试图收取高额费用，暂时要求额外的$%s。该怎么办？",
+    "q_tc": "我剛剛得知，我們花錢請來拖走垃圾的公司正在進行罷工，暫時不會提供服務。他們的競爭對手正試圖收取高額費用，暫時要求額外的$%s。怎麼辦？",
+    "a_en": "Just pay the other company to keep things clean.",
+    "a_sc": "只需付钱给另一家公司，以保持环境清洁。",
+    "a_tc": "只需付錢給另一家公司，以保持環境清潔。",
+    "effect": "花费$5,000，无效果"
+  },
+  {
+    "q_en": "The employees at our oldest work site are claiming it is haunted and refuse to work night shifts. Also a reality show \"Spectral Binge\" wants to spend a couple of days filming an episode at the plant. They will pay us $%s",
+    "q_sc": "我们最老的工作地点的员工都声称那里有鬼，并拒绝上夜班。还有一个真人秀节目《Spectral Binge》想花几天时间在该工厂拍摄一集。他们会付给我们$%s。你同意吗？",
+    "q_tc": "我們最老的工作地點的員工都聲稱那裡有鬼，並拒絕上夜班。還有一個真人秀節目《Spectral Binge》想花幾天時間在該工廠拍攝一集。他們會付給我們$%s。你同意嗎？",
+    "a_en": "Never say no to television! Let the workers skip the night shifts and give it to the film crew.",
+    "a_sc": "永远不要对电视说不！让工人跳过夜班，把它交给电影摄制组。",
+    "a_tc": "永遠不要對電視說不！讓員工跳過夜班，把它交給電影攝製組。",
+    "effect": "获得$5,000"
+  },
+  {
+    "q_en": "Boss, our policy against workplace romance is becoming a problem as more and more company couples are springing up. What should we do?",
+    "q_sc": "老板，随着越来越多的公司夫妇如雨后春笋般出现，我们反对工作场所恋爱的政策正成为一个问题。我们应该做什么？",
+    "q_tc": "老闆，隨著越來越多的公司夫婦如雨後春筍般出現，我們反對工作場所戀愛的政策正成為一個問題。我們該做什麼？",
+    "a_en": "Is there something in the water? I guess we have no choice but to ease up on the policy.",
+    "a_sc": "水中有东西吗？我想我们别无选择，只能放宽政策。",
+    "a_tc": "水中有東西嗎？我想我們別無選擇，只能放寬政策。",
+    "effect": "无效果"
+  },
+  {
+    "q_en": "I have received this letter today and you have been invited to give a TED talk on the rapid success of your company and innovative management style!",
+    "q_sc": "我今天已收到这封信，邀请您就公司的快速成功和创新的管理风格进行TED演讲！",
+    "q_tc": "我今天已收到這封信，邀請您就公司的快速成功和創新的管理風格進行TED演講！",
+    "a_en": "This is an extreme honor. Help me prepare a stunning presentation.",
+    "a_sc": "这是一种至高无上的荣誉。帮我准备一个精彩的演讲。",
+    "a_tc": "這是一種至高無上的榮譽。幫我準備一個精彩的演講。",
+    "effect": "获得$50,000"
+  },
+  {
+    "q_en": "I heard that the workers want us to establish a gaming room they can use to decompress during breaks and before and after shifts. This would have board games, video games, and even tables set up for role-playing games like Dungeons and Dragons.",
+    "q_sc": "我听说工人们希望我们建立一个游戏室，他们可以在休息期间以及轮班前后使用它们进行减压。这将有棋盘游戏，视频游戏，甚至还为角色扮演游戏（如龙与地下城）设置桌子。",
+    "q_tc": "我聽說員工們希望我們建立一個遊戲室，他們可以在休息期間以及輪班前後使用它們進行減壓。這將有棋盤遊戲，視頻遊戲，甚至為角色扮演遊戲（如龍與地下城）設置桌子。",
+    "a_en": "Great idea! Let's spend $%s on this and make sure there are devices running SimCompanies!",
+    "a_sc": "好主意！让我们在这上面花$%s，确保设备上有Sim Companies！",
+    "a_tc": "好主意！讓我們在這上面花$%s，確保設備上有Sim Companies！",
+    "effect": "目前运行中的建筑生产产量增加5%，零售收益增加2.5%(最优解是将所有建筑拉满48小时运行后提交任务)"
+  },
+  {
+    "q_en": "A tax auditor is here and wants to go through the books to make sure we are paying our fair share.",
+    "q_sc": "一位税务审计师来了，他想检查我们的财务报表，以确保我们支付了我们的公平份额。",
+    "q_tc": "一位稅務審計師來了，他想檢查我們的財務報表，以確保我們支付了我們的公平份額。",
+    "a_en": "Give them full and open cooperation. Let's hope they don't find anything too costly.",
+    "a_sc": "给予他充分和公开的合作。希望他不要发现什么太昂贵的东西。",
+    "a_tc": "給予他充分和公開的合作。希望他不要發現什麼太昂貴的東西。",
+    "effect": "获得$50,000"
+  },
+  {
+    "q_en": "It appears there is a sort of \"civil war\" breaking out in the management team. About half of them want to apply Six Sigma principles to improve our processes and the other half all want to go with Agile techniques. It's getting really heated. What do we do?",
+    "q_sc": "似乎在高管们中爆发了某种冲突。大约一半的人想应用六西格玛原则来改善我们的流程，而另一半人则想采用Agile技术。这真是越来越激烈了。我们该怎么办？",
+    "q_tc": "似乎在高階主管中爆發了某種衝突。大約一半的人想應用六西格瑪原則來改善我們的流程，而另一半人則想採用Agile技術。這真是越來越激烈了。我們該怎麼辦？",
+    "a_en": "Striving for perfection is good. Let's use Six Sigma.",
+    "a_sc": "追求完美是好事。让我们使用六西格玛。",
+    "a_tc": "追求完美是好事。讓我們使用六西格瑪。",
+    "effect": "三个选项都是获得$20,000"
+  },
+  {
+    "q_en": "Hey boss, a representative of the military is here and they are offering a special \"boot camp\" for corporate executives. It costs $%s, but is supposed to dramatically improve their ethics, attitude, and ability.",
+    "q_sc": "老板，军队的一名代表在这里，他们为企业高管提供一个特殊的 \"新兵训练营\"。这需要花费$%s，但据说可以极大地提高他们的道德、态度和能力。该怎么办？",
+    "q_tc": "老闆，軍隊的一名代表在這裡，他們為企業高管提供一個特殊的 \"新兵訓練營\"。這需要花費$%s，但據說可以極大地提高他們的道德、態度和能力。怎麼辦？",
+    "a_en": "Awesome! Military training tends to be the best in the world. Sign them up!",
+    "a_sc": "太棒了！军事训练是世界上最好的。给他们报名吧!",
+    "a_tc": "太棒了！軍事訓練是世界上最好的。給他們報名吧!",
+    "effect": "所有高管技能+1"
+  },
+  {
+    "q_en": "Your business partner wants to upgrade her grocery store, and it will cost her $%(upgrade)s. She doesn't have this kind of money, so she's considering borrowing it from her family with no interest. She estimates that she will earn 30 cents more on each purchase, and she has 100 purchases per hour and her store is open 24/7. She's asking you for advice on how long it will take her to pay off her loan.",
+    "q_sc": "你的商业伙伴想升级她的生鲜商店，这将花费她$%(upgrade)s。她没有那么多钱，所以她考虑从家人借钱，没有利息。她估计每次购物会多赚30美分，她每小时有100次购物，她的商店是24小时营业。她向你请教，她需要多长时间才能还清贷款。她应该怎么办？",
+    "q_tc": "你的商業夥伴想升級她的生鮮超市，這將花費她$%(upgrade)s。她沒有那麼多錢，所以她考慮從家人借錢，沒有利息。她估計每次購物會多賺30美分，她每小時有100次購物，她的商店是24小時營業。她向你請教，她需要多長時間才能還清貸款。她該怎麼辦？",
+    "a_en": "Less than 3 weeks, I am sure.",
+    "a_sc": "一定是3个星期内。",
+    "a_tc": "一定是3個星期內。",
+    "effect": "获得$1,800"
+  },
+  {
+    "q_en": "A street magician walked in the office and offered you a gamble. You flip your coin 2 times. If it lands on tail all 2 times, you give him $500, otherwise you receive 100$. Will you accept the gamble?",
+    "q_sc": "一位街头魔术师走进办公室，为您赌博。您掷硬币两次。如果它两次都落在尾巴上，您给他$ 500，否则您将得到$ 100。你会接受赌博吗？",
+    "q_tc": "一位街頭魔術師走進辦公室，為您賭博。您擲硬幣兩次。如果它兩次都落在尾巴上，您給他$ 500，否則您將得到$ 100。你會接受賭博嗎？",
+    "a_en": "Nope, those odds are not fair",
+    "a_sc": "不，那几率不公平",
+    "a_tc": "不，那機率不公平",
+    "effect": "获得1单位Q5名牌手表"
+  },
+  {
+    "q_en": "A friend of yours just called. He offers you to set up the pricing model for his cinema for one evening in exchange for 50%% of profits. He has %s seats, which price should he set up:",
+    "q_sc": "你的一个朋友刚刚打电话来。他提出让你为他的电影院建立一个晚上的定价模式，以换取50%%的利润。他有%s个座位，你觉得他应该设置哪种价格？",
+    "q_tc": "你的一個朋友剛打電話來。他提出讓你為他的電影院建立一個晚上的定價模式，以換取50%%的利潤。他有%s個座位，你覺得他應該設定哪一個價格？",
+    "a_en": "$2 for over 60s year-old and $4 for everyone else.",
+    "a_sc": "超过60岁的人需要支付2美元，其他人需要支付4美元。",
+    "a_tc": "超過60歲的人需要支付2美元，其他人需要支付4美元。",
+    "effect": "获得$1,500"
+  },
+  {
+    "q_en": "One of your workers with a salary of $%(salary)s/hour got into an accident and isn't able to work for the next %(hours)d hours. We won't be able to find a replacement that soon, so we'll just have to wait for him to get back. But there is a drug that can make them recover in just 1 hour, it would cost you $%(cost)s. The worker can't afford it and asks for your help.",
+    "q_sc": "你的一个工资为$%(salary)s/小时的工人出了意外，在接下来的%(hours)d个小时内无法工作。我们不可能那么快找到替代者，所以我们只能等他回来。但是有一种药物可以让他们在短短1小时内恢复，这需要花费$%(cost)s。工人负担不起，他请求你的帮助。该怎么办？",
+    "q_tc": "你的一個薪水為$%(salary)s/小時的員工出了意外，在接下來的%(hours)d小時內無法工作。我們不可能那麼快找到替代者，所以我們只能等他回來。但是有一種藥物可以讓他們在短短1小時內恢復，這需要花費$%(cost)s。員工負擔不起，他請求你的幫助。怎麼辦？",
+    "a_en": "Sure, let's cover his treatment cost.",
+    "a_sc": "当然，让我们负担他的治疗费用。",
+    "a_tc": "當然，讓我們負擔他的治療費用。",
+    "effect": "花费$1,200"
+  },
+  {
+    "q_en": "A journalist from a local newspaper called and asked your opinion as an expert businessman. The government wants to launch a big infrastructure project (building a very expensive and beautiful bridge). The journalist is curious if that should be classified as a fiscal or monetary policy. What should we tell her?",
+    "q_sc": "本地报纸的记者打电话来问您作为专业商人的意见。政府想启动一个大型基础设施项目（建造一座很贵而美丽的大桥）。记者想知道这究竟属于财政政策，还是货币政策。我们应该怎么回答？",
+    "q_tc": "本地報社的記者打電話問您身為專業商人的意見。政府想啟動一個大型基礎建設計畫（建造一座很貴而美麗的大橋）。記者想知道這究竟屬於財政政策，還是貨幣政策。我們該怎麼回答？",
+    "a_en": "Monetary policy, obviously.",
+    "a_sc": "一定是货币政策！",
+    "a_tc": "一定是貨幣政策！",
+    "effect": "获得$2,000"
+  },
+  {
+    "q_en": "You are at a work party, your colleague made a $%(bet)s bet you won't be able to answer a tricky question. Imagine we find a water supplier that offers the water cheaper than we currently have by 10 cents. If we buy all our water from them, the grapes we will get (assuming we produce everything else by ourselves and all other factors being equal) will be:",
+    "q_sc": "你在一个工作聚会上，你的同事打了一个$%(bet)s的赌，你不会回答一个棘手的问题。想象一下，我们找到一个水供应商，其提供的水比我们目前的水便宜10美分。如果我们从他们那里购买所有的水，我们将得到的葡萄（假设我们自己生产其他东西，所有其他因素相同）将便宜多少钱？",
+    "q_tc": "你在工作聚會上，你的同事打了一個$%(bet)s的賭，你不會回答一個棘手的問題。想像一下，我們找到一個水供應商，其提供的水比我們目前的水便宜10美分。如果我們從他們那裡購買所有的水，我們將得到的葡萄（假設我們自己生產其他東西，所有其他因素相同）將便宜多少錢？",
+    "a_en": "Easy, 41 cents cheaper!",
+    "a_sc": "很简单，便宜41美分！",
+    "a_tc": "很簡單，便宜41美元！",
+    "effect": "获得$1,000"
+  },
+  {
+    "q_en": "Hooray! We have finally closed a deal on a perfect new office space. Most of the area is open-space, but there are a few offices to be distributed. As usual, there are more people wanting an office than there are offices. Also some offices are larger, and some have windows with nice views. Boss, how should we decide who gets which office?",
+    "q_sc": "万岁！我们终于就一个完美的新办公空间达成了协议。该地区大部分是开放空间，但有一些办公室需要分配。像往常一样，想要办公室的人比办公室多。此外，有些办公室更大，有些办公室有风景优美的窗户。老板，我们应该如何决定谁得到哪个办公室？",
+    "q_tc": "萬歲！我們終於就一個完美的新辦公空間達成了協議。該地區大部分是開放空間，但有一些辦公室需要分配。像往常一樣，想要辦公室的人比辦公室多。此外，有些辦公室更大，有些辦公室有風景優美的窗戶。老闆，我們該如何決定誰得到哪個辦公室？",
+    "a_en": "Make an optional sealed-bid auction and donate the money to charity.",
+    "a_sc": "做一个可选的盲目拍卖，并将收益捐给慈善机构。",
+    "a_tc": "做一個可選的盲目拍賣，並將收益捐給慈善機構。",
+    "effect": "无效果"
+  },
+  {
+    "q_en": "Boss, one of your top managers complains that his salary is insufficient to cover his family's basic needs, but we already compensate him very well. It's the one who smokes all the time: $5 pack a day. He also coughs a lot... He's here to chat with you.",
+    "q_sc": "老板，你的一位高级管理人员抱怨说，他的薪酬不足以满足他家庭的基本需求，但我们已经很好地补偿了他。这是一个一直吸烟的人：每天5美元一包。他也经常咳嗽...... 他来了跟你讲话。",
+    "q_tc": "老闆，你的一位高階主管抱怨說，他的薪水不足以滿足他家庭的基本需求，但我們已經很好地補償了他。這是一個一直吸煙的人：每天5美元一包。他也常常咳嗽...... 他來了跟你講話。",
+    "a_en": "Would you like to have an equivalent of $%s in the bank generating you 5%% interest?",
+    "a_sc": "你是否想获得相当于$%s的本金所产生的5%%银行利息？",
+    "a_tc": "你是否想獲得相當於$%s的本金所產生的5%%銀行利息？",
+    "effect": "获得1单位无人机"
+  },
+  {
+    "q_en": "A worker in one of your facilities made a mistake that has cost us $%(cost)s. Boss, what should we do?",
+    "q_sc": "你们某个设施中的一名工人犯了一个错误，使我们损失了$%(cost)s。老板，我们该怎么做？",
+    "q_tc": "你們某設施中的一位員工犯了一個錯誤，使我們損失了$%(cost)s。老闆，我們該怎麼做？",
+    "a_en": "Call her in, I will chat with her.",
+    "a_sc": "打电话给她，我会和她聊天。",
+    "a_tc": "打電話給她，我會和她聊天。",
+    "effect": "目前运行中的建筑生产产量增加5%，零售收益增加2.5%(最优解是将所有建筑拉满48小时运行后提交任务)"
+  },
+  {
+    "q_en": "You have %(percent)d%% of blue-eyed people in your company. The blue-eyed people did an internal research and found out that you never promote blue-eyed people, and as a consequence they earn less money than people with other eye color. They are pretty angry and threaten to file a lawsuit unless you do something about it.",
+    "q_sc": "你的公司里有%(percent)d%%的人是蓝眼睛。这些蓝眼睛的人做了一个内部调查，发现你从不提拔蓝眼睛的人，结果他们赚的钱比其他眼睛颜色的人少。他们非常生气，并威胁要提起诉讼，除非你对此有所行动。该怎么办呢？",
+    "q_tc": "你的公司裡有%(percent)d%%的人是藍眼睛。這些藍眼睛的人做了一個內部調查，發現你從不提拔藍眼睛的人，結果他們賺的錢比其他眼睛顏色的人少。他們非常生氣，並威脅要提起訴訟，除非你對此有所行動。怎麼辦呢？",
+    "a_en": "Set up an internal working group to investigate the claim further.",
+    "a_sc": "成立内部工作小组以进一步调查索赔。",
+    "a_tc": "成立內部工作小組以進一步調查索賠。",
+    "effect": "花费$1,000"
+  },
+  {
+    "q_en": "Boss, your CTO is here: I have identified 2 production units we can upgrade, upkeep for the first one is $%(first)s/hour and I can make it run for $4/hour which is saves us 20%% of the cost! The seconds one costs $%(second)s/hour to run, and I can make it run for $18/hour, which saves us 10%% of the upkeep! We can only upgrade one of them, which one should we chose?",
+    "q_sc": "老板，你的CTO来跟你谈谈话：我已经确定了两个可以升级的生产单位，第一种选择的维护费用是$%(first)s/小时，我可以让它以$4/小时的价格运行，这为我们节省了20%%的成本! 第二台的运行成本为$%(second)s/小时，我可以让它以$18/小时的价格运行，这就为我们节省了10%%的维护费用! 我们只能升级其中一个，我们应该选择哪一个？",
+    "q_tc": "老闆，你的CTO來跟你談談：我已經確定了兩個可以升級的生產單位，第一種選擇的維護費用是$%(first)s/小時，我可以讓它以$4/小時的價格運行，這為我們節省了20%%的成本! 第二台的運行成本為$%(second)s/小時，我可以讓它以$18/小時的價格運行，這就為我們節省了10%%的維護費用!我們只能升級其中一個，我們該選擇哪一個？",
+    "a_en": "The second one",
+    "a_sc": "第二选择！",
+    "a_tc": "第二選擇！",
+    "effect": "获得$4,800"
+  },
+  {
+    "q_en": "Boss, there is a conference coming up where we can potentially reach %(customers)s new customers, each worth $21 if they convert buying our product. What marketing materials should we prepare for our stall? It's either: a set of souvenirs worth $10 each with estimated 50%% chance to convert the customer; or we can prepare a set of leaflets worth $5 each and a set of brochures worth $5 each and each has estimated 25%% chance to convert the potential customer.",
+    "q_sc": "老板，有一个会议即将召开，我们有可能接触到%(customers)s个新客户，如果他们开始购买我们的产品，每个人价值$21。我们应该为我们的摊位准备什么营销材料？可以是：一套纪念品，每套价值$10，估计有50%%的机会转化客户；或者我们可以准备一套传单，每套价值$5，一套小册子，每套价值5美元，估计有25%%的机会转化潜在客户。该选哪一个呢？",
+    "q_tc": "老闆，有一個會議即將召開，我們有可能接觸到%(customers)s個新客戶，如果他們開始購買我們的產品，每個人價值$21。我們應該為我們的攤位準備什麼行銷材料？可以是：一套紀念品，每套價值$10，估計有50%%的機會轉化客戶；或者我們可以準備一套傳單，每套價值$5，一套小冊子，每套價值5美元，估計有25%% 的機會轉化潛在客戶。該選哪一個呢？",
+    "a_en": "Prepare the souvenirs, %d%% conversion",
+    "a_sc": "准备那些纪念品！（%d%%的机会转化客户）",
+    "a_tc": "準備那些紀念品！ （%d%%的機會轉換客戶）",
+    "effect": "获得$5,000"
+  },
+  {
+    "q_en": "Boss, your CTO has suggested taking out a loan at 1%% interest a day and automating one of our buildings. We need %(robots)d robots at $%(cost)s each. It will save us 3%% on our salary cost of $%(saving)s per day. We just can't figure out how many days until we start to see a profit.",
+    "q_sc": "老板，你的CTO建议以每天1%%的利率借款，并在我们的一座生产建筑里安装机器人。我们需要%(robots)d个机器人，每个$%(cost)s。这将为我们节省3%%的工资成本，每天总计$%(saving)s。我们需要计算出需要多少天才能收回安装成本。",
+    "q_tc": "老闆，你的CTO建議以每天1%%的利率借款，並在我們的一棟生產大樓安裝機器人。我們需要%(robots)d個機器人，每個$%(cost)s。這將為我們節省3%%的工資成本，每天總計$%(saving)s。我們需要計算出需要多少天才能收回安裝成本。",
+    "a_en": "That is a terrible idea!",
+    "a_sc": "坏主意！",
+    "a_tc": "壞主意！",
+    "effect": "无效果"
+  },
+  {
+    "q_en": "Boss, employees are complaining about the office coffee again. Someone anonymously reviewed it as \"a war crime against Arabica\".",
+    "q_sc": "老板，员工们又在抱怨办公室咖啡了。有人匿名评价它是“对阿拉比卡咖啡的战争罪”。",
+    "q_tc": "老闆，員工們又在抱怨辦公室的咖啡了。有人匿名評論說它是“對阿拉比卡咖啡的戰爭罪行“。",
+    "a_en": "Upgrade to premium coffee for $%(cost)s. It is not that expensive.",
+    "a_sc": "花费 $%(cost)s 升级为高级咖啡。这并没有那么贵。",
+    "a_tc": "升級成高級咖啡只要 $%(cost)s，真的不算什麼大花費啦。",
+    "effect": "目前运行中的建筑生产产量增加5%，零售收益增加2.5%(最优解是将所有建筑拉满48小时运行后提交任务)"
+  },
+  {
+    "q_en": "Boss, warehouse employees have organized an unofficial Forklift Olympics after hours. Events include pallet slalom, synchronized reversing, and something called \"the beep-beep ballet\". The facilities team is extremely worried.",
+    "q_sc": "老板，仓库员工下班后组织了非官方叉车奥运会。比赛项目包括托盘回转赛、同步倒车，以及某种被称为“滴滴芭蕾”的项目。设施团队对此非常担忧。",
+    "q_tc": "老闆，倉庫員工在下班後組織了非官方的“叉車奧運會“。比賽項目包括棧板迴旋、同步倒車，以及一個叫做“嗶嗶芭蕾“的活動。設施管理團隊非常擔心。",
+    "a_en": "Make it official, buy safety cones, and give the winners a trophy.",
+    "a_sc": "把它官方化，购买安全路锥，并给获胜者一个奖杯。",
+    "a_tc": "讓這項活動正式化，購買安全錐，並為獲勝者準備一座獎盃。",
+    "effect": "获得10,000运输单位"
+  },
+  {
+    "q_en": "Boss, an influencer is offering to promote our luxury products to what they call \"an extremely curated audience\" and wants to be paid upfront.",
+    "q_sc": "老板，一位网红提出要向他们所谓“高度精选的受众”推广我们的奢华产品，并希望预先付款。",
+    "q_tc": "老闆，一位網紅提出要推廣我們的奢侈品，並稱其受眾是“極度精心挑選的群體“，而且要求先行付款。",
+    "a_en": "Offer payment, but only for measurable sales.",
+    "a_sc": "提供报酬，但只按实际销售成果支付。",
+    "a_tc": "提供報酬，但只以實際銷售成果支付。",
+    "effect": "获得$3,000"
+  },
+  {
+    "q_en": "Boss, a consulting firm is offering to redesign our management structure into a \"dynamic accountability pyramid\". Their brochure is mostly triangles, but the executives are intrigued.",
+    "q_sc": "老板，一家咨询公司提出要把我们的管理结构重新设计成“动态责任金字塔”。他们的宣传册里几乎全是三角形，但高管们很感兴趣。",
+    "q_tc": "老闆，一家顧問公司提出要將我們的管理架構重新設計成“動態責任金字塔“。他們的簡介幾乎全是三角形，但高層主管們很感興趣。",
+    "a_en": "Recommend them warmly to our competitors.",
+    "a_sc": "热情地把他们推荐给我们的竞争对手。",
+    "a_tc": "熱情地把他們推薦給我們的競爭對手。",
+    "effect": "获得$10,000"
+  }
+]
