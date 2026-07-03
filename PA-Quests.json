@@ -363,9 +363,9 @@
     "q_en": "A journalist from a local newspaper called and asked your opinion as an expert businessman. The government wants to launch a big infrastructure project (building a very expensive and beautiful bridge). The journalist is curious if that should be classified as a fiscal or monetary policy. What should we tell her?",
     "q_sc": "本地报纸的记者打电话来问您作为专业商人的意见。政府想启动一个大型基础设施项目（建造一座很贵而美丽的大桥）。记者想知道这究竟属于财政政策，还是货币政策。我们应该怎么回答？",
     "q_tc": "本地報社的記者打電話問您身為專業商人的意見。政府想啟動一個大型基礎建設計畫（建造一座很貴而美麗的大橋）。記者想知道這究竟屬於財政政策，還是貨幣政策。我們該怎麼回答？",
-    "a_en": "Monetary policy, obviously.",
-    "a_sc": "一定是货币政策！",
-    "a_tc": "一定是貨幣政策！",
+    "a_en": "Fiscal policy, obviously.",
+    "a_sc": "一定是财政政策。",
+    "a_tc": "一定是財政政策。",
     "effect": "获得$2,000"
   },
   {
