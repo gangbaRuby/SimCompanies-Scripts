@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.31
+// @version      1.32.32
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1720,8 +1720,8 @@
                 { type: 'toggle', key: 'warehouseProfit', label: '仓库时利润计算' },
                 { type: 'toggle', key: 'chatAccessibility', label: '聊天室色弱辅助', defaultEnabled: false },
                 { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
-                { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: false },
-                { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: false },
+                { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
+                { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
             ];
             const ITEMS_PER_PAGE = 5;
             let currentPage = 0;
@@ -10510,10 +10510,7 @@
 
         // 检查功能开关
         function isEnabled() {
-            try {
-                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-                return cfg['paQuestAnswers'] === true;
-            } catch (e) { return false; }
+            return window.isPageModuleEnabled ? window.isPageModuleEnabled('paQuestAnswers') : true;
         }
 
         // 加载PA数据
@@ -10693,7 +10690,7 @@
 
             // 复制按钮（放在行末）
             const copyBtn = document.createElement('button');
-            copyBtn.textContent = '📋';
+            copyBtn.textContent = '复制';
             copyBtn.title = '复制答案和效果';
             copyBtn.style.cssText = 'background:none;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:12px;padding:0 5px;line-height:1.8;flex-shrink:0;color:#666;transition:all 0.2s;';
             copyBtn.onmouseenter = function () { this.style.borderColor = '#666'; this.style.color = '#333'; };
@@ -10998,11 +10995,52 @@
             img.setAttribute('data-sc-original-src', imgUrl);
             img.addEventListener('click', function (e) {
                 e.stopPropagation();
-                window.open(href, '_blank');
+                showLightbox(imgUrl);
             });
 
             // 在链接后面插入图片
             link.parentNode.insertBefore(img, link.nextSibling);
+        }
+
+        // 显示图片放大灯箱
+        function showLightbox(url) {
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:99999;display:flex;justify-content:center;align-items:center;cursor:pointer;';
+
+            var closeBtn = document.createElement('span');
+            closeBtn.textContent = '×';
+            closeBtn.style.cssText = 'position:fixed;top:16px;right:24px;font-size:36px;color:#fff;cursor:pointer;z-index:100000;line-height:1;font-family:sans-serif;user-select:none;';
+            closeBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                closeLightbox();
+            });
+
+            function closeLightbox() {
+                overlay.style.opacity = '0';
+                setTimeout(function () { overlay.remove(); }, 200);
+                document.removeEventListener('keydown', onKeyDown);
+            }
+
+            function onKeyDown(e) {
+                if (e.key === 'Escape') closeLightbox();
+            }
+
+            overlay.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', onKeyDown);
+
+            var img = document.createElement('img');
+            img.src = url;
+            img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:4px;box-shadow:0 0 20px rgba(0,0,0,0.5);cursor:default;transition:opacity 0.2s;';
+            img.style.opacity = '0';
+            img.addEventListener('load', function () { img.style.opacity = '1'; });
+            img.addEventListener('click', function (e) { e.stopPropagation(); });
+
+            overlay.appendChild(closeBtn);
+            overlay.appendChild(img);
+            document.body.appendChild(overlay);
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.2s';
+            requestAnimationFrame(function () { overlay.style.opacity = '1'; });
         }
 
         // 扫描容器中的 snipboard 链接
@@ -11065,9 +11103,6 @@
             for (var i = 0; i < containers.length; i++) {
                 observer.observe(containers[i], { childList: true, subtree: true });
             }
-
-            // 也观察整个页面以捕获动态加载的容器
-            observer.observe(document.body, { childList: true, subtree: true });
         }
 
         // SPA 导航监听
@@ -11228,7 +11263,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加Snipboard图片预览功能，默认关闭；增加PA任务答案功能，默认关闭
+        // @changelog    增加Snipboard图片预览功能，默认开启；增加PA任务答案功能，默认开启
 
         fetch(scriptUrl)
             .then(res => res.text())
