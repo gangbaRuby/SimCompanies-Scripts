@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.32
+// @version      1.32.33
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -10560,7 +10560,8 @@
             // 再只保留中文字和英文字母，抛弃数字和特殊符号
             const t = text.toLowerCase().replace(/\s+/g, '').replace(/[^a-z\u4e00-\u9fff]/g, '');
             const q = question.toLowerCase().replace(/\s+/g, '')
-                .replace(/\$%s/g, '').replace(/%\([\w]+\)\w/g, '')
+                .replace(/\$%s/g, '').replace(/%s/g, '').replace(/%\([\w]+\)\w/g, '')
+                .replace(/:re-\d+:/g, '')
                 .replace(/[^a-z\u4e00-\u9fff]/g, '');
             if (!q || !t) return 0;
 
