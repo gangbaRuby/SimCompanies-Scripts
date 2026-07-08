@@ -11264,7 +11264,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    增加Snipboard图片预览功能，默认开启；增加PA任务答案功能，默认开启
+        // @changelog    修改pa任务匹配算法
 
         fetch(scriptUrl)
             .then(res => res.text())
