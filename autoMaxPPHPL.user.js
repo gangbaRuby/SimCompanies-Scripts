@@ -1,4 +1,4 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
 // @version      1.32.33
@@ -1690,27 +1690,29 @@
             secBtnGroup.append(backBtn);
             // 分页渲染：所有开关项
             const toggleItems = [
-                { type: 'factory', fn: () => {
-                    const b = document.createElement('button');
-                    b.className = 'SimcompaniesRetailCalculation-action-btn';
-                    b.id = 'auto-amount-toggle-btn';
-                    const refreshState = () => {
-                        try {
-                            const enabled = typeof window.isAutoAmountEnabled === 'function' && window.isAutoAmountEnabled();
-                            b.textContent = enabled ? '自定义运行时长: 🟢 已启用' : '自定义运行时长: 🔴 已禁用';
-                            b.style.backgroundColor = enabled ? '#4CAF50' : '#f44336';
-                        } catch (e) { b.textContent = '自定义运行时长: (加载中...)'; b.style.backgroundColor = '#607D8B'; }
-                    };
-                    refreshState();
-                    b.onclick = (ev) => {
-                        ev.stopPropagation();
-                        if (typeof window.isAutoAmountEnabled !== 'function') return;
-                        window.saveAutoAmountEnabled(!window.isAutoAmountEnabled());
-                        window.initAutoAmountButtons(true);
+                {
+                    type: 'factory', fn: () => {
+                        const b = document.createElement('button');
+                        b.className = 'SimcompaniesRetailCalculation-action-btn';
+                        b.id = 'auto-amount-toggle-btn';
+                        const refreshState = () => {
+                            try {
+                                const enabled = typeof window.isAutoAmountEnabled === 'function' && window.isAutoAmountEnabled();
+                                b.textContent = enabled ? '自定义运行时长: 🟢 已启用' : '自定义运行时长: 🔴 已禁用';
+                                b.style.backgroundColor = enabled ? '#4CAF50' : '#f44336';
+                            } catch (e) { b.textContent = '自定义运行时长: (加载中...)'; b.style.backgroundColor = '#607D8B'; }
+                        };
                         refreshState();
-                    };
-                    return b;
-                }},
+                        b.onclick = (ev) => {
+                            ev.stopPropagation();
+                            if (typeof window.isAutoAmountEnabled !== 'function') return;
+                            window.saveAutoAmountEnabled(!window.isAutoAmountEnabled());
+                            window.initAutoAmountButtons(true);
+                            refreshState();
+                        };
+                        return b;
+                    }
+                },
                 { type: 'toggle', key: 'marketProfit', label: '交易所计算时利润' },
                 { type: 'toggle', key: 'contractProfit', label: '合同计算时利润' },
                 { type: 'toggle', key: 'executiveHistory', label: '显示高管培训记录' },
@@ -2972,7 +2974,8 @@
             skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
             v, b,
             cogs, quality, quantity, cardIndex, retryCount,
-            SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT} = e.data;
+            SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT,
+            calcMode} = e.data;
 
         // Utility functions defined inside to use local lwe and zn
         const wv = (e, t, r) => {
@@ -3026,7 +3029,11 @@
 
             if (!secondsToFinish || secondsToFinish <= 0) break;
 
-            let profit = (revenue - cogs - wagesTotal) / secondsToFinish;
+            let profit = revenue - cogs - wagesTotal;
+            if (calcMode === 'hourly') {
+                profit = profit / secondsToFinish;
+            }
+
             if (profit > maxProfit) {
                 maxProfit = profit;
                 bestPrice = currentPrice;
@@ -3059,13 +3066,16 @@
         // 计算对应的工资总额
         const calculatedWages = Math.ceil(finalW * wages * acceleration * b / 3600);
 
-        // 发送结果，带上 calculatedWages
+        // 发送结果，带上 calculatedWages, calcMode, finalTotalProfit, finalW
         self.postMessage({
             bestPrice: bestPrice,
             maxProfit: maxProfit,
-            calculatedWages: calculatedWages, // <--- 新增这个
+            calculatedWages: calculatedWages,
             cardIndex: cardIndex,
-            retryCount: retryCount
+            retryCount: retryCount,
+            calcMode: calcMode,
+            finalTotalProfit: (bestPrice * parseFloat(quantity)) - cogs - calculatedWages,
+            finalW: finalW
         });
 
     };
@@ -3073,7 +3083,7 @@
 
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
 
-        function triggerCalculation(comp, index, retryCount = 0) {
+        function triggerCalculation(comp, index, retryCount = 0, calcMode = 'hourly') {
             if (localStorage.getItem('SimcompaniesConstantsData') == null) {
                 showToast("请先点击左下角更新基础数据", 'error');
                 return;
@@ -3111,24 +3121,27 @@
                 cogs, quality, quantity,
                 cardIndex: index,
                 retryCount: retryCount,
-                SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT
+                SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT,
+                calcMode: calcMode
             });
         }
 
         // 注册 Worker 异步回调 (处理结果和校验)
         profitWorker.onmessage = (event) => {
             // 1. 接收 Worker 返回的数据 (包括计算出的预计工资 calculatedWages)
-            const { bestPrice, maxProfit, calculatedWages, cardIndex, retryCount } = event.data;
+            const { bestPrice, maxProfit, calculatedWages, cardIndex, retryCount, calcMode, finalTotalProfit, finalW } = event.data;
+            const mode = calcMode || 'hourly';
 
             // 使用 index 查找对应的卡片
             const card = document.querySelectorAll('div[style="overflow: visible;"]')[cardIndex];
             if (!card) return;
 
             const priceInput = card.querySelector('input[name="price"]');
-            const btn = card.querySelector(`button[data-index="${cardIndex}"]`);
+            const btnHourly = card.querySelector('.btn-max-hourly-profit');
+            const btnTotal = card.querySelector('.btn-max-total-profit');
             const profitDisplay = card.querySelector('.auto-profit-display');
 
-            if (!priceInput || !btn || !profitDisplay) return;
+            if (!priceInput || !profitDisplay) return;
 
             // 2. 重新获取 comp 实例，准备获取 size 和 wagesTotal
             const comp = findReactComponent(priceInput);
@@ -3139,18 +3152,24 @@
             setInput(priceInput, bestPrice.toFixed(2));
 
             // 4. 更新显示 UI
-            const hourlyProfit = (maxProfit / size) * 3600;
+            const hourlyProfit = finalW > 0 ? ((finalTotalProfit / finalW) / size * 3600) : 0;
 
-            // 更好的显示方式，包含预计工资作为校验参考
             profitDisplay.innerHTML = `
-                每级时利润: ${hourlyProfit.toFixed(2)}
+                <div>总利润: ${finalTotalProfit.toFixed(2)}</div>
+                <div style="margin-top: 2px;">每级时利润: ${hourlyProfit.toFixed(2)}</div>
             `;
             profitDisplay.style.background = '#4CAF50'; // 绿色表示成功
             profitDisplay.style.color = 'white';
             profitDisplay.style.fontWeight = 'bold';
 
-            btn.textContent = '最大时利润';
-            btn.disabled = false;
+            if (btnHourly) {
+                btnHourly.textContent = '最大时利润';
+                btnHourly.disabled = false;
+            }
+            if (btnTotal) {
+                btnTotal.textContent = '最大利润';
+                btnTotal.disabled = false;
+            }
 
             // 5. 异步校验 (等待 React State 更新)
             setTimeout(() => {
@@ -3169,10 +3188,11 @@
                         profitDisplay.style.color = 'white';
                         profitDisplay.innerHTML = '🔄 修正数量中...';
 
-                        // ⚠️ 这里的 triggerCalculation 必须在 initAutoPricing 外层定义
-                        // 或者通过 card.doAutoCalc(updatedComp, retryCount + 1) 调用
-                        if (typeof triggerCalculation === "function") {
-                            triggerCalculation(updatedComp, cardIndex, retryCount + 1);
+                        // ⚠️ 优先使用 card.doAutoCalc 调用以传递 mode 参数
+                        if (typeof card.doAutoCalc === "function") {
+                            card.doAutoCalc(updatedComp, retryCount + 1, mode);
+                        } else if (typeof triggerCalculation === "function") {
+                            triggerCalculation(updatedComp, cardIndex, retryCount + 1, mode);
                         } else {
                             // console.error("triggerCalculation 函数未定义，请确保它在作用域内。");
                         }
@@ -3207,11 +3227,25 @@
                     const comp = findReactComponent(priceInput);
                     if (!comp) return;
 
-                    const btn = document.createElement('button');
-                    btn.textContent = '最大时利润';
-                    btn.type = 'button';
-                    btn.setAttribute('data-index', index);
-                    btn.style = `margin-top: 5px; background: #2196F3; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; width: 100%;`;
+                    const btnContainer = document.createElement('div');
+                    btnContainer.style = `display: flex; flex-direction: column; gap: 4px; margin-top: 5px;`;
+
+                    const btnHourly = document.createElement('button');
+                    btnHourly.textContent = '最大时利润';
+                    btnHourly.type = 'button';
+                    btnHourly.className = 'btn-max-hourly-profit';
+                    btnHourly.setAttribute('data-index', index);
+                    btnHourly.style = `background: #2196F3; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; width: 100%;`;
+
+                    const btnTotal = document.createElement('button');
+                    btnTotal.textContent = '最大利润';
+                    btnTotal.type = 'button';
+                    btnTotal.className = 'btn-max-total-profit';
+                    btnTotal.setAttribute('data-index', index);
+                    btnTotal.style = `background: #e91e63; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; width: 100%;`;
+
+                    btnContainer.appendChild(btnHourly);
+                    btnContainer.appendChild(btnTotal);
 
                     const d = DM();
                     const profitDisplay = document.createElement('div');
@@ -3230,7 +3264,7 @@
 
                     // --- 提取核心发送逻辑 ---
                     // 这样按钮点击能用，后续重试也能用
-                    const startCalc = (targetComp, retryIdx = 0) => {
+                    const startCalc = (targetComp, retryIdx = 0, mode = 'hourly') => {
                         if (localStorage.getItem('SimcompaniesConstantsData') == null) {
                             showToast("请尝试更新基本数据（左下角按钮）"); // 替换了 alert
                             return;
@@ -3238,8 +3272,13 @@
 
                         // UI反馈
                         if (retryIdx === 0) {
-                            btn.textContent = '最大时利润 (计算中...)';
-                            btn.disabled = true;
+                            if (mode === 'hourly') {
+                                btnHourly.textContent = '计算中...';
+                                btnHourly.disabled = true;
+                            } else {
+                                btnTotal.textContent = '计算中...';
+                                btnTotal.disabled = true;
+                            }
                         }
                         profitDisplay.textContent = retryIdx > 0 ? `修正中(${retryIdx})...` : `计算中...`;
 
@@ -3263,21 +3302,28 @@
                             v, b, cogs, quality, quantity,
                             cardIndex: index,
                             retryCount: retryIdx, // 发送当前是第几次尝试
-                            SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT
+                            SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT,
+                            calcMode: mode
                         });
                     };
 
-                    btn.onclick = (e) => {
+                    btnHourly.onclick = (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        startCalc(comp, 0); // 初始重试次数为 0
+                        startCalc(comp, 0, 'hourly');
+                    };
+
+                    btnTotal.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        startCalc(comp, 0, 'total');
                     };
 
                     // 将函数引用挂载在 DOM 上，方便 onmessage 找到并调用重试
                     card.doAutoCalc = startCalc;
 
-                    priceInput.parentNode.insertBefore(btn, priceInput.nextSibling);
-                    priceInput.parentNode.insertBefore(profitDisplay, btn.nextSibling);
+                    priceInput.parentNode.insertBefore(btnContainer, priceInput.nextSibling);
+                    priceInput.parentNode.insertBefore(profitDisplay, btnContainer.nextSibling);
                     priceInput.parentNode.insertBefore(customCostInput, profitDisplay.nextSibling);
                     card.dataset.autoPricingAdded = 'true';
                 });
@@ -8939,7 +8985,7 @@
                         s2RawTxt = qualityEl.textContent?.trim() || '';
                         s2Quality = extractQualityFromEl(qualityEl);
                         if (s2Quality !== null) {
-                            mpLog('策略2 从合并成本后兄弟元素:', s2Quality, 'txt:', s2RawTxt.substring(0,30));
+                            mpLog('策略2 从合并成本后兄弟元素:', s2Quality, 'txt:', s2RawTxt.substring(0, 30));
                         }
                     }
                 }
@@ -8947,13 +8993,13 @@
                 // === 调试日志：本次轮询各策略原始数据 ===
                 mpLog('parseQuality 轮询#' + loopCount +
                     ' s1Found=' + s1Found +
-                    ' rawText="' + (s1RawText || '').substring(0,80) + '"' +
+                    ' rawText="' + (s1RawText || '').substring(0, 80) + '"' +
                     ' qMatch=' + s1Quality +
-                    ' btn="' + (s1BtnRaw || '').substring(0,30) + '"' +
+                    ' btn="' + (s1BtnRaw || '').substring(0, 30) + '"' +
                     ' showAll=' + s1ShowAllBtn +
                     ' filter=' + s1FilterBtn +
-                    ' s2El=' + (avgPriceEl?'avgprice':'cost') +
-                    ' s2Txt="' + (s2RawTxt || '').substring(0,30) + '"' +
+                    ' s2El=' + (avgPriceEl ? 'avgprice' : 'cost') +
+                    ' s2Txt="' + (s2RawTxt || '').substring(0, 30) + '"' +
                     ' s2Q=' + s2Quality);
 
                 // === 比对（按用户规范三类情况） ===
@@ -9015,7 +9061,7 @@
                     }
                 } catch (e) { }
             }
-            mpLog('getCachedMarketData 结果:', bestData ? `ts=${bestTs} age=${Date.now()-bestTs}ms rows=${bestData.length}` : 'null');
+            mpLog('getCachedMarketData 结果:', bestData ? `ts=${bestTs} age=${Date.now() - bestTs}ms rows=${bestData.length}` : 'null');
             return { data: bestData, ts: bestTs }; // 返回数据和时间戳
         }
 
@@ -9341,7 +9387,7 @@
                             }
                             renderButtons(freshData, freshMpInfo ? freshMpInfo.price : 0, '后台刷新');
                         }
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
             }
 
@@ -10205,7 +10251,7 @@
                 const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
                 cfg['chatAccessibility'] = val;
                 localStorage.setItem('SC_PageActions_Settings', JSON.stringify(cfg));
-            } catch (e) {}
+            } catch (e) { }
         }
 
         // 更新页面上所有切换按钮的状态
@@ -10527,7 +10573,7 @@
                         questData = parsed.data;
                         return questData;
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
 
             // 请求新数据
@@ -10546,7 +10592,7 @@
                 console.error('[PA任务] 数据加载失败:', e);
                 // 尝试使用过期缓存
                 if (!questData && cached) {
-                    try { questData = JSON.parse(cached).data; } catch (e2) {}
+                    try { questData = JSON.parse(cached).data; } catch (e2) { }
                 }
             }
             return questData;
@@ -11264,7 +11310,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    修改pa任务匹配算法
+        // @changelog    修改pa任务匹配算法，商店中增加最大利润按钮
 
         fetch(scriptUrl)
             .then(res => res.text())
