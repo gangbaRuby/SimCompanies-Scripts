@@ -5717,12 +5717,18 @@
         }
 
         // --- 计算单张卡片的 MP 信息（游戏机制：高Q可替代低Q，但低Q不可替代高Q） ---
-        function calcMpInfo(cardData, marketData) {
+        function calcMpInfo(cardData, marketData, status) {
             const resourceId = parseInt(cardData.dbLetter);
             const targetQuality = (cardData.quality !== null && cardData.quality !== undefined) ? cardData.quality : 0;
 
+            if (status === 'error') {
+                return { mpPercent: null, mpValue: null, mpNotes: 'MP请求失败', mpBestQuality: null };
+            }
+
+            const expiredNote = (status === 'fallback_expired') ? ' (缓存已过期)' : '';
+
             if (!marketData || !Array.isArray(marketData) || marketData.length === 0) {
-                return { mpPercent: null, mpValue: null, mpNotes: null };
+                return { mpPercent: null, mpValue: null, mpNotes: '市场无对应品质' + expiredNote, mpBestQuality: null };
             }
 
             // ID=150（树）只能精确匹配品质
@@ -5751,11 +5757,14 @@
 
             if (bestPrice !== Infinity && bestPrice > 0 && cardData.unitPrice > 0) {
                 const mpPercent = ((bestPrice - cardData.unitPrice) / bestPrice) * 100;
-                const mpNotes = (bestQuality !== targetQuality) ? `参考Q${bestQuality}价` : null;
+                let mpNotes = (bestQuality !== targetQuality) ? `参考Q${bestQuality}价` : null;
+                if (expiredNote) {
+                    mpNotes = mpNotes ? `${mpNotes}${expiredNote}` : '缓存数据';
+                }
                 return { mpPercent, mpValue: bestPrice, mpNotes, mpBestQuality: bestQuality };
             }
 
-            return { mpPercent: null, mpValue: null, mpNotes: '市场无对应品质', mpBestQuality: null };
+            return { mpPercent: null, mpValue: null, mpNotes: '市场无对应品质' + expiredNote, mpBestQuality: null };
         }
 
         // --- 批量处理所有卡片（时利润与 MP 分离：时利润立即发送 Worker，MP 后台拉取） ---
@@ -5903,8 +5912,8 @@
             }
 
             for (const { card, data, isRetail } of cardInfos) {
-                const marketData = marketDataMap[data.dbLetter];
-                const mpInfo = calcMpInfo(data, marketData);
+                const marketResult = marketDataMap[data.dbLetter] || { data: null, status: 'error' };
+                const mpInfo = calcMpInfo(data, marketResult.data, marketResult.status);
                 card.__resourceId = data.dbLetter;  // 供跳转链接使用
                 card.__mpPercent = mpInfo.mpPercent;
                 card.__mpValue = mpInfo.mpValue;
@@ -5913,7 +5922,7 @@
                 card.__mpPending = false;
 
                 // 如果开启了"显示市场最大时利"，收集订单稍后发送给 Worker
-                if (marketMaxProfitEnabled && isRetail && marketData && marketData.length > 0) {
+                if (marketMaxProfitEnabled && isRetail && marketResult.data && marketResult.data.length > 0) {
                     const cid = marketCardIdCounter++;
                     pendingMarketCards.set(cid, {
                         card,
@@ -5923,7 +5932,7 @@
                     });
                     marketOrders.push({
                         cardId: cid,
-                        marketData: marketData,
+                        marketData: marketResult.data,
                         targetQuality: (data.quality !== null && data.quality !== undefined) ? data.quality : 0,
                         quantity: data.quantity,
                         resourceId: data.dbLetter
@@ -6045,34 +6054,43 @@
             const key = `market_all_${realmId}_${resourceId}`;
             const raw = localStorage.getItem(key);
 
+            let cachedData = null;
+            let cachedValid = false;
+
             if (raw) {
                 try {
                     const parsed = JSON.parse(raw);
                     const dataArray = Array.isArray(parsed) ? parsed : parsed.data;
+                    cachedData = dataArray;
                     if (parsed.timestamp && (Date.now() - parsed.timestamp < 60000)) {
-                        return dataArray;
+                        cachedValid = true;
                     }
-                } catch (e) { /* 缓存损坏，重新请求 */ }
+                } catch (e) { /* 缓存损坏 */ }
             }
 
+            // 如果缓存有效，直接使用它并标记状态为 ok
+            if (cachedValid && cachedData) {
+                return { data: cachedData, status: 'ok' };
+            }
+
+            // 否则尝试拉取最新数据
             try {
                 const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
                 const response = await fetch(url);
+                if (!response.ok) throw new Error('Network response was not ok');
                 const json = await response.json();
                 if (Array.isArray(json)) {
                     localStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data: json }));
-                    return json;
+                    return { data: json, status: 'ok' };
                 }
             } catch (e) {
-                // 请求失败时回退到过期缓存
-                if (raw) {
-                    try {
-                        const parsed = JSON.parse(raw);
-                        return Array.isArray(parsed) ? parsed : parsed.data;
-                    } catch { }
+                // 请求失败时，如果存在过期缓存则回退，并标记为过期
+                if (cachedData) {
+                    return { data: cachedData, status: 'fallback_expired' };
                 }
             }
-            return null;
+            // 完全获取不到且无缓存
+            return { data: null, status: 'error' };
         }
 
         function refreshAllContractProfits() {
@@ -11530,6 +11548,36 @@
             return window.isPageModuleEnabled ? window.isPageModuleEnabled(MODULE_KEY) : true;
         }
 
+        // 动态注入样式，只在小屏幕媒体查询下生效以优化小屏幕布局，大屏幕保持原样
+        function injectStyles() {
+            var styleId = 'sc-snipboard-preview-style';
+            var existingStyle = document.getElementById(styleId);
+            var isDark = typeof DM === 'function' ? DM() : false;
+            var styleText = `
+                .sc-snipboard-preview-img {
+                    display: block !important;
+                    max-width: 180px !important;
+                    max-height: 180px !important;
+                    width: 100% !important;
+                    height: auto !important;
+                    object-fit: cover !important;
+                    box-sizing: border-box !important;
+                    border-radius: 4px;
+                    border: 1px solid ${isDark ? '#444' : '#ddd'} !important;
+                    box-shadow: ${isDark ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.15)'} !important;
+                    margin-top: 8px !important;
+                }
+            `;
+            if (existingStyle) {
+                existingStyle.textContent = styleText;
+            } else {
+                var style = document.createElement('style');
+                style.id = styleId;
+                style.textContent = styleText;
+                document.head.appendChild(style);
+            }
+        }
+
         // 查找聊天容器（与模块20相同逻辑）
         function findChatContainers() {
             var byClass = document.querySelectorAll('div.css-xo2rg1.e1llepen2');
@@ -11563,6 +11611,7 @@
 
             var img = document.createElement('img');
             img.src = imgUrl;
+            img.className = 'sc-snipboard-preview-img';
             img.style.maxWidth = '100%';
             img.style.maxHeight = '100%';
             img.style.height = 'auto';
@@ -11644,6 +11693,9 @@
             initAttempted = true;
 
             if (!isEnabled()) return;
+
+            // 注入或更新样式配置
+            injectStyles();
 
             // 扫描现有内容
             scanAll();
