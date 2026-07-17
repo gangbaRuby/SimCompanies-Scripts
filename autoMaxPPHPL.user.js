@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.35
+// @version      1.32.36
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -12177,7 +12177,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    入库合同获取mp失败时增加提示，修改图片预览图片大小，新增聊天输入框自动扩大功能
+        // @changelog    尝试修复输入法遮挡文本框的问题
 
         fetch(scriptUrl)
             .then(res => res.text())
