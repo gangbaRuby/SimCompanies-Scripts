@@ -2382,6 +2382,7 @@
                 { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
                 { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
+                { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true },
             ];
             const ITEMS_PER_PAGE = 5;
             let currentPage = 0;
@@ -11602,6 +11603,10 @@
             if (link.getAttribute('data-snipboard-processed') === '1') return;
 
             var imgUrl = href;
+            // 确保使用 https 协议，消除浏览器的混合内容（Mixed Content）警告
+            if (imgUrl.indexOf('http://') === 0) {
+                imgUrl = imgUrl.replace('http://', 'https://');
+            }
             // 如果URL不以图片格式结尾，添加 .jpg（snipboard默认）
             if (!isImageUrl(imgUrl)) {
                 imgUrl = imgUrl.replace(/\/?$/, '.jpg');
@@ -11749,6 +11754,257 @@
     })();
 
     // ======================
+    // 模块24：聊天输入框自动扩大
+    // ======================
+    (function () {
+        'use strict';
+
+        var MODULE_KEY = 'chatInputExpander';
+
+        function isEnabled() {
+            return typeof window.isPageModuleEnabled === 'function' ? window.isPageModuleEnabled(MODULE_KEY) : true;
+        }
+
+        // 动态注入样式，支持浅色和深色模式，且通过媒体查询实现响应式布局
+        function injectStyles() {
+            var styleId = 'sc-chat-input-expander-style';
+            var existingStyle = document.getElementById(styleId);
+            var isDark = typeof DM === 'function' ? DM() : false;
+
+            // 依据深浅色模式采用不同的蓝色阴影透明度以保证视觉高级感
+            var shadowColor = isDark ? 'rgba(33, 150, 243, 0.5)' : 'rgba(33, 150, 243, 0.3)';
+            var styleText = `
+                /* 默认过渡动画，实现平滑的高度伸缩和发光效果 */
+                .sc-chat-textarea-transition {
+                    transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s, border-color 0.2s !important;
+                }
+                .sc-chat-container-transition {
+                    transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                }
+
+                /* 焦点在输入框内时的扩大状态（默认桌面端/平板） */
+                .sc-chat-textarea-focused {
+                    height: 130px !important;
+                    top: 0px !important;
+                    bottom: 0px !important;
+                    border-color: #2196F3 !important;
+                    box-shadow: 0 0 10px ${shadowColor} !important;
+                }
+                .sc-chat-input-group-focused {
+                    height: 130px !important;
+                }
+                /* 发送按钮容器高度扩大，并利用 vertical-align 靠底对齐，保持原有 table-cell 布局不被破坏 */
+                .sc-chat-btn-focused {
+                    height: 130px !important;
+                    vertical-align: bottom !important;
+                }
+                .sc-chat-outer-focused {
+                    height: 138px !important;
+                }
+
+                /* 移动端/小屏幕适配：防止弹出的虚拟键盘和过大输入框遮挡全部屏幕 */
+                @media (max-width: 767px) {
+                    .sc-chat-textarea-focused {
+                        height: 90px !important;
+                    }
+                    .sc-chat-input-group-focused {
+                        height: 90px !important;
+                    }
+                    .sc-chat-btn-focused {
+                        height: 90px !important;
+                    }
+                    .sc-chat-outer-focused {
+                        height: 98px !important;
+                    }
+                }
+            `;
+
+            if (existingStyle) {
+                existingStyle.textContent = styleText;
+            } else {
+                var style = document.createElement('style');
+                style.id = styleId;
+                style.textContent = styleText;
+                document.head.appendChild(style);
+            }
+        }
+
+        // 识别聊天输入框（通过 DOM 结构与聊天室特有特征判定，不依赖文本内容）
+        function isChatInput(el) {
+            if (!el || el.tagName !== 'TEXTAREA') return false;
+
+            // 1. 必须位于 input-group 容器中
+            var inputGroup = el.closest('.input-group');
+            if (!inputGroup) return false;
+
+            // 2. 向上寻找祖先节点，直到找到包含聊天记录容器的公共祖先（不限制层数以确保 100% 兼容）
+            var isInsideChat = false;
+            var cur = el.parentElement;
+            while (cur && cur !== document.body) {
+                if (cur.classList.contains('e1llepen1') ||
+                    cur.querySelector('.e1llepen2') ||
+                    cur.querySelector('div[style*="column-reverse"]')) {
+                    isInsideChat = true;
+                    break;
+                }
+                cur = cur.parentElement;
+            }
+
+            // console.log('[SC-ChatInputExpander] 检测输入框焦点:', el, '判定是否为聊天框:', isInsideChat);
+            return isInsideChat;
+        }
+
+        // 动态定位关联的容器节点
+        function findContainers(textarea) {
+            var inputGroup = textarea.closest('.input-group');
+            var btnContainer = inputGroup ? inputGroup.querySelector('.input-group-btn') : null;
+            var outerContainer = null;
+
+            // 1. 向上寻找整个聊天窗的容器（参考模块23检测逻辑）
+            var chatRoom = textarea.closest('.e1llepen1');
+            if (!chatRoom) {
+                var cur = textarea.parentElement;
+                while (cur && cur !== document.body) {
+                    if (cur.querySelector('.e1llepen2') || cur.querySelector('div[style*="column-reverse"]')) {
+                        chatRoom = cur;
+                        break;
+                    }
+                    cur = cur.parentElement;
+                }
+            }
+
+            // 2. 输入框的最外层包装容器必然是聊天窗 chatRoom 的直接子节点
+            if (chatRoom) {
+                var cur = textarea.parentElement;
+                while (cur && cur !== chatRoom) {
+                    if (cur.parentElement === chatRoom) {
+                        outerContainer = cur;
+                        break;
+                    }
+                    cur = cur.parentElement;
+                }
+            }
+
+            // 3. 兜底保护：若上述算法未定位到，则降级使用 inputGroup 往上两层
+            if (!outerContainer && inputGroup) {
+                outerContainer = inputGroup.parentElement;
+                if (outerContainer && outerContainer.style.width === '100%') {
+                    outerContainer = outerContainer.parentElement;
+                }
+            }
+
+            /*
+            console.log('[SC-ChatInputExpander] 定位到的容器:', {
+                inputGroup: inputGroup,
+                btnContainer: btnContainer,
+                outerContainer: outerContainer
+            });
+            */
+
+            return {
+                inputGroup: inputGroup,
+                btnContainer: btnContainer,
+                outerContainer: outerContainer
+            };
+        }
+
+        // 初始化模块
+        function init() {
+            if (!isEnabled()) return;
+            injectStyles();
+        }
+
+        var isClickingInside = false;
+
+        // 收缩单个输入框关联的所有容器
+        function collapseContainers(textarea) {
+            var containers = findContainers(textarea);
+            textarea.classList.remove('sc-chat-textarea-focused');
+            if (containers.inputGroup) {
+                containers.inputGroup.classList.remove('sc-chat-input-group-focused');
+            }
+            if (containers.btnContainer) {
+                containers.btnContainer.classList.remove('sc-chat-btn-focused');
+            }
+            if (containers.outerContainer) {
+                containers.outerContainer.classList.remove('sc-chat-outer-focused');
+            }
+        }
+
+        // 收缩所有已展开的聊天输入框
+        function collapseAll() {
+            var expanded = document.querySelectorAll('.sc-chat-textarea-focused');
+            for (var i = 0; i < expanded.length; i++) {
+                collapseContainers(expanded[i]);
+            }
+        }
+
+        // 监听鼠标按下事件，判断用户点击是否在聊天输入组件内部（例如点击发送按钮），此时不能立刻失焦收缩，避免点击位移失效
+        document.addEventListener('mousedown', function (e) {
+            if (!isEnabled()) return;
+            var target = e.target;
+            if (target) {
+                var inputGroup = target.closest('.input-group');
+                var outerFocused = target.closest('.sc-chat-outer-focused');
+                if (inputGroup || outerFocused) {
+                    isClickingInside = true;
+                    return;
+                }
+            }
+            isClickingInside = false;
+        });
+
+        // 鼠标松开后延迟重置点击状态，如果此时焦点彻底移出了输入框，则在交互完成后收缩
+        document.addEventListener('mouseup', function () {
+            if (!isEnabled()) return;
+            setTimeout(function () {
+                isClickingInside = false;
+                var activeEl = document.activeElement;
+                if (!isChatInput(activeEl)) {
+                    collapseAll();
+                }
+            }, 150);
+        });
+
+        // 利用全局事件代理监听焦点，避免 React 重新渲染页面导致绑定失效
+        document.addEventListener('focusin', function (e) {
+            if (!isEnabled()) return;
+            var target = e.target;
+            if (isChatInput(target)) {
+                var containers = findContainers(target);
+
+                target.classList.add('sc-chat-textarea-transition');
+                target.classList.add('sc-chat-textarea-focused');
+
+                if (containers.inputGroup) {
+                    containers.inputGroup.classList.add('sc-chat-container-transition');
+                    containers.inputGroup.classList.add('sc-chat-input-group-focused');
+                }
+                if (containers.btnContainer) {
+                    containers.btnContainer.classList.add('sc-chat-container-transition');
+                    containers.btnContainer.classList.add('sc-chat-btn-focused');
+                }
+                if (containers.outerContainer) {
+                    containers.outerContainer.classList.add('sc-chat-container-transition');
+                    containers.outerContainer.classList.add('sc-chat-outer-focused');
+                }
+            }
+        });
+
+        document.addEventListener('focusout', function (e) {
+            var target = e.target;
+            if (isChatInput(target)) {
+                // 如果用户当前正在点击输入区内部（如发送按钮），绝不立刻收缩以防止点击丢失
+                if (isClickingInside) return;
+                collapseContainers(target);
+            }
+        });
+
+        // 立即初始化以注入样式
+        init();
+    })();
+
+    // ======================
     // 检测更新模块
     // ======================
     function compareVersions(v1, v2) {
@@ -11889,7 +12145,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    入库合同获取mp失败时增加提示，修改图片预览图片大小
+        // @changelog    入库合同获取mp失败时增加提示，修改图片预览图片大小，新增聊天输入框自动扩大功能
 
         fetch(scriptUrl)
             .then(res => res.text())
