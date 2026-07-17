@@ -11790,6 +11790,11 @@
                     border-color: #2196F3 !important;
                     box-shadow: 0 0 10px ${shadowColor} !important;
                 }
+                /* 使输入框紧邻的前置高亮渲染 div 的高度同步拉伸，防止文本输入层级错位导致输入法定位失灵被覆盖 */
+                .sc-chat-wrap-focused > div {
+                    height: 130px !important;
+                    min-height: 130px !important;
+                }
                 .sc-chat-input-group-focused {
                     height: 130px !important;
                 }
@@ -11806,6 +11811,10 @@
                 @media (max-width: 767px) {
                     .sc-chat-textarea-focused {
                         height: 90px !important;
+                    }
+                    .sc-chat-wrap-focused > div {
+                        height: 90px !important;
+                        min-height: 90px !important;
                     }
                     .sc-chat-input-group-focused {
                         height: 90px !important;
@@ -11920,6 +11929,12 @@
         function collapseContainers(textarea) {
             var containers = findContainers(textarea);
             textarea.classList.remove('sc-chat-textarea-focused');
+
+            var parent = textarea.parentElement;
+            if (parent) {
+                parent.classList.remove('sc-chat-wrap-focused');
+            }
+
             if (containers.inputGroup) {
                 containers.inputGroup.classList.remove('sc-chat-input-group-focused');
             }
@@ -11976,6 +11991,12 @@
                 target.classList.add('sc-chat-textarea-transition');
                 target.classList.add('sc-chat-textarea-focused');
 
+                var parent = target.parentElement;
+                if (parent) {
+                    parent.classList.add('sc-chat-container-transition');
+                    parent.classList.add('sc-chat-wrap-focused');
+                }
+
                 if (containers.inputGroup) {
                     containers.inputGroup.classList.add('sc-chat-container-transition');
                     containers.inputGroup.classList.add('sc-chat-input-group-focused');
@@ -11988,6 +12009,17 @@
                     containers.outerContainer.classList.add('sc-chat-container-transition');
                     containers.outerContainer.classList.add('sc-chat-outer-focused');
                 }
+
+                // 解决移动端虚拟键盘弹起时输入框可能被键盘物理覆盖遮挡的问题：平滑将输入框滚动至可视区域中上部
+                setTimeout(function () {
+                    if (document.activeElement === target) {
+                        if (typeof target.scrollIntoViewIfNeeded === 'function') {
+                            target.scrollIntoViewIfNeeded(false);
+                        } else {
+                            target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                        }
+                    }
+                }, 300);
             }
         });
 
