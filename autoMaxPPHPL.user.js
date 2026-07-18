@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.36
+// @version      1.32.37
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -5815,12 +5815,18 @@
                 if (!data || !data.dbLetter) continue;
 
                 const resourceId = parseInt(data.dbLetter);
-                if (EXCLUDED_IDS.includes(resourceId)) continue;
-
-                const isRetail = Object.values(SCD.data.SALES).some(arr => arr.includes(resourceId));
 
                 card.setAttribute('data-found', 'true');
                 card.removeAttribute('data-retry');
+
+                if (EXCLUDED_IDS.includes(resourceId)) {
+                    // 如果在排除列表中，直接在此判定是否为高价合同（因为它们只支持单独设置绝对值，且无MP，无需后续处理）
+                    checkAndApplyDoubleConfirm(card);
+                    continue;
+                }
+
+                const isRetail = Object.values(SCD.data.SALES).some(arr => arr.includes(resourceId));
+
                 // 标记 MP 待处理（时利润先展示）
                 if (isRetail) card.__mpPending = true;
 
@@ -6359,6 +6365,7 @@
                 const currentHtml = displayEl.innerHTML;
                 displayEl.innerHTML = currentHtml + mpHtml;
             }
+            checkAndApplyDoubleConfirm(card);
         }
 
         // --- 非零售物品的完整注入（仅 MP，无时利润） ---
@@ -6467,10 +6474,11 @@
                 tip.style.cssText = `
                     display: flex;
                     flex-wrap: wrap;
-                    align-items: end;
-                    gap: ${isNarrow8 ? '4px' : '8px'};
+                    align-items: center;
+                    gap: ${isNarrow8 ? '6px 8px' : '8px'};
                     color: ${d8 ? '#aaa' : '#777'};
                     font-size: ${isNarrow8 ? '11px' : '13px'};
+                    width: 100%;
                 `;
                 tip.dataset.warningText = 'true';
 
@@ -6483,13 +6491,14 @@
                 `;
                 tip.appendChild(textSpan);
 
-                // 2. 按钮组容器（两个按钮为一组）
-                const btnGroup = document.createElement('span');
+                // 2. 按钮组容器
+                const btnGroup = document.createElement('div');
                 btnGroup.style.cssText = `
-                    display: inline-flex;
+                    display: flex;
+                    flex-wrap: wrap;
                     align-items: center;
-                    gap: 6px;
-                    flex-shrink: 0;
+                    gap: ${isNarrow8 ? '4px 6px' : '6px'};
+                    flex: 1 1 auto;
                 `;
 
                 // 2a. 开关按钮
@@ -6528,6 +6537,18 @@
                 marketToggle.wrapper.style.marginLeft = "0";
                 btnGroup.appendChild(marketToggle.wrapper);
 
+                // 2d. 预期价格设置按钮
+                const priceSetBtn = document.createElement('button');
+                priceSetBtn.type = 'button';
+                priceSetBtn.textContent = '预期价格';
+                priceSetBtn.style.cssText = `
+                    padding: 4px 10px; background: #9c27b0;
+                    color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                    font-weight: bold; white-space: nowrap; flex-shrink: 0;
+                `;
+                priceSetBtn.onclick = () => showContractPriceModal();
+                btnGroup.appendChild(priceSetBtn);
+
                 tip.appendChild(btnGroup);
 
                 insertTarget.appendChild(tip);
@@ -6537,6 +6558,531 @@
         function removeWarningNotice() {
             const oldNotice = document.querySelector('[data-warning-text]');
             if (oldNotice) oldNotice.remove();
+        }
+
+        // ======================
+        // 新增：高价合同二级确认相关辅助函数
+        // ======================
+        const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
+
+        function getParsedRules() {
+            const settings = JSON.parse(localStorage.getItem('SC_Contract_HighPrice_Settings') || '{"global":"","individual":""}');
+            const parsed = {
+                global: null,
+                individual: new Map()
+            };
+
+            if (settings.global) {
+                const gVal = settings.global.trim();
+                if (gVal) {
+                    if (gVal.endsWith('%')) {
+                        parsed.global = { type: 'percent', value: parseFloat(gVal.slice(0, -1)) };
+                    } else {
+                        parsed.global = { type: 'delta', value: parseFloat(gVal) };
+                    }
+                }
+            }
+
+            if (settings.individual) {
+                const lines = settings.individual.split('\n');
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+                    const parts = trimmed.split(/[，,]/);
+                    if (parts.length !== 3) continue;
+
+                    let itemId = null;
+                    const itemKey = parts[0].trim();
+                    if (/^\d+$/.test(itemKey)) {
+                        itemId = parseInt(itemKey);
+                    } else {
+                        // 使用全局 resourceIdNameMap 映射中文名字
+                        for (const [id, name] of Object.entries(resourceIdNameMap)) {
+                            if (name === itemKey) {
+                                itemId = parseInt(id);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (itemId === null) continue;
+                    const quality = parseInt(parts[1].trim());
+                    if (isNaN(quality)) continue;
+
+                    const ruleVal = parts[2].trim();
+                    let type = 'absolute';
+                    let val = parseFloat(ruleVal);
+
+                    if (ruleVal.endsWith('%')) {
+                        type = 'percent';
+                        val = parseFloat(ruleVal.slice(0, -1));
+                    } else if (ruleVal.startsWith('-')) {
+                        type = 'delta';
+                        val = parseFloat(ruleVal);
+                    }
+
+                    parsed.individual.set(`${itemId}_${quality}`, { type, value: val });
+                }
+            }
+
+            return parsed;
+        }
+
+        function isContractHighPrice(card) {
+            const data = parseContractCard(card);
+            if (!data || !data.dbLetter) return false;
+
+            const itemId = parseInt(data.dbLetter);
+            const quality = data.quality !== null ? data.quality : 0;
+            const price = data.unitPrice;
+            const mpValue = card.__mpValue;
+
+            const rules = getParsedRules();
+
+            // 1. 优先匹配单独规则
+            const indivKey = `${itemId}_${quality}`;
+            if (rules.individual.has(indivKey)) {
+                const rule = rules.individual.get(indivKey);
+                if (rule.type === 'absolute') {
+                    return price > rule.value;
+                } else if (rule.type === 'percent') {
+                    if (mpValue !== undefined && mpValue !== null && isFinite(mpValue)) {
+                        const threshold = mpValue * (1 + rule.value / 100);
+                        return price > threshold;
+                    }
+                    return false;
+                } else if (rule.type === 'delta') {
+                    if (mpValue !== undefined && mpValue !== null && isFinite(mpValue)) {
+                        const threshold = mpValue + rule.value;
+                        return price > threshold;
+                    }
+                    return false;
+                }
+            }
+
+            // 2. 其次匹配全局规则 (排除列表除外)
+            if (EXCLUDED_IDS.includes(itemId)) return false;
+
+            if (rules.global) {
+                const rule = rules.global;
+                if (rule.type === 'percent') {
+                    if (mpValue !== undefined && mpValue !== null && isFinite(mpValue)) {
+                        const threshold = mpValue * (1 + rule.value / 100);
+                        return price > threshold;
+                    }
+                } else if (rule.type === 'delta') {
+                    if (mpValue !== undefined && mpValue !== null && isFinite(mpValue)) {
+                        const threshold = mpValue + rule.value;
+                        return price > threshold;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        function resetAcceptBtn(btn) {
+            btn.dataset.confirmed = 'false';
+            const span = btn.querySelector('span');
+            if (span && btn.__originalText) {
+                span.textContent = btn.__originalText;
+            }
+            if (btn.__originalBg !== undefined) {
+                btn.style.backgroundColor = btn.__originalBg;
+            } else {
+                btn.style.backgroundColor = '';
+            }
+            btn.style.borderColor = '';
+            clearTimeout(btn.__resetTimer);
+        }
+
+        function checkAndApplyDoubleConfirm(card) {
+            const acceptBtn = card.querySelector('a[aria-label="接受合同"], a.css-14hcbmv');
+            if (!acceptBtn) return;
+
+            const isHigh = isContractHighPrice(card);
+
+            if (isHigh) {
+                // 卡片边框变红以示警告
+                card.style.border = "2px dashed #ff4444";
+                card.style.borderRadius = "8px";
+
+                const displayEl = card.__profitDisplayEl;
+                if (displayEl && !displayEl.querySelector('.sc-high-price-warning')) {
+                    const warningSpan = document.createElement('span');
+                    warningSpan.className = 'sc-high-price-warning';
+                    warningSpan.style.cssText = 'color:#ff4444; font-weight:bold; margin-left:8px; animation: sc-highprice-blink 1s infinite alternate;';
+                    warningSpan.textContent = '[⚠️高价合同]';
+                    displayEl.appendChild(warningSpan);
+
+                    if (!document.getElementById('sc-highprice-blink-style')) {
+                        const style = document.createElement('style');
+                        style.id = 'sc-highprice-blink-style';
+                        style.textContent = `
+                            @keyframes sc-highprice-blink {
+                                0% { opacity: 0.3; }
+                                100% { opacity: 1; }
+                            }
+                        `;
+                        document.head.appendChild(style);
+                    }
+                }
+
+                if (!acceptBtn.__hasHighPriceInterceptor) {
+                    acceptBtn.__hasHighPriceInterceptor = true;
+                    acceptBtn.dataset.confirmed = 'false';
+
+                    acceptBtn.addEventListener('click', function (e) {
+                        if (!isContractHighPrice(card)) {
+                            return; // 若非高价则放行
+                        }
+
+                        if (acceptBtn.dataset.confirmed !== 'true') {
+                            e.stopPropagation();
+                            e.preventDefault();
+
+                            acceptBtn.dataset.confirmed = 'true';
+
+                            const span = acceptBtn.querySelector('span');
+                            acceptBtn.__originalText = span ? span.textContent : "接受";
+                            if (span) span.textContent = acceptBtn.__originalText + "?";
+
+                            acceptBtn.__originalBg = acceptBtn.style.backgroundColor;
+                            acceptBtn.style.backgroundColor = '#ff4444';
+                            acceptBtn.style.borderColor = '#ff4444';
+
+                            clearTimeout(acceptBtn.__resetTimer);
+                            acceptBtn.__resetTimer = setTimeout(() => {
+                                resetAcceptBtn(acceptBtn);
+                            }, 5000);
+                        } else {
+                            // 已确认状态，放行原生 click 动作，500ms 后自动复位防止卡死
+                            setTimeout(() => {
+                                resetAcceptBtn(acceptBtn);
+                            }, 500);
+                        }
+                    }, true); // 捕获阶段拦截
+                }
+            } else {
+                card.style.border = "";
+                card.style.borderRadius = "";
+                const displayEl = card.__profitDisplayEl;
+                if (displayEl) {
+                    const warningSpan = displayEl.querySelector('.sc-high-price-warning');
+                    if (warningSpan) warningSpan.remove();
+                }
+                if (acceptBtn.__hasHighPriceInterceptor) {
+                    resetAcceptBtn(acceptBtn);
+                }
+            }
+        }
+
+        function showContractPriceModal() {
+            if (document.getElementById('sc-contract-price-modal')) return;
+
+            const modal = document.createElement('div');
+            modal.id = 'sc-contract-price-modal';
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background: rgba(0, 0, 0, 0.6); z-index: 22000;
+                display: flex; justify-content: center; align-items: center;
+            `;
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = `
+                background: var(--sc-bg); border: 1px solid var(--sc-border);
+                border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                width: min(550px, 95vw); max-height: min(650px, 90vh);
+                color: var(--sc-fg); font-family: sans-serif; display: flex; flex-direction: column; overflow: hidden;
+            `;
+
+            wrapper.innerHTML = `
+                <div style="padding: 12px 20px; background: #9c27b0; color: white; display: flex; justify-content: space-between; align-items: center; user-select: none; font-weight: bold; font-size: 15px;">
+                    <span>合同预期价格设置</span>
+                    <span id="sc-contract-price-close" style="cursor: pointer; font-size: 20px; font-weight: normal; line-height: 1;">&times;</span>
+                </div>
+                <div style="padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;">
+                    <div>
+                        <label style="display: block; font-weight: bold; font-size: 13px; margin-bottom: 6px; color: var(--sc-fg2);">全局高价判定规则</label>
+                        <input id="sc-contract-global-val" type="text" placeholder="例如：-1.8% 或 -0.5 (不填则禁用全局)" style="width: 100%; padding: 8px 12px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 13px; box-sizing: border-box; outline: none; transition: border-color 0.2s;" />
+                        <span style="font-size: 11px; color: var(--sc-fg3); display: block; margin-top: 4px; line-height: 1.4;">
+                            * <b>-?%</b>：合同价格高于 <b>MP * (1 - ?%)</b> 时需要二级确认。<br>
+                            * <b>-?</b>：合同价格高于 <b>MP - ?</b> 时需要二级确认。
+                        </span>
+                    </div>
+                    <hr style="border: 0; border-top: 1px solid var(--sc-border2); margin: 5px 0;">
+                    <div style="display: flex; flex-direction: column; flex-grow: 1;">
+                        <label style="display: block; font-weight: bold; font-size: 13px; margin-bottom: 6px; color: var(--sc-fg2);">单独物品判定规则</label>
+                        <div style="display: flex; gap: 8px; font-size: 11px; font-weight: bold; color: var(--sc-fg3); margin-bottom: 5px; padding-right: 32px; box-sizing: border-box;">
+                            <span style="flex: 2; padding-left: 2px;">物品名称或ID</span>
+                            <span style="flex: 1; text-align: center;">品质</span>
+                            <span style="flex: 2; padding-left: 2px;">价格规则 (-1.5% / -0.5 / 1.7)</span>
+                        </div>
+                        <div id="sc-contract-rules-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 5px; margin-bottom: 10px;">
+                            <!-- 动态规则行 -->
+                        </div>
+                        <button id="sc-contract-add-rule-row" type="button" style="align-self: flex-start; padding: 5px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: background-color 0.2s;">+ 添加物品规则</button>
+                        <span style="font-size: 11px; color: var(--sc-fg3); display: block; margin-top: 8px; line-height: 1.4;">
+                            * 支持直接写绝对价格（如 1.7），或偏离值（-1.5% / -0.5）。<br>
+                            * 航空航天终端产品无MP，仅能使用绝对价格
+                        </span>
+                        <details id="sc-contract-ref-details" style="margin-top: 8px; border: 1px solid var(--sc-border2); border-radius: 6px; padding: 6px 10px; background: var(--sc-bg2); cursor: pointer; user-select: none;">
+                            <summary style="font-size: 11px; font-weight: bold; color: var(--sc-fg2); outline: none;">查看物品名称/ID对照参考表 (点击物品可直接填入空行)</summary>
+                            <div id="sc-contract-ref-tags" style="display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; max-height: 100px; overflow-y: auto; cursor: default;">
+                                <!-- 标签由 JS 动态生成 -->
+                            </div>
+                        </details>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; border-top: 1px solid var(--sc-border2); padding-top: 15px;">
+                        <button id="sc-contract-price-cancel" style="padding: 8px 16px; background: #607D8B; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; transition: background-color 0.2s;">取消</button>
+                        <button id="sc-contract-price-save" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; transition: background-color 0.2s;">保存</button>
+                    </div>
+                </div>
+            `;
+
+            modal.appendChild(wrapper);
+
+            // 动态创建并注入 datalist 自动完成候选列表
+            let datalist = document.getElementById('sc-contract-resource-options');
+            if (!datalist) {
+                datalist = document.createElement('datalist');
+                datalist.id = 'sc-contract-resource-options';
+                datalist.innerHTML = Object.values(resourceIdNameMap)
+                    .filter(name => name && name !== 'undefined')
+                    .map(name => `<option value="${name}"></option>`)
+                    .join('');
+                modal.appendChild(datalist);
+            }
+
+            document.body.appendChild(modal);
+
+            const updateThemeVars = () => {
+                const isDark = DM();
+                modal.style.setProperty('--sc-bg', theme.bg);
+                modal.style.setProperty('--sc-bg2', theme.bg2);
+                modal.style.setProperty('--sc-fg', theme.fg);
+                modal.style.setProperty('--sc-fg2', theme.fg2);
+                modal.style.setProperty('--sc-fg3', theme.fg3);
+                modal.style.setProperty('--sc-border', theme.border);
+                modal.style.setProperty('--sc-border2', theme.border2);
+                modal.style.setProperty('--sc-input-bg', theme.inputBg);
+                modal.style.setProperty('--sc-input-fg', theme.inputFg);
+            };
+
+            updateThemeVars();
+
+            const themeObserver = new MutationObserver(() => {
+                updateThemeVars();
+            });
+            themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
+
+            const rulesListContainer = document.getElementById('sc-contract-rules-list');
+
+            function addRuleRow(itemVal = '', qualVal = '', ruleVal = '') {
+                const row = document.createElement('div');
+                row.className = 'sc-contract-rule-row';
+                row.style.cssText = 'display: flex; align-items: center; gap: 8px; width: 100%;';
+
+                row.innerHTML = `
+                    <input type="text" class="sc-rule-item" list="sc-contract-resource-options" value="${itemVal}" placeholder="如：苹果 或 3" style="flex: 2; min-width: 0; padding: 6px 10px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 13px; box-sizing: border-box; outline: none;" />
+                    <input type="number" class="sc-rule-quality" value="${qualVal}" min="0" max="12" placeholder="0" style="flex: 1; min-width: 0; padding: 6px 5px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 13px; box-sizing: border-box; outline: none; text-align: center;" />
+                    <input type="text" class="sc-rule-value" value="${ruleVal}" placeholder="如：-1.5% 或 1.7" style="flex: 2; min-width: 0; padding: 6px 10px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 13px; box-sizing: border-box; outline: none;" />
+                    <button type="button" class="sc-rule-delete" style="flex: 0 0 24px; height: 24px; padding: 0; background: #e53935; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; display: flex; align-items: center; justify-content: center; line-height: 1;">&times;</button>
+                `;
+
+                row.querySelector('.sc-rule-delete').onclick = () => {
+                    row.remove();
+                };
+
+                rulesListContainer.appendChild(row);
+            }
+
+            // 初始化规则列表
+            const settings = JSON.parse(localStorage.getItem('SC_Contract_HighPrice_Settings') || '{"global":"","individual":""}');
+            document.getElementById('sc-contract-global-val').value = settings.global || '';
+
+            const lines = (settings.individual || '').split('\n');
+            let hasRows = false;
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                const parts = trimmed.split(/[，,]/);
+                if (parts.length === 3) {
+                    addRuleRow(parts[0].trim(), parts[1].trim(), parts[2].trim());
+                    hasRows = true;
+                }
+            }
+
+            if (!hasRows) {
+                addRuleRow('', '', '');
+            }
+
+            document.getElementById('sc-contract-add-rule-row').onclick = (e) => {
+                e.preventDefault();
+                addRuleRow('', '', '');
+            };
+
+            // 动态生成常见物品名称/ID对照表小标签
+            const tagsContainer = document.getElementById('sc-contract-ref-tags');
+            if (tagsContainer) {
+                tagsContainer.innerHTML = '';
+                const sortedItems = Object.entries(resourceIdNameMap)
+                    .filter(([id, name]) => name && name !== 'undefined')
+                    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+
+                for (const [id, name] of sortedItems) {
+                    const tag = document.createElement('span');
+                    tag.textContent = `${name}(${id})`;
+                    tag.title = `点击可直接填入该物品`;
+                    tag.style.cssText = `
+                        display: inline-block; padding: 2px 6px; background: var(--sc-border2);
+                        color: var(--sc-fg); font-size: 11px; border-radius: 4px; cursor: pointer;
+                        transition: all 0.2s; border: 1px solid var(--sc-border);
+                    `;
+
+                    // 绑定悬停变色效果
+                    tag.onmouseenter = () => {
+                        tag.style.background = '#9c27b0';
+                        tag.style.color = '#fff';
+                        tag.style.borderColor = '#9c27b0';
+                    };
+                    tag.onmouseleave = () => {
+                        tag.style.background = 'var(--sc-border2)';
+                        tag.style.color = 'var(--sc-fg)';
+                        tag.style.borderColor = 'var(--sc-border)';
+                    };
+
+                    // 绑定点击填充事件
+                    tag.onclick = (event) => {
+                        event.preventDefault();
+                        const rows = rulesListContainer.querySelectorAll('.sc-contract-rule-row');
+                        let targetInput = null;
+
+                        // 优先寻找最后一行空的物品输入框
+                        for (let i = rows.length - 1; i >= 0; i--) {
+                            const input = rows[i].querySelector('.sc-rule-item');
+                            if (input && !input.value.trim()) {
+                                targetInput = input;
+                                break;
+                            }
+                        }
+
+                        // 如果全满了，自动开辟新行并填充
+                        if (!targetInput) {
+                            addRuleRow(name, '', '');
+                            const newRows = rulesListContainer.querySelectorAll('.sc-contract-rule-row');
+                            targetInput = newRows[newRows.length - 1].querySelector('.sc-rule-item');
+                        } else {
+                            targetInput.value = name;
+                        }
+
+                        if (targetInput) {
+                            targetInput.focus();
+                            const origBorder = targetInput.style.borderColor;
+                            targetInput.style.borderColor = '#4CAF50';
+                            setTimeout(() => {
+                                targetInput.style.borderColor = origBorder;
+                            }, 500);
+                        }
+                    };
+
+                    tagsContainer.appendChild(tag);
+                }
+            }
+
+            const closeBtn = document.getElementById('sc-contract-price-close');
+            const cancelBtn = document.getElementById('sc-contract-price-cancel');
+            const saveBtn = document.getElementById('sc-contract-price-save');
+
+            const closeModal = () => {
+                themeObserver.disconnect();
+                modal.remove();
+            };
+
+            closeBtn.onclick = closeModal;
+            cancelBtn.onclick = closeModal;
+
+            saveBtn.onclick = (e) => {
+                e.preventDefault();
+                const globalInput = document.getElementById('sc-contract-global-val').value.trim();
+
+                // 1. 校验全局
+                if (globalInput) {
+                    if (!/^-\d+(?:\.\d+)?%?$/.test(globalInput)) {
+                        showToast("全局设置格式不正确。请输入类似 -1.8% 或 -0.5 的偏离格式", "error");
+                        return;
+                    }
+                }
+
+                // 2. 校验及组装单独规则行
+                const rows = rulesListContainer.querySelectorAll('.sc-contract-rule-row');
+                const indivRules = [];
+
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+                    const itemInput = row.querySelector('.sc-rule-item').value.trim();
+                    const qualInput = row.querySelector('.sc-rule-quality').value.trim();
+                    const valInput = row.querySelector('.sc-rule-value').value.trim();
+
+                    // 只要物品输入和规则输入均为空，则忽略该行
+                    if (!itemInput && !valInput) continue;
+
+                    // 若不完整则报错
+                    if (!itemInput || qualInput === "" || !valInput) {
+                        showToast(`第 ${i + 1} 行规则信息不完整，请填写所有列或将其删除`, "error");
+                        return;
+                    }
+
+                    let itemId = null;
+                    if (/^\d+$/.test(itemInput)) {
+                        itemId = parseInt(itemInput);
+                    } else {
+                        // 查找物品 ID
+                        for (const [id, name] of Object.entries(resourceIdNameMap)) {
+                            if (name === itemInput) {
+                                itemId = parseInt(id);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (itemId === null) {
+                        showToast(`第 ${i + 1} 行的物品名称或ID '${itemInput}' 无法识别，请使用物品ID或正确的物品名称`, "error");
+                        return;
+                    }
+
+                    const quality = parseInt(qualInput);
+                    if (isNaN(quality) || quality < 0) {
+                        showToast(`第 ${i + 1} 行的品质 '${qualInput}' 必须是正整数`, "error");
+                        return;
+                    }
+
+                    const isAbsolute = /^\d+(?:\.\d+)?$/.test(valInput);
+                    const isOffset = /^-\d+(?:\.\d+)?%?$/.test(valInput);
+
+                    if (!isAbsolute && !isOffset) {
+                        showToast(`第 ${i + 1} 行的规则 '${valInput}' 格式不正确。请输入绝对价格（如 1.7）或偏离值（如 -1.5% 或 -0.5）`, "error");
+                        return;
+                    }
+
+                    if (EXCLUDED_IDS.includes(itemId) && !isAbsolute) {
+                        showToast(`物品 ID ${itemId} 没有 MP 数据，只能使用绝对价格作为判定条件（第 ${i + 1} 行）`, "error");
+                        return;
+                    }
+
+                    indivRules.push(`${itemInput},${quality},${valInput}`);
+                }
+
+                // 保存
+                localStorage.setItem('SC_Contract_HighPrice_Settings', JSON.stringify({
+                    global: globalInput,
+                    individual: indivRules.join('\n')
+                }));
+
+                showToast("保存成功", "success");
+                closeModal();
+                refreshAllContractProfits();
+            };
         }
 
         return { init };
@@ -12177,7 +12723,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    尝试修复输入法遮挡文本框的问题
+        // @changelog    入库合同增加二级确认
 
         fetch(scriptUrl)
             .then(res => res.text())
