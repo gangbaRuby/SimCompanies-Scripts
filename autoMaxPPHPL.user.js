@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.37
+// @version      1.32.38
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3650,8 +3650,6 @@
             if (profit > maxProfit) {
                 maxProfit = profit;
                 bestPrice = currentPrice;
-            } else if (maxProfit > 0 && profit < 0) { //有正利润后出现负利润提前终端循环
-                break;
             }
 
             if (currentPrice < 8) {
@@ -4143,8 +4141,6 @@
                 if (profit > maxProfit) {
                     maxProfit = profit;
                     selltime = secondsToFinish;
-                } else if (maxProfit > 0 && profit < 0) {
-                    break;
                 }
                 if (currentPrice < 8) {
                     currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
@@ -5408,8 +5404,6 @@
                     if (!secondsToFinish || secondsToFinish <= 0) break;
                     if (profit > maxProfit) {
                         maxProfit = profit;
-                    } else if (maxProfit > 0 && profit < 0) {
-                        break;
                     }
 
                     if (currentPrice < 8) {
@@ -5554,8 +5548,6 @@
                     if (!secondsToFinish || secondsToFinish <= 0) break;
                     if (profit > maxProfit) {
                         maxProfit = profit;
-                    } else if (maxProfit > 0 && profit < 0) {
-                        break;
                     }
                     if (currentPrice < 8) {
                         currentPrice = Math.round((currentPrice + 0.01) * 100) / 100;
@@ -8726,8 +8718,6 @@
                         if (profit > maxProfit) {
                             maxProfit = profit;
                             selltime = secondsToFinish;
-                        } else if (maxProfit > 0 && profit < 0) {
-                            break;
                         }
                         // price increment
                         if (currentPrice < 8) {
@@ -10924,8 +10914,6 @@
                 if (profit > maxProfit) {
                     maxProfit = profit;
                     bestPrice = currentPrice;
-                } else if (maxProfit > 0 && profit < 0) {
-                    break;
                 }
 
                 if (currentPrice < 8) {
@@ -12723,7 +12711,7 @@
     function checkUpdate() {
         const scriptUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js?t=' + Date.now();
         const downloadUrl = 'https://sc.22-7.top/scripts/autoMaxPPHPL.user.js';
-        // @changelog    入库合同增加二级确认
+        // @changelog    修复因用时太短导致的工资计算误差提前中断时利润遍历问题
 
         fetch(scriptUrl)
             .then(res => res.text())
