@@ -1,0 +1,12 @@
+{
+  "name": "auto-max-pphpl",
+  "version": "1.32.38",
+  "description": "SimCompanies autoMaxPPHPL userscript",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0"
+  }
+}
