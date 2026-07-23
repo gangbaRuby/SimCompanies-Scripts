@@ -10878,3 +10878,15 @@ import { isDarkMode, DM, theme, showToast } from './utils/ui.js';
     // 延迟执行，避开页面初始加载高峰
     setTimeout(checkUpdate, 3000);
 })();
+
+// ======================
+// Phase 6.6.1 Bridge Registry
+// ======================
+window.SC_Modules = {
+    ResourceMarketHandler,
+    incomingContractsHandler,
+    outgoingContractMPHandler,
+    ExecutiveTrainingModule,
+    FormerExecutivesModule,
+    LandscapeIdleBuildingHighlight
+};
