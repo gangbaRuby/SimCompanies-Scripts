@@ -1,11 +1,12 @@
-﻿import { createGlobalCustomToggle } from '../utils/uiComponents.js';
-import { DM, showToast } from '../utils/ui.js';
+import { createGlobalCustomToggle } from '../utils/uiComponents.js';
+import { DM, showToast, theme } from '../utils/ui.js';
 import { getRealmIdFromLink } from '../core/storage.js';
 import { state } from '../core/state.js';
 import { Storage } from './dataStorage.js';
 import { RegionData } from './regionData.js';
 import { Network } from '../core/network.js';
 import { constantsData } from './constantsData.js';
+import { executiveCustomButton } from './executiveBoardroom.js';
 import { resourceIdNameMap } from '../constants/resourceMap.js';
 
 const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
@@ -493,10 +494,39 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             const uniqueResourceIds = new Set();
 
             for (const card of cards) {
-                if (!forceReset && card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) continue;
-
                 const data = parseContractCard(card);
                 if (!data || !data.dbLetter) continue;
+
+                const currentSignature = `${data.dbLetter}_${data.quantity}_${data.quality}_${data.unitPrice}`;
+
+                if (!forceReset && card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) {
+                    if (card.__contractSignature === currentSignature) {
+                        // 检查 UI 是否丢失 (React 可能会重绘卡片内部并抹除我们注入的 DOM)
+                        const hasProfitUI = card.__profitDisplayEl && document.body.contains(card.__profitDisplayEl);
+                        const acceptBtn = card.querySelector('a[aria-label="接受合同"], a.css-14hcbmv');
+                        const lostInterceptor = card.__wasHighPrice && acceptBtn && !acceptBtn.__hasHighPriceInterceptor;
+
+                        if (hasProfitUI && !lostInterceptor) {
+                            continue;
+                        }
+                    } else {
+                        // DOM 被 React 复用（数据已变），需要清理旧 UI 残留
+                        const oldEl = card.__profitDisplayEl;
+                        if (oldEl && oldEl.parentNode) oldEl.remove();
+                        card.style.border = "";
+                        card.style.borderRadius = "";
+                        const acceptBtn = card.querySelector('a[aria-label="接受合同"], a.css-14hcbmv');
+                        if (acceptBtn) delete acceptBtn.__hasHighPriceInterceptor;
+                    }
+                    
+                    // UI 丢失或 DOM 被复用，允许重新注入
+                    card.removeAttribute('data-found');
+                    delete card.__profitDisplayEl;
+                    delete card.__wasHighPrice;
+                    delete card.__mpValue;
+                }
+
+                card.__contractSignature = currentSignature;
 
                 const resourceId = parseInt(data.dbLetter);
 
@@ -696,11 +726,9 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
         }
 
         function startMutationObserver() {
-            const targetNode = document.querySelectorAll('.row')[1];
-            if (!targetNode) {
-                console.error('[合同页面处理] 未找到目标容器');
-                return;
-            }
+            // 监听更稳定的父节点 document.body，避免因 React 替换局部 DOM 导致 observer 失效
+            const targetNode = document.body;
+            if (!targetNode) return;
 
             const isOnIncomingPage = () => /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
 
@@ -711,20 +739,27 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     return;
                 }
 
-                for (const mutation of mutationsList) {
-                    if (mutation.type === 'childList') {
-                        clearTimeout(processDebounceTimer);
-                        processDebounceTimer = setTimeout(() => {
-                            // 再次检查以防延迟期间页面跳转
-                            if (!isOnIncomingPage()) {
-                                cleanupAll();
-                                return;
-                            }
-                            const contractCards = document.querySelectorAll('div[tabindex="0"]');
-                            processAllCards([...contractCards]);
-                        }, 150);
-                        break;
-                    }
+                // 判断是否目标卡片发生变化
+                const hasRelevantChanges = mutationsList.some(mutation => {
+                    return mutation.type === 'childList' && (
+                        // 添加了新节点，且包含合同卡片
+                        (mutation.addedNodes.length > 0 && Array.from(mutation.addedNodes).some(node => node.nodeType === 1 && (node.matches('div[tabindex="0"]') || node.querySelector('div[tabindex="0"]')))) ||
+                        // 或者是已有卡片内部发生了变化（React 抹除 UI 时通常触发其内部节点的 childList 变化）
+                        (mutation.target && mutation.target.nodeType === 1 && mutation.target.closest('div[tabindex="0"]'))
+                    );
+                });
+
+                if (hasRelevantChanges) {
+                    clearTimeout(processDebounceTimer);
+                    processDebounceTimer = setTimeout(() => {
+                        // 再次检查以防延迟期间页面跳转
+                        if (!isOnIncomingPage()) {
+                            cleanupAll();
+                            return;
+                        }
+                        const contractCards = document.querySelectorAll('div[tabindex="0"]');
+                        processAllCards([...contractCards]);
+                    }, 150);
                 }
             });
 
@@ -883,6 +918,28 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             card.__profitDisplayEl = el;
         }
 
+        function ensureHighPriceWarning(card, displayEl) {
+            if (card.__wasHighPrice === true && displayEl && !displayEl.querySelector('.sc-high-price-warning')) {
+                const warningSpan = document.createElement('span');
+                warningSpan.className = 'sc-high-price-warning';
+                warningSpan.style.cssText = 'color:#ff4444; font-weight:bold; margin-left:8px; animation: sc-highprice-blink 1s infinite alternate;';
+                warningSpan.textContent = '[⚠️高价合同]';
+                displayEl.appendChild(warningSpan);
+
+                if (!document.getElementById('sc-highprice-blink-style')) {
+                    const style = document.createElement('style');
+                    style.id = 'sc-highprice-blink-style';
+                    style.textContent = `
+                        @keyframes sc-highprice-blink {
+                            0% { opacity: 0.3; }
+                            100% { opacity: 1; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+            }
+        }
+
         // --- 注入/更新时利润（仅时利润，不含 MP，用于 Worker 回调立即展示） ---
         function injectOrUpdateProfit(card, profitValue) {
             card.__contractProfit = profitValue;  // 供市场最大时利比较用
@@ -976,6 +1033,8 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             profitDisplay.innerHTML = profitHtml + mpHtml;
             priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
             card.__profitDisplayEl = profitDisplay;
+
+            ensureHighPriceWarning(card, profitDisplay);
         }
 
         // --- 更新卡片上的 MP 信息显示 ---
@@ -984,6 +1043,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             if (!displayEl) {
                 // 如果没有时利润显示元素，创建仅 MP 的显示
                 injectHourlyProfitLegacy(card, null, mpPercent, mpValue, mpNotes);
+                checkAndApplyDoubleConfirm(card);
                 return;
             }
 
@@ -1128,6 +1188,8 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             profitDisplay.innerHTML = displayText;
             priceBox.parentNode.insertBefore(profitDisplay, priceBox.nextSibling);
             card.__profitDisplayEl = profitDisplay;
+
+            ensureHighPriceWarning(card, profitDisplay);
         }
 
         // --- 保留旧签名兼容（非零售物品从 MP 回调调用） ---
@@ -1381,36 +1443,20 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
         }
 
         function checkAndApplyDoubleConfirm(card) {
-            const acceptBtn = card.querySelector('a[aria-label="接受合同"], a.css-14hcbmv');
-            if (!acceptBtn) return;
-
             const isHigh = isContractHighPrice(card);
+            card.__wasHighPrice = isHigh;
+            const acceptBtn = card.querySelector('a[aria-label="接受合同"], a.css-14hcbmv');
 
             if (isHigh) {
                 // 卡片边框变红以示警告
                 card.style.border = "2px dashed #ff4444";
                 card.style.borderRadius = "8px";
 
-                const displayEl = card.__profitDisplayEl;
-                if (displayEl && !displayEl.querySelector('.sc-high-price-warning')) {
-                    const warningSpan = document.createElement('span');
-                    warningSpan.className = 'sc-high-price-warning';
-                    warningSpan.style.cssText = 'color:#ff4444; font-weight:bold; margin-left:8px; animation: sc-highprice-blink 1s infinite alternate;';
-                    warningSpan.textContent = '[⚠️高价合同]';
-                    displayEl.appendChild(warningSpan);
+                ensureHighPriceWarning(card, card.__profitDisplayEl);
 
-                    if (!document.getElementById('sc-highprice-blink-style')) {
-                        const style = document.createElement('style');
-                        style.id = 'sc-highprice-blink-style';
-                        style.textContent = `
-                            @keyframes sc-highprice-blink {
-                                0% { opacity: 0.3; }
-                                100% { opacity: 1; }
-                            }
-                        `;
-                        document.head.appendChild(style);
-                    }
-                }
+                // 尝试获取按钮并绑定拦截器。如果 React 还没渲染出按钮，则提早退出。
+                // 此时 __wasHighPrice 已成功记录，当按钮渲染后 observer 会因 lostInterceptor 重新触发本流程。
+                if (!acceptBtn) return;
 
                 if (!acceptBtn.__hasHighPriceInterceptor) {
                     acceptBtn.__hasHighPriceInterceptor = true;
@@ -1455,7 +1501,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     const warningSpan = displayEl.querySelector('.sc-high-price-warning');
                     if (warningSpan) warningSpan.remove();
                 }
-                if (acceptBtn.__hasHighPriceInterceptor) {
+                if (acceptBtn && acceptBtn.__hasHighPriceInterceptor) {
                     resetAcceptBtn(acceptBtn);
                 }
             }

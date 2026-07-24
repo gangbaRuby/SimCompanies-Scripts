@@ -3,7 +3,7 @@ import { DM, showToast, theme } from '../utils/ui.js';
 import { Storage } from './dataStorage.js';
 import { Network } from '../core/network.js';
 
-    const executiveCustomButton = (function () {
+export const executiveCustomButton = (function () {
         let boardroomState = {
             'o': null, 'f': null, 'm': null, 't': null,
             'v': null, 'x': null, 'y': null, 'z': null,
