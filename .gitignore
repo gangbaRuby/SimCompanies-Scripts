@@ -1,2 +1,12 @@
 node_modules/
 dist/
+AGENTS.local.md
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db

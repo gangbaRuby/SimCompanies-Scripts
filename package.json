@@ -4,7 +4,9 @@
   "description": "SimCompanies autoMaxPPHPL userscript",
   "main": "src/index.js",
   "scripts": {
-    "build": "node build.js"
+    "build": "node build.js",
+    "check": "node --check build.js && node --check scripts/release.js && npm run build",
+    "release": "node scripts/release.js"
   },
   "devDependencies": {
     "esbuild": "^0.23.0"

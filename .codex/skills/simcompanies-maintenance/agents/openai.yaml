@@ -1,0 +1,4 @@
+interface:
+  display_name: "SimCompanies 项目维护"
+  short_description: "按统一、安全的流程维护此用户脚本。"
+  default_prompt: "使用 $simcompanies-maintenance 分析并安全实现这个 SimCompanies 用户脚本改动。"
