@@ -48,7 +48,7 @@ npm run release -- "本次更新说明"
 npm run release -- --dry-run "本次更新说明"
 ```
 
-构建不等于部署：提交 Git、推送远程仓库、上传更新服务器和创建 GitHub Release 都需要单独执行与确认。
+构建不等于部署：提交 Git、推送远程仓库和上传更新服务器仍需单独执行。推送 `v1.32.40` 这类标签后，GitHub Actions 会自动创建/更新 GitHub Release 并附加正式安装包。
 
 ## 项目结构
 

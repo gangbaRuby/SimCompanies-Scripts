@@ -90,7 +90,16 @@ npm run release -- "本次中文更新说明"
 
 正式构建会递增补丁版本、更新版本元数据和 `CHANGELOG.md`、生成正式 `autoMaxPPHPL.user.js`，并写入更新说明。它不会自动提交、推送或上传更新服务器。
 
-正式构建后，按“每次修改功能”流程把版本文件、`CHANGELOG.md` 和正式安装包通过新 PR 合并；再将同一个正式安装包上传到更新服务器。
+正式构建后，按“每次修改功能”流程把版本文件、`CHANGELOG.md` 和正式安装包通过新 PR 合并。合并后创建并推送版本标签：
+
+```powershell
+git switch main
+git pull --ff-only origin main
+git tag -a v1.32.40 -m "Release v1.32.40"
+git push origin v1.32.40
+```
+
+推送标签会自动创建/更新 GitHub Release 并附加正式 `autoMaxPPHPL.user.js`。最后再将同一个正式安装包上传到更新服务器。
 
 ## 永远不要做的事
 

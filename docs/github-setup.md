@@ -22,7 +22,7 @@
 
 - 仅通过 `npm run release -- "更新说明"` 生成正式安装包。
 - 提交正式安装包、`CHANGELOG.md` 和版本元数据后，再创建与版本一致的 Git tag。
-- GitHub Release 说明应与 `CHANGELOG.md` 中对应版本一致。
+- 推送 `v1.32.40` 这类标签会自动创建/更新 GitHub Release、读取 `CHANGELOG.md` 对应版本的说明，并附加正式 `autoMaxPPHPL.user.js`。
 - 更新服务器的正式文件必须与 Git tag 对应的 `autoMaxPPHPL.user.js` 完全一致。
 
 ## 依赖更新

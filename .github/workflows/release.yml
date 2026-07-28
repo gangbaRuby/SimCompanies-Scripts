@@ -1,0 +1,62 @@
+name: 发布正式安装包
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要发布或补充附件的标签，例如 v1.32.39
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: 创建 Release 并上传安装包
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: 检出标签内容
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: 验证正式安装包
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          test -f autoMaxPPHPL.user.js
+          head -n 20 autoMaxPPHPL.user.js > userscript-metadata.txt
+          grep -Eq "^// @version[[:space:]]+${version}$" userscript-metadata.txt
+          ! grep -q "(DEV)" userscript-metadata.txt
+          grep -Eq "^// @changelog[[:space:]]+.+" autoMaxPPHPL.user.js
+          grep -Fq "## [${version}]" CHANGELOG.md
+
+      - name: 提取发布说明
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          awk -v version="$version" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            printf '版本 %s\n' "$version" > release-notes.md
+          fi
+
+      - name: 创建或更新 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Release ${{ env.RELEASE_TAG }}
+          body_path: release-notes.md
+          files: autoMaxPPHPL.user.js
+          fail_on_unmatched_files: true
