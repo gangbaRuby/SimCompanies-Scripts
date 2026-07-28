@@ -522,7 +522,7 @@ export const executiveCustomButton = (function () {
                         flex: none;
                     }
                 }
-                
+
                 /* Card grid layouts */
                 .sc-slots-group {
                     margin-bottom: 20px;
@@ -540,7 +540,7 @@ export const executiveCustomButton = (function () {
                     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
                     gap: 12px;
                 }
-                
+
                 /* Card Styles */
                 .sc-exec-card {
                     background: var(--sc-card-bg);
@@ -578,7 +578,7 @@ export const executiveCustomButton = (function () {
                     background: rgba(33, 150, 243, 0.1);
                     color: #2196F3;
                 }
-                
+
                 /* Card input styling */
                 .sc-card-name {
                     font-weight: bold;
@@ -625,13 +625,13 @@ export const executiveCustomButton = (function () {
                 .sc-card-skill-input {
                     -moz-appearance: textfield;
                 }
-                
+
                 .sc-exec-card.selected {
                     border-color: #2196F3;
                     box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
                     background: var(--sc-card-bg-selected);
                 }
-                
+
                 @media (max-width: 576px) {
                     .sc-boardroom-left {
                         padding: 10px;
@@ -811,7 +811,7 @@ export const executiveCustomButton = (function () {
                 <div style="font-size: 15px; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid var(--sc-border); padding-bottom: 10px; color: var(--sc-fg);">
                     高管加成模拟计算
                 </div>
-                
+
                 <div style="margin-bottom: 15px; font-size: 13px; background: var(--sc-aca-bg); padding: 10px; border-radius: 8px; border: 1px solid var(--sc-border);">
                     <strong style="display: block; margin-bottom: 6px; color: var(--sc-fg); font-size: 12px;">学院总等级:</strong>
                     <div style="display: flex; flex-wrap: wrap; gap: 8px 12px; color: var(--sc-fg); font-size: 12px;">
@@ -822,10 +822,10 @@ export const executiveCustomButton = (function () {
                         <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="20" style="vertical-align:middle;"> 20+</label>
                     </div>
                 </div>
-                
+
                 <!-- Calculation Table -->
                 <div id="sc-calc-table-container"></div>
-                
+
                 <!-- Calculation Details Box -->
                 <div id="sc-detail-box" style="padding: 10px; border: 1px solid var(--sc-border); border-radius: 8px; background: var(--sc-detail-bg); font-size: 11px; line-height: 1.5; color: var(--sc-fg3); min-height: 120px; box-sizing: border-box;">
                     💡 提示：点击或悬浮在上方任意行，可在此处查看详细计算公式。
