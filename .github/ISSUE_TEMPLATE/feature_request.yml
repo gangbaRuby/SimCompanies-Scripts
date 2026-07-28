@@ -1,0 +1,29 @@
+name: 功能建议
+description: 提出一个明确、可验证的用户脚本功能建议。
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 请说明当前操作中的具体痛点和页面场景。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议行为
+      description: 请说明期望显示什么、何时触发、如何操作。
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: 相关页面地址
+      placeholder: "https://www.simcompanies.com/..."
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 备选方案或补充信息
