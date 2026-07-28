@@ -65,6 +65,6 @@ docs/                面向维护者的中文文档
 
 ## 参与维护
 
-提交问题或改动前，请阅读：[贡献指南](CONTRIBUTING.md)、[维护指南](docs/maintenance-guide.md)、[变更记录](CHANGELOG.md)、[安全政策](SECURITY.md) 和 [GitHub 仓库设置](docs/github-setup.md)。
+提交问题或改动前，请先阅读：[日常操作流程](docs/daily-workflow.md)、[贡献指南](CONTRIBUTING.md)、[维护指南](docs/maintenance-guide.md)、[变更记录](CHANGELOG.md)、[安全政策](SECURITY.md) 和 [GitHub 仓库设置](docs/github-setup.md)。
 
 项目采用 [AGPL-3.0](LICENSE) 许可证。

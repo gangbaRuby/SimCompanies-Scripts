@@ -5,7 +5,7 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 
 # SimCompanies 维护流程
 
-在此仓库执行任何工作都必须遵循本流程。执行前阅读 `AGENTS.md`、`AGENTS.local.md`（如存在）和 `references/project-map.md`。
+在此仓库执行任何工作都必须遵循本流程。执行前阅读 `AGENTS.md`、`AGENTS.local.md`（如存在）、`references/project-map.md` 和 `docs/daily-workflow.md`。
 
 ## 工作流程
 
