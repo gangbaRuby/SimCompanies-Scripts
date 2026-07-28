@@ -2,7 +2,7 @@
 
 本文件随仓库提交，供后续维护者与自动化维护 Agent 使用。
 
-1. 先阅读 `docs/maintenance-guide.md` 和 `.codex/skills/simcompanies-maintenance/SKILL.md`。
+1. 先阅读 `docs/daily-workflow.md`、`docs/maintenance-guide.md` 和 `.codex/skills/simcompanies-maintenance/SKILL.md`。
 2. 修改任何源码前，必须追踪调用链，确认根因或需求边界，说明最小修改方案，并取得项目负责人确认。
 3. 保持 ES Modules、`window.SC_Modules` 与 `pageObserver` 的既有通信方式；不得直接进行架构迁移或大范围重构。
 4. 修改源码后必须运行 `npm run build`；涉及页面 UI 时，按维护指南检查 SPA 生命周期、桌面/手机、深浅模式和功能开关。
