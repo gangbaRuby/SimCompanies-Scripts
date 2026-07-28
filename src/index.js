@@ -3442,7 +3442,7 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
         // 显示图片放大灯箱
         function showLightbox(url) {
             var overlay = document.createElement('div');
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:99999;display:flex;justify-content:center;align-items:center;cursor:pointer;';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:99999;display:flex;justify-content:center;align-items:center;cursor:pointer;overflow:hidden;';
 
             var closeBtn = document.createElement('span');
             closeBtn.textContent = '×';
@@ -3465,15 +3465,152 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
             overlay.addEventListener('click', closeLightbox);
             document.addEventListener('keydown', onKeyDown);
 
+            var viewport = document.createElement('div');
+            viewport.style.cssText = 'width:90vw;height:90vh;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:default;';
+
             var img = document.createElement('img');
             img.src = url;
-            img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:4px;box-shadow:0 0 20px rgba(0,0,0,0.5);cursor:default;transition:opacity 0.2s;';
+            img.style.cssText = 'max-width:100%;max-height:100%;border-radius:4px;box-shadow:0 0 20px rgba(0,0,0,0.5);cursor:zoom-in;touch-action:none;transition:opacity 0.2s,transform 0.12s ease-out;user-select:none;-webkit-user-drag:none;';
             img.style.opacity = '0';
             img.addEventListener('load', function () { img.style.opacity = '1'; });
-            img.addEventListener('click', function (e) { e.stopPropagation(); });
+
+            var scale = 1;
+            var offsetX = 0;
+            var offsetY = 0;
+            var dragStart = null;
+            var activePointers = new Map();
+            var pinchStart = null;
+            var lastTouchTap = null;
+
+            function clampOffsets() {
+                var maxX = Math.max(0, (img.clientWidth * scale - viewport.clientWidth) / 2);
+                var maxY = Math.max(0, (img.clientHeight * scale - viewport.clientHeight) / 2);
+                offsetX = Math.max(-maxX, Math.min(maxX, offsetX));
+                offsetY = Math.max(-maxY, Math.min(maxY, offsetY));
+            }
+
+            function updateTransform() {
+                if (scale === 1) {
+                    offsetX = 0;
+                    offsetY = 0;
+                } else {
+                    clampOffsets();
+                }
+                img.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+                img.style.cursor = scale > 1 ? (dragStart ? 'grabbing' : 'grab') : 'zoom-in';
+            }
+
+            function setScale(nextScale) {
+                scale = Math.max(1, Math.min(3, nextScale));
+                updateTransform();
+            }
+
+            viewport.addEventListener('wheel', function (e) {
+                if (e.target !== img) return;
+                e.preventDefault();
+                setScale(scale + (e.deltaY < 0 ? 0.25 : -0.25));
+            }, { passive: false });
+
+            viewport.addEventListener('pointerdown', function (e) {
+                activePointers.set(e.pointerId, {
+                    x: e.clientX,
+                    y: e.clientY,
+                    startedOnImage: e.target === img
+                });
+                viewport.setPointerCapture(e.pointerId);
+
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+                if (activePointers.size === 2) {
+                    var points = Array.from(activePointers.values());
+                    lastTouchTap = null;
+                    pinchStart = {
+                        distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
+                        scale: scale
+                    };
+                    if (!points[0].startedOnImage || !points[1].startedOnImage) {
+                        pinchStart = null;
+                    }
+                    dragStart = null;
+                    updateTransform();
+                    return;
+                }
+
+                if (scale <= 1 || !e.target || e.target !== img) return;
+                dragStart = { x: e.clientX, y: e.clientY, offsetX: offsetX, offsetY: offsetY };
+                updateTransform();
+            });
+
+            viewport.addEventListener('pointermove', function (e) {
+                var pointer = activePointers.get(e.pointerId);
+                if (!pointer) return;
+                activePointers.set(e.pointerId, {
+                    x: e.clientX,
+                    y: e.clientY,
+                    startedOnImage: pointer.startedOnImage
+                });
+
+                if (pinchStart && activePointers.size === 2) {
+                    var points = Array.from(activePointers.values());
+                    var distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+                    if (pinchStart.distance > 0) {
+                        setScale(pinchStart.scale * distance / pinchStart.distance);
+                    }
+                    return;
+                }
+
+                if (!dragStart) return;
+                offsetX = dragStart.offsetX + e.clientX - dragStart.x;
+                offsetY = dragStart.offsetY + e.clientY - dragStart.y;
+                updateTransform();
+            });
+
+            viewport.addEventListener('pointerup', function (e) {
+                var wasDragging = dragStart && (Math.abs(e.clientX - dragStart.x) > 8 || Math.abs(e.clientY - dragStart.y) > 8);
+                var wasPinching = pinchStart !== null;
+                var pointer = activePointers.get(e.pointerId);
+                var startedOnImage = pointer && pointer.startedOnImage;
+                dragStart = null;
+                activePointers.delete(e.pointerId);
+                if (activePointers.size < 2) pinchStart = null;
+                updateTransform();
+
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                if (wasDragging || wasPinching) {
+                    lastTouchTap = null;
+                    return;
+                }
+                if (!startedOnImage) {
+                    closeLightbox();
+                    return;
+                }
+
+                if (e.pointerType === 'mouse') {
+                    setScale(scale > 1 ? 1 : 2);
+                } else if (e.pointerType === 'touch') {
+                    var now = Date.now();
+                    if (lastTouchTap && now - lastTouchTap < 300) {
+                        setScale(scale > 1 ? 1 : 2);
+                        lastTouchTap = null;
+                    } else {
+                        lastTouchTap = now;
+                    }
+                }
+            });
+
+            viewport.addEventListener('pointercancel', function (e) {
+                dragStart = null;
+                activePointers.delete(e.pointerId);
+                if (activePointers.size < 2) pinchStart = null;
+                lastTouchTap = null;
+                updateTransform();
+            });
+
+            viewport.addEventListener('click', function (e) { e.stopPropagation(); });
 
             overlay.appendChild(closeBtn);
-            overlay.appendChild(img);
+            viewport.appendChild(img);
+            overlay.appendChild(viewport);
             document.body.appendChild(overlay);
             overlay.style.opacity = '0';
             overlay.style.transition = 'opacity 0.2s';

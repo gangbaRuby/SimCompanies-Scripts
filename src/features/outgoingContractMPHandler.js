@@ -621,7 +621,8 @@ import { DM } from '../utils/ui.js';
                             createPresetBtn(mpBasePrice, mpPresets, null);
                         }
                     } else {
-                        createPresetBtn(currentVal2, loadPresets(), null);
+                        const mpPresets = loadPresets().filter(p => !/^vwap/i.test(p.trim()));
+                        createPresetBtn(currentVal2, mpPresets, null);
                     }
                 } else {
                     if (mpBasePrice > 0) {
