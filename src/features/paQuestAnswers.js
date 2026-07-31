@@ -8,6 +8,7 @@
         let dataLoadAttempted = false;
         let initAttempted = false;
         let observer = null;
+        let cleanupTimer = null;
 
         // 检查功能开关
         function isEnabled() {
@@ -101,7 +102,7 @@
                     const score = calcMatchRate(text, v.text);
                     if (score > bestScore) {
                         bestScore = score;
-                        best = { quest: q, lang: v.lang };
+                        best = { quest: q, lang: v.lang, qText: v.text };
                     }
                 }
             }
@@ -128,44 +129,88 @@
             return parts.join('').trim();
         }
 
+        // 提取 stopEl 之前的所有纯文本（用于定位 pa-reply 链接前的问题文字）
+        function getTextBefore(element, stopEl) {
+            const parts = [];
+            function walk(node) {
+                if (node === stopEl) return true;
+                if (node.nodeType === Node.TEXT_NODE) {
+                    const t = (node.textContent || '').trim();
+                    if (t) parts.push(t);
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    const tag = node.tagName;
+                    if (tag === 'A' || tag === 'SCRIPT' || tag === 'STYLE') return false;
+                    for (let child = node.firstChild; child; child = child.nextSibling) {
+                        if (walk(child)) return true;
+                    }
+                }
+                return false;
+            }
+            walk(element);
+            return parts.join('').trim();
+        }
+
         // 从消息元素获取用于匹配的文本段列表
-        // 返回数组，每个元素独立匹配，避免拼接答案选项导致双向匹配失败
+        // 返回 { text, el } 列表：text 独立匹配，el 为该文本的来源元素
         function getMessageTexts(element) {
             // PA消息（带 pa-reply 链接）：提取第一个 pa-reply 之前的文本（即问题文本）
             var paReply = element.querySelector('a.pa-reply');
             if (paReply) {
-                var parts = [];
-                var children = element.children;
-                for (var i = 0; i < children.length; i++) {
-                    // 遇到包含 pa-reply 的子元素就停止
-                    if (children[i].querySelector('a.pa-reply')) break;
-                    var t = extractText(children[i]);
-                    if (t) parts.push(t);
-                }
-                if (parts.length > 0) return [parts.join(' ').trim()];
+                var text = getTextBefore(element, paReply);
+                if (text) return [{ text: text, el: element }];
                 return [];
             }
 
             // 聊天消息/其他：优先按子元素分割独立匹配
-            var texts = [];
+            var results = [];
             var children = element.children;
             if (children.length > 1) {
                 for (var i = 0; i < children.length; i++) {
                     var childText = extractText(children[i]);
                     if (childText && childText.length > 3) {
-                        texts.push(childText);
+                        results.push({ text: childText, el: children[i] });
                     }
                 }
                 // 同时加入全部合并文本（处理问题被拆分到多个span的情况）
                 var fullText = extractText(element);
-                if (fullText) texts.push(fullText);
+                if (fullText) results.push({ text: fullText, el: element });
             }
             // 如果子元素分割没有结果，退回到整体提取
-            if (texts.length === 0) {
+            if (results.length === 0) {
                 var fullText = extractText(element);
-                if (fullText) texts.push(fullText);
+                if (fullText) results.push({ text: fullText, el: element });
             }
-            return texts;
+            return results;
+        }
+
+        // 定位 PA 问题消息元素：从链接向上找最近的、包含该链接且链接前有足够文本的 DIV，
+        // 避免把答案框追加到聊天窗口/页面级包装元素上
+        function findPaMessageElement(link) {
+            var el = link.parentElement;
+            while (el && el !== document.body) {
+                if (el.tagName === 'DIV') {
+                    var text = getTextBefore(el, link);
+                    if (text && text.length >= 3 && !isChatContainer(el)
+                        && !el.querySelector('.input-group')) {
+                        return el;
+                    }
+                }
+                el = el.parentElement;
+            }
+            return null;
+        }
+
+        // 防御：答案框只允许插入消息级元素，拒绝聊天容器/聊天窗口/页面级包装元素
+        function isSafeAnswerParent(el) {
+            if (!el || el === document.body) return false;
+            if (isChatContainer(el)) return false;
+            if (el.querySelector && el.querySelector('.input-group')) return false;
+            // 内部仍嵌套消息容器，说明是包装层而非单条消息
+            if (el.querySelector && el.querySelector('div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]')) return false;
+            // PA 消息：包含 pa-reply 链接
+            if (el.querySelector && el.querySelector('a.pa-reply')) return true;
+            // 聊天消息：必须是已知消息容器的直接子元素
+            return !!(el.parentElement && isChatContainer(el.parentElement));
         }
 
         // 创建答案UI
@@ -249,14 +294,26 @@
             if (element.scPaProcessed) return;
             element.scPaProcessed = true;
 
-            var texts = getMessageTexts(element);
-            for (var ti = 0; ti < texts.length; ti++) {
-                if (!texts[ti] || texts[ti].length < 3) continue;
-                var match = findBestMatch(texts[ti]);
+            if (!isSafeAnswerParent(element)) {
+                return;
+            }
+
+            var entries = getMessageTexts(element);
+            for (var ti = 0; ti < entries.length; ti++) {
+                if (!entries[ti].text || entries[ti].text.length < 3) continue;
+                var match = findBestMatch(entries[ti].text);
                 if (match) {
                     if (element.querySelector('.sc-pa-answer-box')) return;
                     var answerUI = createAnswerUI(match);
-                    element.appendChild(answerUI);
+                    answerUI.dataset.scPaQuestion = match.qText;
+                    // 若匹配文本来自子元素且该子元素本身是安全的消息内容块，优先插到该子元素
+                    var target = element;
+                    if (entries[ti].el !== element && entries[ti].el.tagName === 'DIV'
+                        && isSafeAnswerParent(entries[ti].el)) {
+                        target = entries[ti].el;
+                    }
+                    if (!isSafeAnswerParent(target)) return;
+                    target.appendChild(answerUI);
                     return;
                 }
             }
@@ -268,14 +325,9 @@
 
             // 1. 处理 PA 系统消息（通过 pa-reply 链接定位）
             document.querySelectorAll('a.pa-reply').forEach(function (link) {
-                let el = link.parentElement;
-                for (let i = 0; i < 10 && el && el !== document.body; i++) {
-                    var texts = getMessageTexts(el);
-                    if (texts.length > 0 && !el.scPaProcessed) {
-                        processMessage(el);
-                        break;
-                    }
-                    el = el.parentElement;
+                var msgEl = findPaMessageElement(link);
+                if (msgEl && !msgEl.scPaProcessed) {
+                    processMessage(msgEl);
                 }
             });
 
@@ -323,6 +375,62 @@
             return document.querySelectorAll('div[style*="column-reverse"][style*="overflow"]');
         }
 
+        // 判断是否为聊天消息容器（与 findChatContainers 同一套选择器）
+        function isChatContainer(el) {
+            if (!el || el.nodeType !== 1 || !el.matches) return false;
+            return el.matches('div.css-xo2rg1.e1llepen2') ||
+                el.matches('div[style*="column-reverse"][style*="overflow"]');
+        }
+
+        // 判断是否为消息级元素（聊天容器的直接子级，或包含 pa-reply 链接的 PA 消息）
+        function isMessageLevelElement(el) {
+            if (!el || el === document.body || isChatContainer(el)) return false;
+            if (el.querySelector && el.querySelector('a.pa-reply')) return true;
+            return !!(el.parentElement && isChatContainer(el.parentElement));
+        }
+
+        // 清理过期答案框：宿主被 React 清空/复用、宿主为聊天容器本身、
+        // 或宿主文本不再匹配原问题时，移除答案框并允许重新评估宿主
+        function cleanupStaleAnswers() {
+            var boxes = document.querySelectorAll('.sc-pa-answer-box');
+            for (var i = 0; i < boxes.length; i++) {
+                var box = boxes[i];
+                var parent = box.parentElement;
+                if (!parent || !parent.isConnected) {
+                    box.remove();
+                    continue;
+                }
+                var qText = box.dataset.scPaQuestion;
+                var valid = false;
+                if (qText && !isChatContainer(parent)) {
+                    var entries = getMessageTexts(parent);
+                    for (var ti = 0; ti < entries.length; ti++) {
+                        if (calcMatchRate(entries[ti].text, qText) >= MATCH_THRESHOLD) {
+                            valid = true;
+                            break;
+                        }
+                    }
+                }
+                if (valid) continue;
+
+                box.remove();
+                // 宿主可能已被 React 复用装入新消息：重置标记并重新评估
+                parent.scPaProcessed = false;
+                if (isMessageLevelElement(parent)) {
+                    processMessage(parent);
+                }
+            }
+        }
+
+        // 防抖调度清理，避免每次 DOM 变更都全量校验
+        function scheduleCleanup() {
+            if (cleanupTimer) return;
+            cleanupTimer = setTimeout(function () {
+                cleanupTimer = null;
+                cleanupStaleAnswers();
+            }, 300);
+        }
+
         // 初始化
         async function init() {
             // 仅在 /messages/ 页面运行
@@ -348,6 +456,7 @@
 
             // 扫描现有消息
             scanPage();
+            cleanupStaleAnswers();
 
             // 监听变化
             if (observer) observer.disconnect();
@@ -364,6 +473,7 @@
                         }
                     }
                 }
+                scheduleCleanup();
             });
 
             // 观察聊天容器
@@ -381,14 +491,9 @@
 
             // 如果是 pa-reply 链接，处理其消息容器
             if (element.tagName === 'A' && element.classList.contains('pa-reply')) {
-                let el = element.parentElement;
-                for (let i = 0; i < 10 && el && el !== document.body; i++) {
-                    var texts = getMessageTexts(el);
-                    if (texts.length > 0 && !el.scPaProcessed) {
-                        processMessage(el);
-                        break;
-                    }
-                    el = el.parentElement;
+                var msgEl = findPaMessageElement(element);
+                if (msgEl && !msgEl.scPaProcessed) {
+                    processMessage(msgEl);
                 }
                 return;
             }
@@ -406,17 +511,23 @@
                 var links = element.querySelectorAll('a.pa-reply');
                 if (links.length > 0) {
                     links.forEach(function (link) {
-                        let el = link.parentElement;
-                        for (let i = 0; i < 10 && el && el !== document.body; i++) {
-                            var linkTexts = getMessageTexts(el);
-                            if (linkTexts.length > 0 && !el.scPaProcessed) {
-                                processMessage(el);
-                                break;
-                            }
-                            el = el.parentElement;
+                        var msgEl = findPaMessageElement(link);
+                        if (msgEl && !msgEl.scPaProcessed) {
+                            processMessage(msgEl);
                         }
                     });
                 }
+            }
+
+            // React 整体重建消息容器时，容器内部的消息不会作为独立新增节点出现，
+            // 这里递归处理新增节点内部嵌套的已知聊天容器及其消息子元素
+            if (element.querySelectorAll && !isChatContainer(element)) {
+                var nestedContainers = element.querySelectorAll('div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]');
+                nestedContainers.forEach(function (c) {
+                    c.querySelectorAll(':scope > div').forEach(function (msgEl) {
+                        if (!msgEl.scPaProcessed) processMessage(msgEl);
+                    });
+                });
             }
 
             // 通用后备：处理新增的有文本内容的元素（新聊天消息、新PA消息等）
