@@ -631,6 +631,113 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
                 return btn;
             };
 
+            // 聊天输入框扩大高度配置（桌面/移动端分开存储，预留后续分别调整）
+            const CHAT_INPUT_HEIGHT_KEY = {
+                desktop: 'chatInputExpanderHeight',
+                mobile: 'chatInputExpanderHeightMobile',
+            };
+            const CHAT_INPUT_HEIGHT_DEFAULTS = { desktop: 130, mobile: 90 };
+            const CHAT_INPUT_HEIGHT_RANGE = { min: 40 };
+
+            const readChatInputHeight = (key, fallback) => {
+                try {
+                    const config = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                    const value = parseInt(config[key], 10);
+                    return isFinite(value) ? value : fallback;
+                } catch (e) {
+                    return fallback;
+                }
+            };
+
+            const createChatInputHeightControls = () => {
+                const row = document.createElement('div');
+                row.className = 'sc-chat-input-height-row';
+                row.style.cssText = 'display:grid;grid-template-columns:auto 64px auto;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);';
+
+                const makeInput = (label, key, fallback) => {
+                    const labelSpan = document.createElement('span');
+                    labelSpan.textContent = label;
+                    labelSpan.style.cssText = 'white-space:nowrap;line-height:24px;';
+                    const input = document.createElement('input');
+                    input.type = 'number';
+                    input.min = CHAT_INPUT_HEIGHT_RANGE.min;
+                    input.step = 10;
+                    input.value = readChatInputHeight(key, fallback);
+                    input.style.cssText = 'width:100%;height:24px;box-sizing:border-box;padding:2px 4px;border:1px solid #666;border-radius:3px;background:rgba(255,255,255,0.08);color:inherit;font-size:12px;';
+                    const unit = document.createElement('span');
+                    unit.textContent = 'px';
+                    unit.style.cssText = 'line-height:24px;';
+                    row.append(labelSpan, input, unit);
+                    return input;
+                };
+
+                const desktopInput = makeInput('桌面端高度:', CHAT_INPUT_HEIGHT_KEY.desktop, CHAT_INPUT_HEIGHT_DEFAULTS.desktop);
+                const mobileInput = makeInput('移动端高度:', CHAT_INPUT_HEIGHT_KEY.mobile, CHAT_INPUT_HEIGHT_DEFAULTS.mobile);
+
+                const clampHeight = (value, fallback) => {
+                    const n = parseInt(value, 10);
+                    if (!isFinite(n)) return fallback;
+                    return Math.max(CHAT_INPUT_HEIGHT_RANGE.min, n);
+                };
+
+                // 按钮短暂变换文字作为操作反馈，随后恢复
+                const flashButton = (btn, activeText, activeColor, idleText, idleColor) => {
+                    if (btn._flashTimer) clearTimeout(btn._flashTimer);
+                    btn.textContent = activeText;
+                    btn.style.backgroundColor = activeColor;
+                    btn._flashTimer = setTimeout(() => {
+                        btn.textContent = idleText;
+                        btn.style.backgroundColor = idleColor;
+                    }, 1500);
+                };
+
+                const applyBtn = document.createElement('button');
+                applyBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+                applyBtn.textContent = '应用';
+                applyBtn.style.cssText = 'flex:1;background:#2196F3;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;';
+                applyBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const configKey = 'SC_PageActions_Settings';
+                    let config = {};
+                    try { config = JSON.parse(localStorage.getItem(configKey)) || {}; } catch (err) { config = {}; }
+                    config[CHAT_INPUT_HEIGHT_KEY.desktop] = clampHeight(desktopInput.value, CHAT_INPUT_HEIGHT_DEFAULTS.desktop);
+                    config[CHAT_INPUT_HEIGHT_KEY.mobile] = clampHeight(mobileInput.value, CHAT_INPUT_HEIGHT_DEFAULTS.mobile);
+                    localStorage.setItem(configKey, JSON.stringify(config));
+                    desktopInput.value = config[CHAT_INPUT_HEIGHT_KEY.desktop];
+                    mobileInput.value = config[CHAT_INPUT_HEIGHT_KEY.mobile];
+                    if (typeof window.scChatInputExpanderApplyStyles === 'function') {
+                        window.scChatInputExpanderApplyStyles();
+                    }
+                    flashButton(applyBtn, '✓ 已应用', '#4CAF50', '应用', '#2196F3');
+                };
+
+                const resetBtn = document.createElement('button');
+                resetBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+                resetBtn.textContent = '重置';
+                resetBtn.style.cssText = 'flex:1;background:#607D8B;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;';
+                resetBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const configKey = 'SC_PageActions_Settings';
+                    let config = {};
+                    try { config = JSON.parse(localStorage.getItem(configKey)) || {}; } catch (err) { config = {}; }
+                    delete config[CHAT_INPUT_HEIGHT_KEY.desktop];
+                    delete config[CHAT_INPUT_HEIGHT_KEY.mobile];
+                    localStorage.setItem(configKey, JSON.stringify(config));
+                    desktopInput.value = CHAT_INPUT_HEIGHT_DEFAULTS.desktop;
+                    mobileInput.value = CHAT_INPUT_HEIGHT_DEFAULTS.mobile;
+                    if (typeof window.scChatInputExpanderApplyStyles === 'function') {
+                        window.scChatInputExpanderApplyStyles();
+                    }
+                    flashButton(resetBtn, '✓ 已重置', '#4CAF50', '重置', '#607D8B');
+                };
+
+                const actionRow = document.createElement('div');
+                actionRow.style.cssText = 'display:flex;gap:6px;grid-column:1 / -1;margin-top:2px;';
+                actionRow.append(applyBtn, resetBtn);
+                row.appendChild(actionRow);
+                return row;
+            };
+
             mainMenu.append(
                 createStatusRow('r1'),
                 createStatusRow('r2'),
@@ -743,7 +850,7 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
                 { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
                 { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
-                { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true },
+                { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true, heightInput: true },
             ];
             const ITEMS_PER_PAGE = 5;
             let currentPage = 0;
@@ -757,7 +864,16 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
                     let el;
                     if (item.type === 'factory') { el = item.fn(); }
                     else { el = createPageActionToggle(item.key, item.label, item.defaultEnabled !== false); }
-                    el.classList.add('sc-toggle-item');
+                    if (item.heightInput) {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'sc-toggle-item';
+                        wrap.style.cssText = 'display:flex;flex-direction:column;';
+                        wrap.appendChild(el);
+                        wrap.appendChild(createChatInputHeightControls());
+                        el = wrap;
+                    } else {
+                        el.classList.add('sc-toggle-item');
+                    }
                     secBtnGroup.appendChild(el);
                 }
                 const controls = document.createElement('div');
@@ -3717,6 +3833,10 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
             var existingStyle = document.getElementById(styleId);
             var isDark = typeof DM === 'function' ? DM() : false;
 
+            // 读取自定义扩大高度（桌面/移动端分开存储），未设置时沿用默认值
+            var desktopHeight = readCustomHeight('chatInputExpanderHeight', 130);
+            var mobileHeight = readCustomHeight('chatInputExpanderHeightMobile', 90);
+
             // 依据深浅色模式采用不同的蓝色阴影透明度以保证视觉高级感
             var shadowColor = isDark ? 'rgba(33, 150, 243, 0.5)' : 'rgba(33, 150, 243, 0.3)';
             var styleText = `
@@ -3730,7 +3850,7 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
 
                 /* 焦点在输入框内时的扩大状态（默认桌面端/平板） */
                 .sc-chat-textarea-focused {
-                    height: 130px !important;
+                    height: ${desktopHeight}px !important;
                     top: 0px !important;
                     bottom: 0px !important;
                     border-color: #2196F3 !important;
@@ -3738,38 +3858,38 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
                 }
                 /* 使输入框紧邻的前置高亮渲染 div 的高度同步拉伸，防止文本输入层级错位导致输入法定位失灵被覆盖 */
                 .sc-chat-wrap-focused > div {
-                    height: 130px !important;
-                    min-height: 130px !important;
+                    height: ${desktopHeight}px !important;
+                    min-height: ${desktopHeight}px !important;
                 }
                 .sc-chat-input-group-focused {
-                    height: 130px !important;
+                    height: ${desktopHeight}px !important;
                 }
                 /* 发送按钮容器高度扩大，并利用 vertical-align 靠底对齐，保持原有 table-cell 布局不被破坏 */
                 .sc-chat-btn-focused {
-                    height: 130px !important;
+                    height: ${desktopHeight}px !important;
                     vertical-align: bottom !important;
                 }
                 .sc-chat-outer-focused {
-                    height: 138px !important;
+                    height: ${desktopHeight + 8}px !important;
                 }
 
                 /* 移动端/小屏幕适配：防止弹出的虚拟键盘和过大输入框遮挡全部屏幕 */
                 @media (max-width: 767px) {
                     .sc-chat-textarea-focused {
-                        height: 90px !important;
+                        height: ${mobileHeight}px !important;
                     }
                     .sc-chat-wrap-focused > div {
-                        height: 90px !important;
-                        min-height: 90px !important;
+                        height: ${mobileHeight}px !important;
+                        min-height: ${mobileHeight}px !important;
                     }
                     .sc-chat-input-group-focused {
-                        height: 90px !important;
+                        height: ${mobileHeight}px !important;
                     }
                     .sc-chat-btn-focused {
-                        height: 90px !important;
+                        height: ${mobileHeight}px !important;
                     }
                     .sc-chat-outer-focused {
-                        height: 98px !important;
+                        height: ${mobileHeight + 8}px !important;
                     }
                 }
             `;
@@ -3781,6 +3901,18 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
                 style.id = styleId;
                 style.textContent = styleText;
                 document.head.appendChild(style);
+            }
+        }
+
+        // 读取自定义扩大高度（px），非法值回退默认，仅保留最小下限防止塌陷
+        function readCustomHeight(key, fallback) {
+            try {
+                var cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                var value = parseInt(cfg[key], 10);
+                if (!isFinite(value)) return fallback;
+                return Math.max(40, value);
+            } catch (e) {
+                return fallback;
             }
         }
 
@@ -3980,6 +4112,9 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
 
         // 立即初始化以注入样式
         init();
+
+        // 供设置面板在修改自定义高度后立即重新生成样式
+        window.scChatInputExpanderApplyStyles = injectStyles;
     })();
 
     // ======================
