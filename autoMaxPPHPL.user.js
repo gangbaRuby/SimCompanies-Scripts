@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.39
+// @version      1.32.40
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -707,6 +707,7 @@
     let dataLoadAttempted = false;
     let initAttempted = false;
     let observer = null;
+    let cleanupTimer = null;
     function isEnabled() {
       return window.isPageModuleEnabled ? window.isPageModuleEnabled("paQuestAnswers") : true;
     }
@@ -775,7 +776,7 @@
           const score = calcMatchRate(text, v.text);
           if (score > bestScore) {
             bestScore = score;
-            best = { quest: q, lang: v.lang };
+            best = { quest: q, lang: v.lang, qText: v.text };
           }
         }
       }
@@ -798,36 +799,70 @@
       walk(element);
       return parts.join("").trim();
     }
+    function getTextBefore(element, stopEl) {
+      const parts = [];
+      function walk(node) {
+        if (node === stopEl) return true;
+        if (node.nodeType === Node.TEXT_NODE) {
+          const t = (node.textContent || "").trim();
+          if (t) parts.push(t);
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          const tag = node.tagName;
+          if (tag === "A" || tag === "SCRIPT" || tag === "STYLE") return false;
+          for (let child = node.firstChild; child; child = child.nextSibling) {
+            if (walk(child)) return true;
+          }
+        }
+        return false;
+      }
+      walk(element);
+      return parts.join("").trim();
+    }
     function getMessageTexts(element) {
       var paReply = element.querySelector("a.pa-reply");
       if (paReply) {
-        var parts = [];
-        var children = element.children;
-        for (var i = 0; i < children.length; i++) {
-          if (children[i].querySelector("a.pa-reply")) break;
-          var t = extractText(children[i]);
-          if (t) parts.push(t);
-        }
-        if (parts.length > 0) return [parts.join(" ").trim()];
+        var text = getTextBefore(element, paReply);
+        if (text) return [{ text, el: element }];
         return [];
       }
-      var texts = [];
+      var results = [];
       var children = element.children;
       if (children.length > 1) {
         for (var i = 0; i < children.length; i++) {
           var childText = extractText(children[i]);
           if (childText && childText.length > 3) {
-            texts.push(childText);
+            results.push({ text: childText, el: children[i] });
           }
         }
         var fullText = extractText(element);
-        if (fullText) texts.push(fullText);
+        if (fullText) results.push({ text: fullText, el: element });
       }
-      if (texts.length === 0) {
+      if (results.length === 0) {
         var fullText = extractText(element);
-        if (fullText) texts.push(fullText);
+        if (fullText) results.push({ text: fullText, el: element });
       }
-      return texts;
+      return results;
+    }
+    function findPaMessageElement(link) {
+      var el = link.parentElement;
+      while (el && el !== document.body) {
+        if (el.tagName === "DIV") {
+          var text = getTextBefore(el, link);
+          if (text && text.length >= 3 && !isChatContainer(el) && !el.querySelector(".input-group")) {
+            return el;
+          }
+        }
+        el = el.parentElement;
+      }
+      return null;
+    }
+    function isSafeAnswerParent(el) {
+      if (!el || el === document.body) return false;
+      if (isChatContainer(el)) return false;
+      if (el.querySelector && el.querySelector(".input-group")) return false;
+      if (el.querySelector && el.querySelector('div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]')) return false;
+      if (el.querySelector && el.querySelector("a.pa-reply")) return true;
+      return !!(el.parentElement && isChatContainer(el.parentElement));
     }
     function createAnswerUI(match2) {
       const { quest, lang } = match2;
@@ -902,14 +937,23 @@
     function processMessage(element) {
       if (element.scPaProcessed) return;
       element.scPaProcessed = true;
-      var texts = getMessageTexts(element);
-      for (var ti = 0; ti < texts.length; ti++) {
-        if (!texts[ti] || texts[ti].length < 3) continue;
-        var match2 = findBestMatch(texts[ti]);
+      if (!isSafeAnswerParent(element)) {
+        return;
+      }
+      var entries = getMessageTexts(element);
+      for (var ti = 0; ti < entries.length; ti++) {
+        if (!entries[ti].text || entries[ti].text.length < 3) continue;
+        var match2 = findBestMatch(entries[ti].text);
         if (match2) {
           if (element.querySelector(".sc-pa-answer-box")) return;
           var answerUI = createAnswerUI(match2);
-          element.appendChild(answerUI);
+          answerUI.dataset.scPaQuestion = match2.qText;
+          var target = element;
+          if (entries[ti].el !== element && entries[ti].el.tagName === "DIV" && isSafeAnswerParent(entries[ti].el)) {
+            target = entries[ti].el;
+          }
+          if (!isSafeAnswerParent(target)) return;
+          target.appendChild(answerUI);
           return;
         }
       }
@@ -917,14 +961,9 @@
     function scanPage() {
       if (!questData || questData.length === 0) return;
       document.querySelectorAll("a.pa-reply").forEach(function(link) {
-        let el = link.parentElement;
-        for (let i2 = 0; i2 < 10 && el && el !== document.body; i2++) {
-          var texts = getMessageTexts(el);
-          if (texts.length > 0 && !el.scPaProcessed) {
-            processMessage(el);
-            break;
-          }
-          el = el.parentElement;
+        var msgEl = findPaMessageElement(link);
+        if (msgEl && !msgEl.scPaProcessed) {
+          processMessage(msgEl);
         }
       });
       var chatContainers = findChatContainers();
@@ -963,6 +1002,50 @@
       if (byClass.length > 0) return byClass;
       return document.querySelectorAll('div[style*="column-reverse"][style*="overflow"]');
     }
+    function isChatContainer(el) {
+      if (!el || el.nodeType !== 1 || !el.matches) return false;
+      return el.matches("div.css-xo2rg1.e1llepen2") || el.matches('div[style*="column-reverse"][style*="overflow"]');
+    }
+    function isMessageLevelElement(el) {
+      if (!el || el === document.body || isChatContainer(el)) return false;
+      if (el.querySelector && el.querySelector("a.pa-reply")) return true;
+      return !!(el.parentElement && isChatContainer(el.parentElement));
+    }
+    function cleanupStaleAnswers() {
+      var boxes = document.querySelectorAll(".sc-pa-answer-box");
+      for (var i = 0; i < boxes.length; i++) {
+        var box = boxes[i];
+        var parent = box.parentElement;
+        if (!parent || !parent.isConnected) {
+          box.remove();
+          continue;
+        }
+        var qText = box.dataset.scPaQuestion;
+        var valid = false;
+        if (qText && !isChatContainer(parent)) {
+          var entries = getMessageTexts(parent);
+          for (var ti = 0; ti < entries.length; ti++) {
+            if (calcMatchRate(entries[ti].text, qText) >= MATCH_THRESHOLD) {
+              valid = true;
+              break;
+            }
+          }
+        }
+        if (valid) continue;
+        box.remove();
+        parent.scPaProcessed = false;
+        if (isMessageLevelElement(parent)) {
+          processMessage(parent);
+        }
+      }
+    }
+    function scheduleCleanup() {
+      if (cleanupTimer) return;
+      cleanupTimer = setTimeout(function() {
+        cleanupTimer = null;
+        cleanupStaleAnswers();
+      }, 300);
+    }
     async function init2() {
       if (!/\/messages(\/|$)/.test(location.href)) {
         if (observer) {
@@ -983,6 +1066,7 @@
       if (initAttempted) return;
       initAttempted = true;
       scanPage();
+      cleanupStaleAnswers();
       if (observer) observer.disconnect();
       observer = new MutationObserver(function(mutations) {
         if (!isEnabled()) return;
@@ -995,6 +1079,7 @@
             }
           }
         }
+        scheduleCleanup();
       });
       findChatContainers().forEach(function(c) {
         observer.observe(c, { childList: true, subtree: true });
@@ -1004,20 +1089,15 @@
     function scanElement(element) {
       if (!questData || questData.length === 0) return;
       if (element.tagName === "A" && element.classList.contains("pa-reply")) {
-        let el = element.parentElement;
-        for (let i = 0; i < 10 && el && el !== document.body; i++) {
-          var texts = getMessageTexts(el);
-          if (texts.length > 0 && !el.scPaProcessed) {
-            processMessage(el);
-            break;
-          }
-          el = el.parentElement;
+        var msgEl = findPaMessageElement(element);
+        if (msgEl && !msgEl.scPaProcessed) {
+          processMessage(msgEl);
         }
         return;
       }
       if (element.matches && element.matches('div[style*="column-reverse"][style*="overflow"]')) {
-        element.querySelectorAll(":scope > div").forEach(function(msgEl) {
-          if (!msgEl.scPaProcessed) processMessage(msgEl);
+        element.querySelectorAll(":scope > div").forEach(function(msgEl2) {
+          if (!msgEl2.scPaProcessed) processMessage(msgEl2);
         });
         return;
       }
@@ -1025,17 +1105,20 @@
         var links = element.querySelectorAll("a.pa-reply");
         if (links.length > 0) {
           links.forEach(function(link) {
-            let el = link.parentElement;
-            for (let i = 0; i < 10 && el && el !== document.body; i++) {
-              var linkTexts = getMessageTexts(el);
-              if (linkTexts.length > 0 && !el.scPaProcessed) {
-                processMessage(el);
-                break;
-              }
-              el = el.parentElement;
+            var msgEl2 = findPaMessageElement(link);
+            if (msgEl2 && !msgEl2.scPaProcessed) {
+              processMessage(msgEl2);
             }
           });
         }
+      }
+      if (element.querySelectorAll && !isChatContainer(element)) {
+        var nestedContainers = element.querySelectorAll('div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]');
+        nestedContainers.forEach(function(c) {
+          c.querySelectorAll(":scope > div").forEach(function(msgEl2) {
+            if (!msgEl2.scPaProcessed) processMessage(msgEl2);
+          });
+        });
       }
       if (!element.scPaProcessed && element.nodeType === 1 && element.textContent.trim().length > 5) {
         if (element.matches && element.matches('div[style*="column-reverse"]')) return;
@@ -2924,7 +3007,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.32.39",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.32.40",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -7978,6 +8061,109 @@
           btn.style.backgroundColor = isEnabled ? "#4CAF50" : "#f44336";
           return btn;
         };
+        const CHAT_INPUT_HEIGHT_KEY = {
+          desktop: "chatInputExpanderHeight",
+          mobile: "chatInputExpanderHeightMobile"
+        };
+        const CHAT_INPUT_HEIGHT_DEFAULTS = { desktop: 130, mobile: 90 };
+        const CHAT_INPUT_HEIGHT_RANGE = { min: 40 };
+        const readChatInputHeight = (key, fallback) => {
+          try {
+            const config = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+            const value = parseInt(config[key], 10);
+            return isFinite(value) ? value : fallback;
+          } catch (e) {
+            return fallback;
+          }
+        };
+        const createChatInputHeightControls = () => {
+          const row = document.createElement("div");
+          row.className = "sc-chat-input-height-row";
+          row.style.cssText = "display:grid;grid-template-columns:auto 64px auto;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);";
+          const makeInput = (label, key, fallback) => {
+            const labelSpan = document.createElement("span");
+            labelSpan.textContent = label;
+            labelSpan.style.cssText = "white-space:nowrap;line-height:24px;";
+            const input = document.createElement("input");
+            input.type = "number";
+            input.min = CHAT_INPUT_HEIGHT_RANGE.min;
+            input.step = 10;
+            input.value = readChatInputHeight(key, fallback);
+            input.style.cssText = "width:100%;height:24px;box-sizing:border-box;padding:2px 4px;border:1px solid #666;border-radius:3px;background:rgba(255,255,255,0.08);color:inherit;font-size:12px;";
+            const unit = document.createElement("span");
+            unit.textContent = "px";
+            unit.style.cssText = "line-height:24px;";
+            row.append(labelSpan, input, unit);
+            return input;
+          };
+          const desktopInput = makeInput("\u684C\u9762\u7AEF\u9AD8\u5EA6:", CHAT_INPUT_HEIGHT_KEY.desktop, CHAT_INPUT_HEIGHT_DEFAULTS.desktop);
+          const mobileInput = makeInput("\u79FB\u52A8\u7AEF\u9AD8\u5EA6:", CHAT_INPUT_HEIGHT_KEY.mobile, CHAT_INPUT_HEIGHT_DEFAULTS.mobile);
+          const clampHeight = (value, fallback) => {
+            const n = parseInt(value, 10);
+            if (!isFinite(n)) return fallback;
+            return Math.max(CHAT_INPUT_HEIGHT_RANGE.min, n);
+          };
+          const flashButton = (btn, activeText, activeColor, idleText, idleColor) => {
+            if (btn._flashTimer) clearTimeout(btn._flashTimer);
+            btn.textContent = activeText;
+            btn.style.backgroundColor = activeColor;
+            btn._flashTimer = setTimeout(() => {
+              btn.textContent = idleText;
+              btn.style.backgroundColor = idleColor;
+            }, 1500);
+          };
+          const applyBtn = document.createElement("button");
+          applyBtn.className = "SimcompaniesRetailCalculation-action-btn";
+          applyBtn.textContent = "\u5E94\u7528";
+          applyBtn.style.cssText = "flex:1;background:#2196F3;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;";
+          applyBtn.onclick = (e) => {
+            e.stopPropagation();
+            const configKey = "SC_PageActions_Settings";
+            let config = {};
+            try {
+              config = JSON.parse(localStorage.getItem(configKey)) || {};
+            } catch (err) {
+              config = {};
+            }
+            config[CHAT_INPUT_HEIGHT_KEY.desktop] = clampHeight(desktopInput.value, CHAT_INPUT_HEIGHT_DEFAULTS.desktop);
+            config[CHAT_INPUT_HEIGHT_KEY.mobile] = clampHeight(mobileInput.value, CHAT_INPUT_HEIGHT_DEFAULTS.mobile);
+            localStorage.setItem(configKey, JSON.stringify(config));
+            desktopInput.value = config[CHAT_INPUT_HEIGHT_KEY.desktop];
+            mobileInput.value = config[CHAT_INPUT_HEIGHT_KEY.mobile];
+            if (typeof window.scChatInputExpanderApplyStyles === "function") {
+              window.scChatInputExpanderApplyStyles();
+            }
+            flashButton(applyBtn, "\u2713 \u5DF2\u5E94\u7528", "#4CAF50", "\u5E94\u7528", "#2196F3");
+          };
+          const resetBtn = document.createElement("button");
+          resetBtn.className = "SimcompaniesRetailCalculation-action-btn";
+          resetBtn.textContent = "\u91CD\u7F6E";
+          resetBtn.style.cssText = "flex:1;background:#607D8B;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;";
+          resetBtn.onclick = (e) => {
+            e.stopPropagation();
+            const configKey = "SC_PageActions_Settings";
+            let config = {};
+            try {
+              config = JSON.parse(localStorage.getItem(configKey)) || {};
+            } catch (err) {
+              config = {};
+            }
+            delete config[CHAT_INPUT_HEIGHT_KEY.desktop];
+            delete config[CHAT_INPUT_HEIGHT_KEY.mobile];
+            localStorage.setItem(configKey, JSON.stringify(config));
+            desktopInput.value = CHAT_INPUT_HEIGHT_DEFAULTS.desktop;
+            mobileInput.value = CHAT_INPUT_HEIGHT_DEFAULTS.mobile;
+            if (typeof window.scChatInputExpanderApplyStyles === "function") {
+              window.scChatInputExpanderApplyStyles();
+            }
+            flashButton(resetBtn, "\u2713 \u5DF2\u91CD\u7F6E", "#4CAF50", "\u91CD\u7F6E", "#607D8B");
+          };
+          const actionRow = document.createElement("div");
+          actionRow.style.cssText = "display:flex;gap:6px;grid-column:1 / -1;margin-top:2px;";
+          actionRow.append(applyBtn, resetBtn);
+          row.appendChild(actionRow);
+          return row;
+        };
         mainMenu.append(
           createStatusRow("r1"),
           createStatusRow("r2"),
@@ -8080,7 +8266,7 @@
           { type: "toggle", key: "landscapeHighlight", label: "\u5730\u56FE\u7A7A\u95F2\u5EFA\u7B51\u9AD8\u4EAE" },
           { type: "toggle", key: "paQuestAnswers", label: "PA\u4EFB\u52A1\u7B54\u6848", defaultEnabled: true },
           { type: "toggle", key: "snipboardPreview", label: "Snipboard\u56FE\u7247\u9884\u89C8", defaultEnabled: true },
-          { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true }
+          { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, heightInput: true }
         ];
         const ITEMS_PER_PAGE = 5;
         let currentPage = 0;
@@ -8097,7 +8283,16 @@
             } else {
               el = createPageActionToggle(item.key, item.label, item.defaultEnabled !== false);
             }
-            el.classList.add("sc-toggle-item");
+            if (item.heightInput) {
+              const wrap = document.createElement("div");
+              wrap.className = "sc-toggle-item";
+              wrap.style.cssText = "display:flex;flex-direction:column;";
+              wrap.appendChild(el);
+              wrap.appendChild(createChatInputHeightControls());
+              el = wrap;
+            } else {
+              el.classList.add("sc-toggle-item");
+            }
             secBtnGroup.appendChild(el);
           }
           const controls = document.createElement("div");
@@ -10622,6 +10817,8 @@
         var styleId = "sc-chat-input-expander-style";
         var existingStyle = document.getElementById(styleId);
         var isDark = typeof DM === "function" ? DM() : false;
+        var desktopHeight = readCustomHeight("chatInputExpanderHeight", 130);
+        var mobileHeight = readCustomHeight("chatInputExpanderHeightMobile", 90);
         var shadowColor = isDark ? "rgba(33, 150, 243, 0.5)" : "rgba(33, 150, 243, 0.3)";
         var styleText = `
                 /* \u9ED8\u8BA4\u8FC7\u6E21\u52A8\u753B\uFF0C\u5B9E\u73B0\u5E73\u6ED1\u7684\u9AD8\u5EA6\u4F38\u7F29\u548C\u53D1\u5149\u6548\u679C */
@@ -10634,7 +10831,7 @@
 
                 /* \u7126\u70B9\u5728\u8F93\u5165\u6846\u5185\u65F6\u7684\u6269\u5927\u72B6\u6001\uFF08\u9ED8\u8BA4\u684C\u9762\u7AEF/\u5E73\u677F\uFF09 */
                 .sc-chat-textarea-focused {
-                    height: 130px !important;
+                    height: ${desktopHeight}px !important;
                     top: 0px !important;
                     bottom: 0px !important;
                     border-color: #2196F3 !important;
@@ -10642,38 +10839,38 @@
                 }
                 /* \u4F7F\u8F93\u5165\u6846\u7D27\u90BB\u7684\u524D\u7F6E\u9AD8\u4EAE\u6E32\u67D3 div \u7684\u9AD8\u5EA6\u540C\u6B65\u62C9\u4F38\uFF0C\u9632\u6B62\u6587\u672C\u8F93\u5165\u5C42\u7EA7\u9519\u4F4D\u5BFC\u81F4\u8F93\u5165\u6CD5\u5B9A\u4F4D\u5931\u7075\u88AB\u8986\u76D6 */
                 .sc-chat-wrap-focused > div {
-                    height: 130px !important;
-                    min-height: 130px !important;
+                    height: ${desktopHeight}px !important;
+                    min-height: ${desktopHeight}px !important;
                 }
                 .sc-chat-input-group-focused {
-                    height: 130px !important;
+                    height: ${desktopHeight}px !important;
                 }
                 /* \u53D1\u9001\u6309\u94AE\u5BB9\u5668\u9AD8\u5EA6\u6269\u5927\uFF0C\u5E76\u5229\u7528 vertical-align \u9760\u5E95\u5BF9\u9F50\uFF0C\u4FDD\u6301\u539F\u6709 table-cell \u5E03\u5C40\u4E0D\u88AB\u7834\u574F */
                 .sc-chat-btn-focused {
-                    height: 130px !important;
+                    height: ${desktopHeight}px !important;
                     vertical-align: bottom !important;
                 }
                 .sc-chat-outer-focused {
-                    height: 138px !important;
+                    height: ${desktopHeight + 8}px !important;
                 }
 
                 /* \u79FB\u52A8\u7AEF/\u5C0F\u5C4F\u5E55\u9002\u914D\uFF1A\u9632\u6B62\u5F39\u51FA\u7684\u865A\u62DF\u952E\u76D8\u548C\u8FC7\u5927\u8F93\u5165\u6846\u906E\u6321\u5168\u90E8\u5C4F\u5E55 */
                 @media (max-width: 767px) {
                     .sc-chat-textarea-focused {
-                        height: 90px !important;
+                        height: ${mobileHeight}px !important;
                     }
                     .sc-chat-wrap-focused > div {
-                        height: 90px !important;
-                        min-height: 90px !important;
+                        height: ${mobileHeight}px !important;
+                        min-height: ${mobileHeight}px !important;
                     }
                     .sc-chat-input-group-focused {
-                        height: 90px !important;
+                        height: ${mobileHeight}px !important;
                     }
                     .sc-chat-btn-focused {
-                        height: 90px !important;
+                        height: ${mobileHeight}px !important;
                     }
                     .sc-chat-outer-focused {
-                        height: 98px !important;
+                        height: ${mobileHeight + 8}px !important;
                     }
                 }
             `;
@@ -10684,6 +10881,16 @@
           style.id = styleId;
           style.textContent = styleText;
           document.head.appendChild(style);
+        }
+      }
+      function readCustomHeight(key, fallback) {
+        try {
+          var cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+          var value = parseInt(cfg[key], 10);
+          if (!isFinite(value)) return fallback;
+          return Math.max(40, value);
+        } catch (e) {
+          return fallback;
         }
       }
       function isChatInput(el) {
@@ -10832,6 +11039,7 @@
         }
       });
       init2();
+      window.scChatInputExpanderApplyStyles = injectStyles;
     })();
     function compareVersions(v1, v2) {
       const a = v1.split(".").map(Number);
@@ -10983,4 +11191,4 @@
   })();
 })();
 
-// @changelog 增加 Snipboard 图片预览缩放功能，修复资源市场自定义数据按钮和输入价格 MP 计算逻辑。
+// @changelog 聊天输入框自动扩大支持自定义高度，桌面端与移动端可分别设置。修复 PA 任务答案框在聊天记录清除后残留、新消息到达时出现在错误位置的问题。

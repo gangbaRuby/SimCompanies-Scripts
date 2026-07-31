@@ -1,7 +1,7 @@
 export const state = {
     hasNewVersion: undefined,
     latestVersion: undefined,
-    localVersion: typeof GM_info !== 'undefined' ? GM_info.script.version : '1.32.39',
+    localVersion: typeof GM_info !== 'undefined' ? GM_info.script.version : '1.32.40',
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
