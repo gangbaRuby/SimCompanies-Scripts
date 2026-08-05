@@ -22,6 +22,8 @@
 - `resourceMarketHandler.js`：资源市场计算和控件。
 - `outgoingContractMPHandler.js`：出库销售/合同 MP、VWAP 预设、价格建议和运输利润显示。
 - `warehouseRetailProfit.js`：仓库零售利润。
+- `landscapeIdleBuildingHighlight.js`：地图空闲建筑高亮。
+- `restaurantStockReminder.js`：餐馆备货提醒（菜单库存、每日消耗、剩余天数预警）。
 - `executiveBoardroom.js`：自定义高管数据面板和已保存加成。
 
 ## 高风险检查
