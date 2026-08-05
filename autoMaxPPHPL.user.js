@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.40
+// @version      1.32.41
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1149,6 +1149,7 @@
   var ExecutiveTrainingModule = { init: (...args) => window.SC_Modules?.ExecutiveTrainingModule?.init(...args) };
   var FormerExecutivesModule = { forceInject: (...args) => window.SC_Modules?.FormerExecutivesModule?.forceInject(...args) };
   var LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.LandscapeIdleBuildingHighlight?.init(...args) };
+  var RestaurantStockReminder = { init: (...args) => window.SC_Modules?.RestaurantStockReminder?.init(...args) };
   (function() {
     const PAGE_ACTIONS = {
       marketPage: {
@@ -1209,6 +1210,7 @@
         //建筑页面
         pattern: /\/b\/\d+\/?$/,
         action: () => {
+          RestaurantStockReminder.init();
           const tryInit = (delay, retriesLeft) => {
             setTimeout(() => {
               if (!/\/b\/\d+\/?$/.test(location.href)) return;
@@ -1349,6 +1351,373 @@
   }();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.LandscapeIdleBuildingHighlight = LandscapeIdleBuildingHighlight2;
+
+  // src/features/restaurantStockReminder.js
+  var RestaurantStockReminder2 = function() {
+    const STORAGE_KEY = "script_restaurant_stock_restaurant_count";
+    const state2 = {
+      menuObserver: null,
+      watchTimer: null,
+      panelNode: null,
+      panelContentNode: null,
+      tableBodyNode: null,
+      menuContainer: null,
+      observedMenuContainer: null,
+      panelPositionInitialized: false,
+      panelMovedByUser: false,
+      panelCollapsed: true,
+      dragMoved: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      dragOriginLeft: 0,
+      dragOriginTop: 0,
+      handleDragMove: null,
+      handleDragEnd: null,
+      currentUrl: ""
+    };
+    let restaurantCount = loadRestaurantCount();
+    function isEnabled() {
+      return typeof window.isPageModuleEnabled !== "function" || window.isPageModuleEnabled("restaurantStock");
+    }
+    function init2() {
+      if (!isEnabled()) {
+        cleanupAll();
+        return;
+      }
+      startWatch();
+    }
+    function startWatch() {
+      if (state2.watchTimer) return;
+      state2.watchTimer = setInterval(() => mainFunc(), 1200);
+      mainFunc();
+    }
+    function stopWatch() {
+      if (state2.watchTimer) {
+        clearInterval(state2.watchTimer);
+        state2.watchTimer = null;
+      }
+    }
+    function cleanupAll() {
+      stopWatch();
+      disconnectMenuObserver();
+      destroyPanel();
+      state2.menuContainer = null;
+      state2.currentUrl = "";
+    }
+    function getRestaurantDetailAnchor() {
+      const labels = Array.from(document.querySelectorAll("label"));
+      return labels.find((label) => label.textContent?.trim() === "\u9910\u9986\u8425\u4E1A\u4E2D") || null;
+    }
+    function isRestaurantPage() {
+      return Boolean(getRestaurantDetailAnchor());
+    }
+    function getTargetMenuContainer() {
+      const containers = Array.from(document.querySelectorAll("div.css-12ocart"));
+      if (containers.length >= 3) {
+        return containers[2];
+      }
+      return containers.find((container) => {
+        return Boolean(container.querySelector("label") && container.querySelector(".css-1v345k9, .css-1k48byk"));
+      }) || containers.find((container) => Boolean(container.querySelector("label"))) || null;
+    }
+    function mainFunc() {
+      if (!isEnabled() || !/\/b\/\d+\/?$/.test(location.href)) {
+        cleanupAll();
+        return;
+      }
+      if (!isRestaurantPage()) {
+        destroyPanel();
+        disconnectMenuObserver();
+        state2.menuContainer = null;
+        return;
+      }
+      const menuContainer = getTargetMenuContainer();
+      if (!menuContainer) return;
+      if (state2.currentUrl !== location.href) {
+        state2.currentUrl = location.href;
+        disconnectMenuObserver();
+        state2.panelPositionInitialized = false;
+        state2.panelMovedByUser = false;
+      }
+      state2.menuContainer = menuContainer;
+      ensurePanel(menuContainer);
+      observeMenu(menuContainer);
+      refreshPanel();
+    }
+    function loadRestaurantCount() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const value = parseInt(raw || "1", 10);
+        return value > 0 ? value : 1;
+      } catch (error) {
+        return 1;
+      }
+    }
+    function saveRestaurantCount(value) {
+      try {
+        localStorage.setItem(STORAGE_KEY, String(value));
+      } catch (error) {
+        console.error("[\u9910\u9986\u5907\u8D27\u63D0\u9192] \u5B58\u50A8\u9910\u9986\u6570\u91CF\u5931\u8D25", error);
+      }
+    }
+    function getRestaurantCount() {
+      const input = document.querySelector("#script_restaurant_count");
+      const inputValue = parseInt(input?.value || String(restaurantCount), 10);
+      const count = Number.isFinite(inputValue) && inputValue > 0 ? inputValue : 1;
+      restaurantCount = count;
+      return count;
+    }
+    function parseNumber(text) {
+      if (!text) return 0;
+      const clean = String(text).replace(/,/g, "").replace(/[^\d-]/g, "");
+      const value = parseInt(clean, 10);
+      return Number.isFinite(value) ? value : 0;
+    }
+    function parseConsumeNumber(text) {
+      if (!text) return 0;
+      const cleanText = String(text).replace(/,/g, "");
+      const match2 = cleanText.match(/-\s*(\d+(?:\.\d+)?)/) || cleanText.match(/(\d+(?:\.\d+)?)/);
+      if (!match2) return 0;
+      const value = parseFloat(match2[1]);
+      return Number.isFinite(value) ? value : 0;
+    }
+    function ensurePanel(menuContainer) {
+      if (!state2.panelNode || !state2.panelNode.isConnected) {
+        const panel = createPanelDOM();
+        document.body.appendChild(panel);
+        state2.panelNode = panel;
+        state2.panelContentNode = panel.querySelector("#script_restaurant_stock_content");
+        state2.tableBodyNode = panel.querySelector("#script_restaurant_stock_tbody");
+        bindPanelInteractions();
+        bindRestaurantCountInput(panel);
+      }
+      if (!state2.panelMovedByUser && !state2.panelPositionInitialized) {
+        alignPanelToMenu(menuContainer);
+        state2.panelPositionInitialized = true;
+      }
+    }
+    function createPanelDOM() {
+      const panel = document.createElement("div");
+      panel.id = "script_restaurant_stock_panel";
+      panel.style.cssText = [
+        "position:fixed",
+        "z-index:999",
+        "width:360px",
+        "left:30px",
+        "top:70px",
+        "max-height:75vh",
+        "overflow:auto",
+        "background:rgba(17,24,39,0.95)",
+        "color:#e5e7eb",
+        "border:1px solid rgba(255,255,255,0.12)",
+        "border-radius:8px",
+        "padding:10px",
+        "box-shadow:0 8px 20px rgba(0,0,0,0.35)",
+        "font-size:12px",
+        "line-height:1.4"
+      ].join(";");
+      panel.innerHTML = `
+            <div id="script_restaurant_stock_header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;cursor:move;user-select:none;">
+                <strong style="font-size:13px;">\u9910\u9986\u5907\u8D27\u63D0\u9192</strong>
+                <button id="script_restaurant_stock_collapse" type="button" style="height:22px;padding:0 8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;border-radius:4px;cursor:pointer;">\u6536\u8D77</button>
+            </div>
+            <div id="script_restaurant_stock_content">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
+                        \u9910\u9986\uFF1A<input id="script_restaurant_count" type="number" min="1" step="1" style="width:52px;height:22px;padding:0 4px;border-radius:4px;border:1px solid rgba(255,255,255,0.4);background:rgba(0,0,0,0.35);color:#fff;font-size:12px;">
+                    </span>
+                    <span id="script_restaurant_stock_meta" style="opacity:0.85;">\u52A0\u8F7D\u4E2D...</span>
+                </div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="text-align:left;border-bottom:1px solid rgba(255,255,255,0.15);">
+                            <th style="padding:4px 2px;">\u83DC\u54C1</th>
+                            <th style="padding:4px 2px;">\u5E93\u5B58</th>
+                            <th style="padding:4px 2px;">\u6BCF\u65E5\u6D88\u8017\u91CF</th>
+                            <th style="padding:4px 2px;">\u5269\u4F59\u5929\u6570</th>
+                        </tr>
+                    </thead>
+                    <tbody id="script_restaurant_stock_tbody"></tbody>
+                </table>
+            </div>
+        `;
+      return panel;
+    }
+    function alignPanelToMenu(menuContainer) {
+      const panel = state2.panelNode;
+      if (!menuContainer || !panel || !panel.isConnected) return;
+      const panelWidth = panel.offsetWidth || 360;
+      const panelHeight = panel.offsetHeight || 260;
+      const left = 30;
+      const top = 70;
+      const maxLeft = Math.max(8, window.innerWidth - panelWidth - 8);
+      const maxTop = Math.max(8, window.innerHeight - panelHeight - 8);
+      const safeLeft = Math.min(Math.max(8, left), maxLeft);
+      const safeTop = Math.min(Math.max(8, top), maxTop);
+      panel.style.left = `${safeLeft}px`;
+      panel.style.top = `${safeTop}px`;
+    }
+    function bindPanelInteractions() {
+      const panel = state2.panelNode;
+      if (!panel) return;
+      const header = panel.querySelector("#script_restaurant_stock_header");
+      const collapseBtn = panel.querySelector("#script_restaurant_stock_collapse");
+      const content = state2.panelContentNode;
+      if (!header || !collapseBtn || !content) return;
+      collapseBtn.addEventListener("click", () => {
+        state2.panelCollapsed = !state2.panelCollapsed;
+        content.style.display = state2.panelCollapsed ? "none" : "block";
+        collapseBtn.textContent = state2.panelCollapsed ? "\u5C55\u5F00" : "\u6536\u8D77";
+      });
+      state2.handleDragMove = (event) => {
+        if (!state2.dragMoved && (Math.abs(event.clientX - state2.dragStartX) > 2 || Math.abs(event.clientY - state2.dragStartY) > 2)) {
+          state2.dragMoved = true;
+        }
+        const nextLeft = state2.dragOriginLeft + (event.clientX - state2.dragStartX);
+        const nextTop = state2.dragOriginTop + (event.clientY - state2.dragStartY);
+        const maxLeft = Math.max(8, window.innerWidth - panel.offsetWidth - 8);
+        const maxTop = Math.max(8, window.innerHeight - 40);
+        panel.style.left = `${Math.min(Math.max(8, nextLeft), maxLeft)}px`;
+        panel.style.top = `${Math.min(Math.max(8, nextTop), maxTop)}px`;
+      };
+      state2.handleDragEnd = () => {
+        if (state2.dragMoved) {
+          state2.panelMovedByUser = true;
+        }
+        document.removeEventListener("mousemove", state2.handleDragMove);
+        document.removeEventListener("mouseup", state2.handleDragEnd);
+      };
+      header.addEventListener("mousedown", (event) => {
+        if (event.button !== 0 || event.target === collapseBtn) return;
+        event.preventDefault();
+        state2.dragMoved = false;
+        state2.dragStartX = event.clientX;
+        state2.dragStartY = event.clientY;
+        state2.dragOriginLeft = parseFloat(panel.style.left || "8") || 8;
+        state2.dragOriginTop = parseFloat(panel.style.top || "8") || 8;
+        document.addEventListener("mousemove", state2.handleDragMove);
+        document.addEventListener("mouseup", state2.handleDragEnd);
+      });
+    }
+    function bindRestaurantCountInput(panel) {
+      const input = panel.querySelector("#script_restaurant_count");
+      if (!input) return;
+      input.value = String(restaurantCount || 1);
+      const handleChange = () => {
+        const value = parseInt(input.value, 10);
+        const fixedValue = Number.isFinite(value) && value > 0 ? value : 1;
+        input.value = String(fixedValue);
+        restaurantCount = fixedValue;
+        saveRestaurantCount(fixedValue);
+        refreshPanel();
+      };
+      input.addEventListener("change", handleChange);
+      input.addEventListener("input", () => {
+        const value = parseInt(input.value, 10);
+        if (!Number.isFinite(value) || value <= 0) return;
+        restaurantCount = value;
+        saveRestaurantCount(value);
+        refreshPanel();
+      });
+    }
+    function extractMenuRows() {
+      const menuContainer = state2.menuContainer;
+      const count = getRestaurantCount();
+      if (!menuContainer) return [];
+      const cards = menuContainer.querySelectorAll(".css-1v345k9, .css-1k48byk");
+      const rows = [];
+      cards.forEach((card) => {
+        if (card.classList.contains("css-1k48byk")) return;
+        const name = card.querySelector("b")?.textContent?.trim() || "\u672A\u77E5\u83DC\u54C1";
+        const valueWrap = card.querySelector(".css-aqbich");
+        if (!valueWrap) return;
+        const stock = parseNumber(valueWrap.querySelector("div:nth-child(1)")?.textContent);
+        const periodConsume = Math.abs(parseConsumeNumber(valueWrap.querySelector("div:nth-child(2)")?.textContent));
+        if (!periodConsume) return;
+        const dailyConsume = periodConsume * 2 * count;
+        const remainDays = stock / dailyConsume;
+        rows.push({
+          name,
+          stock,
+          dailyConsume,
+          remainDays,
+          isWarning: remainDays < 2
+        });
+      });
+      return rows;
+    }
+    function formatNumber(num) {
+      return Number.isFinite(num) ? num.toLocaleString() : "0";
+    }
+    function renderRows(rows) {
+      const tbody = state2.tableBodyNode;
+      const panel = state2.panelNode;
+      if (!tbody || !panel) return;
+      const metaNode = panel.querySelector("#script_restaurant_stock_meta");
+      const warningCount = rows.filter((row) => row.isWarning).length;
+      if (metaNode) {
+        metaNode.textContent = `\u83DC\u54C1:${rows.length} | \u9884\u8B66:${warningCount}`;
+      }
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding:10px 2px;opacity:0.8;">\u672A\u68C0\u6D4B\u5230\u53EF\u8BA1\u7B97\u83DC\u54C1\uFF0C\u7B49\u5F85\u9875\u9762\u6570\u636E\u52A0\u8F7D...</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((row) => {
+        const warnStyle = row.isWarning ? "background:rgba(220,38,38,0.2);color:#fecaca;font-weight:600;" : "";
+        return `
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.08);${warnStyle}">
+                    <td style="padding:5px 2px;">${row.name}</td>
+                    <td style="padding:5px 2px;">${formatNumber(row.stock)}</td>
+                    <td style="padding:5px 2px;">${formatNumber(row.dailyConsume)}</td>
+                    <td style="padding:5px 2px;">${row.remainDays.toFixed(2)}</td>
+                </tr>
+            `;
+      }).join("");
+    }
+    function refreshPanel() {
+      const rows = extractMenuRows();
+      renderRows(rows);
+    }
+    function observeMenu(menuContainer) {
+      if (state2.menuObserver && state2.observedMenuContainer === menuContainer) return;
+      disconnectMenuObserver();
+      state2.menuObserver = new MutationObserver(() => refreshPanel());
+      state2.menuObserver.observe(menuContainer, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+      state2.observedMenuContainer = menuContainer;
+    }
+    function disconnectMenuObserver() {
+      if (state2.menuObserver) {
+        state2.menuObserver.disconnect();
+        state2.menuObserver = null;
+      }
+      state2.observedMenuContainer = null;
+    }
+    function destroyPanel() {
+      if (state2.handleDragMove) {
+        document.removeEventListener("mousemove", state2.handleDragMove);
+      }
+      if (state2.handleDragEnd) {
+        document.removeEventListener("mouseup", state2.handleDragEnd);
+      }
+      if (state2.panelNode && state2.panelNode.isConnected) {
+        state2.panelNode.remove();
+      }
+      state2.panelNode = null;
+      state2.panelContentNode = null;
+      state2.tableBodyNode = null;
+      state2.panelPositionInitialized = false;
+      state2.panelMovedByUser = false;
+      state2.handleDragMove = null;
+      state2.handleDragEnd = null;
+    }
+    return { init: init2 };
+  }();
+  window.SC_Modules = window.SC_Modules || {};
+  window.SC_Modules.RestaurantStockReminder = RestaurantStockReminder2;
 
   // src/utils/ui.js
   var isDarkMode = () => {
@@ -3007,7 +3376,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.32.40",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.32.41",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -8264,6 +8633,7 @@
           { type: "toggle", key: "warehouseProfit", label: "\u4ED3\u5E93\u65F6\u5229\u6DA6\u8BA1\u7B97" },
           { type: "toggle", key: "chatAccessibility", label: "\u804A\u5929\u5BA4\u8272\u5F31\u8F85\u52A9", defaultEnabled: false },
           { type: "toggle", key: "landscapeHighlight", label: "\u5730\u56FE\u7A7A\u95F2\u5EFA\u7B51\u9AD8\u4EAE" },
+          { type: "toggle", key: "restaurantStock", label: "\u9910\u9986\u5907\u8D27\u63D0\u9192" },
           { type: "toggle", key: "paQuestAnswers", label: "PA\u4EFB\u52A1\u7B54\u6848", defaultEnabled: true },
           { type: "toggle", key: "snipboardPreview", label: "Snipboard\u56FE\u7247\u9884\u89C8", defaultEnabled: true },
           { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, heightInput: true }
@@ -11191,4 +11561,4 @@
   })();
 })();
 
-// @changelog 聊天输入框自动扩大支持自定义高度，桌面端与移动端可分别设置。修复 PA 任务答案框在聊天记录清除后残留、新消息到达时出现在错误位置的问题。
+// @changelog 增加餐馆备货提醒：在餐馆建筑页展示菜品库存、每日消耗与剩余天数，低于 2 天预警；可设置餐馆数量，并支持功能开关。
