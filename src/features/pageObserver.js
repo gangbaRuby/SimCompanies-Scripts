@@ -4,6 +4,7 @@ const outgoingContractMPHandler = { init: (...args) => window.SC_Modules?.outgoi
 const ExecutiveTrainingModule = { init: (...args) => window.SC_Modules?.ExecutiveTrainingModule?.init(...args) };
 const FormerExecutivesModule = { forceInject: (...args) => window.SC_Modules?.FormerExecutivesModule?.forceInject(...args) };
 const LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.LandscapeIdleBuildingHighlight?.init(...args) };
+const RestaurantStockReminder = { init: (...args) => window.SC_Modules?.RestaurantStockReminder?.init(...args) };
     // 模块9：判断当前页面
     // ======================
     (function () {
@@ -68,6 +69,7 @@ const LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.L
             buildingPage: { //建筑页面
                 pattern: /\/b\/\d+\/?$/,
                 action: () => {
+                    RestaurantStockReminder.init();
                     // 多级重试：确保在 SPA 页面切换后 DOM 完全渲染时能注入按钮
                     // 单次 300ms 延迟有时不足以等待 React 渲染完成
                     const tryInit = (delay, retriesLeft) => {
