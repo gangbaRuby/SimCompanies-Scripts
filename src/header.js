@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润 (DEV)
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.40
+// @version      1.32.41
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
