@@ -11,6 +11,8 @@ registerExportInfo({
 
 const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
 
+const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" style="display:block;width:14px;height:14px;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="envelope" class="css-0" role="img" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48H48zM0 176V384c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V176L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"></path></svg>`;
+
     const ResourceMarketHandler = (function () {
         let currentResourceId = null;
         let currentRealmId = null;
@@ -23,6 +25,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
         let _pendingAutoSelectPollTimer = null; // 等待API返回的轮询定时器
         let _globalObserver = null; // 全局 MutationObserver（跨 init 调用复用防泄漏）
         let _tableObserver = null; // 表格行变化 MutationObserver
+        let _messageIconObserver = null; // 私信图标注入 MutationObserver
         let _quantityCheckInterval = null; // 数量输入框脏检查定时器ID
         let _formClickHandler = null; // 表单按钮点击处理函数引用
         let _initDone = false; // 标记是否已成功初始化，避免 observer 反复执行 tryInit
@@ -714,6 +717,100 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             }
         }
 
+        function injectMessageIcon(row) {
+            if (row.hasAttribute('data-sc-message-added')) return;
+            const link = row.querySelector('td > div > div > a[href*="/company/"]');
+            if (!link || !link.parentElement) return;
+
+            const nameEl = link.nextElementSibling?.querySelector('span')
+                || link.parentElement.querySelector('div span, span');
+            const companyName = nameEl?.textContent?.trim();
+            if (!companyName) return;
+
+            const messageLink = document.createElement('a');
+            messageLink.href = `https://www.simcompanies.com/zh-cn/messages/${encodeURIComponent(companyName)}`;
+            messageLink.target = '_blank';
+            messageLink.rel = 'noopener';
+            messageLink.title = '给公司发私信';
+            messageLink.style.cssText = `display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-right:3px; color:inherit; vertical-align:middle; flex-shrink:0; line-height:1; text-decoration:none;`;
+            messageLink.innerHTML = MESSAGE_ICON_SVG;
+            messageLink.setAttribute('data-sc-market-message-icon', 'true');
+            messageLink.addEventListener('click', (e) => e.stopPropagation());
+
+            link.parentElement.insertBefore(messageLink, link);
+            row.setAttribute('data-sc-message-added', 'true');
+        }
+
+        const isMarketMessageIconEnabled = () => {
+            try {
+                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                return cfg['marketMessageIcon'] === true;
+            } catch (e) {
+                return false;
+            }
+        };
+
+        const stopMessageIconWatch = () => {
+            if (_messageIconObserver) {
+                _messageIconObserver.disconnect();
+                _messageIconObserver = null;
+            }
+            document.querySelectorAll('tr[data-sc-message-added]').forEach(row => {
+                row.querySelectorAll('a[data-sc-market-message-icon]').forEach(a => a.remove());
+                row.removeAttribute('data-sc-message-added');
+            });
+        };
+
+        const startMessageIconWatch = () => {
+            stopMessageIconWatch();
+            if (!isMarketMessageIconEnabled()) return;
+
+            const injectMessageIconStyles = () => {
+                if (document.getElementById('sc-market-message-icon-style')) return;
+                const style = document.createElement('style');
+                style.id = 'sc-market-message-icon-style';
+                style.textContent = `
+                    a[data-sc-market-message-icon] {
+                        display: inline-flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        width: 18px !important;
+                        height: 18px !important;
+                        margin: 0 3px 0 0 !important;
+                        color: inherit !important;
+                        vertical-align: middle !important;
+                        line-height: 1 !important;
+                        text-decoration: none !important;
+                        align-self: center !important;
+                        flex: 0 0 auto !important;
+                    }
+                    a[data-sc-market-message-icon] svg {
+                        display: block !important;
+                        width: 14px !important;
+                        height: 14px !important;
+                        margin: 0 !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            };
+            injectMessageIconStyles();
+
+            const injectRows = () => {
+                if (!/\/market\/resource\/\d+/.test(location.pathname) || !isMarketMessageIconEnabled()) {
+                    stopMessageIconWatch();
+                    return;
+                }
+                const tbody = findValidTbody();
+                if (tbody) tbody.querySelectorAll('tr').forEach(injectMessageIcon);
+            };
+
+            injectRows();
+            _messageIconObserver = new MutationObserver(() => {
+                requestAnimationFrame(injectRows);
+            });
+            _messageIconObserver.observe(document.body, { childList: true, subtree: true });
+        };
+
         // 预计算共享值（同一资源页所有行共用），避免 Worker 内重复计算
         function buildSharedContext(SCD, SRC, currentResourceId) {
             const resource = parseInt(currentResourceId);
@@ -945,6 +1042,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     _tableObserver.disconnect();
                     _tableObserver = null;
                 }
+                stopMessageIconWatch();
 
                 // 3. 重置初始化标记，允许重新初始化
                 _initDone = false;
@@ -970,6 +1068,12 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 // ---- 新页面初始化 ----
                 currentResourceId = resourceId;
                 currentRealmId = null;
+                const marketProfitEnabled = typeof window.isPageModuleEnabled === 'function'
+                    ? window.isPageModuleEnabled('marketProfit')
+                    : true;
+                if (!marketProfitEnabled && !isMarketMessageIconEnabled()) return;
+                startMessageIconWatch();
+                if (!marketProfitEnabled) return;
 
                 // --- 核心优化 1: 启动即判断零售属性 ---
                 let currentIsRetail = false;
