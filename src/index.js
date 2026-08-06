@@ -2080,6 +2080,12 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
         RegionAutoUpdater.checkAndUpdate(getRealmIdFromLink());
     }, 3000);
 
+    // 每分钟检查一次领域数据是否需要更新（不需要时只做本地时间判断，不发请求）
+    const regionUpdateTimer = setInterval(() => {
+        RegionAutoUpdater.checkAndUpdate(getRealmIdFromLink());
+    }, 60 * 1000);
+    window.addEventListener('pagehide', () => clearInterval(regionUpdateTimer), { once: true });
+
     // ======================
     // 模块11：计算预测剩余量
     // ======================
