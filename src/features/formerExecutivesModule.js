@@ -1,5 +1,6 @@
 ﻿import { getRealmIdFromLink } from '../core/storage.js';
 import { DM } from '../utils/ui.js';
+import { registerExportInfo } from '../core/exportInfo.js';
 
     const FormerExecutivesModule = (function () {
         const FORMER_EXEC_API_REGEX = /\/api\/v2\/companies\/(\d+)\/former-executives\//;
@@ -402,6 +403,14 @@ import { DM } from '../utils/ui.js';
 
         return { forceInject: injectMoreInfoButtons };
     })();
+
+registerExportInfo({
+    name: '前任高管记录',
+    scope: 'realm',
+    keys: realmId => realmId === null
+        ? ['SC-former-executives']
+        : [`R${realmId}-SC-former-executives`]
+});
 
 window.SC_Modules = window.SC_Modules || {};
 window.SC_Modules.FormerExecutivesModule = FormerExecutivesModule;

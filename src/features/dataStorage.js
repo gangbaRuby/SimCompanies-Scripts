@@ -1,3 +1,5 @@
+import { registerExportInfo } from '../core/exportInfo.js';
+
 export const Storage = (() => {
     const KEYS = {
         region: realmId => `SimcompaniesRetailCalculation_${realmId}`,
@@ -9,6 +11,18 @@ export const Storage = (() => {
         const d = new Date(isoString);
         return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     };
+
+    registerExportInfo({
+        name: '基础数据',
+        scope: 'global',
+        keys: [KEYS.constants]
+    });
+
+    registerExportInfo({
+        name: '领域数据',
+        scope: 'realm',
+        keys: realmId => [KEYS.region(realmId)]
+    });
 
     return {
         save: (type, data) => {

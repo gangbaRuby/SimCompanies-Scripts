@@ -13,6 +13,7 @@
 - `src/core/network.js`：带重试的请求辅助方法。
 - `src/core/storage.js`：区服识别与作用域存储键辅助方法。
 - `src/core/requestHooks.js`：游戏请求拦截与缓存更新。
+- `src/core/exportInfo.js`：排错信息导出注册、收集与下载。
 - `src/features/dataStorage.js`：常量和区服数据持久化。
 - `src/utils/ui.js`、`src/utils/uiComponents.js`：共享 UI 和开关辅助方法。
 

@@ -1,5 +1,19 @@
 ﻿import { getRealmIdFromLink } from '../core/storage.js';
 import { DM } from '../utils/ui.js';
+import { registerExportInfo } from '../core/exportInfo.js';
+
+registerExportInfo({
+    name: '出库合同 MP 设置',
+    scope: 'global',
+    keys: ['SC_OutgoingMP_Presets', 'SC_OutgoingMP_UseInput']
+});
+
+registerExportInfo({
+    name: '出库合同 VWAP 缓存',
+    scope: 'realm',
+    match: realmId => realmId === null
+        ? /(?!)/ : new RegExp(`^SC_OutgoingVWAP_Cache_${realmId}_\\d+_\\d+$`)
+});
 
     const outgoingContractMPHandler = (function () {
         const STORAGE_KEY = 'SC_OutgoingMP_Presets';
