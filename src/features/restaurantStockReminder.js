@@ -1,5 +1,13 @@
+import { registerExportInfo } from '../core/exportInfo.js';
+
 const RestaurantStockReminder = (function () {
     const STORAGE_KEY = 'script_restaurant_stock_restaurant_count';
+
+    registerExportInfo({
+        name: '餐馆备货提醒设置',
+        scope: 'global',
+        keys: [STORAGE_KEY]
+    });
 
     const state = {
         menuObserver: null,

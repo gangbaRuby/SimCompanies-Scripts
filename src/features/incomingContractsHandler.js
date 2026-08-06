@@ -8,6 +8,13 @@ import { Network } from '../core/network.js';
 import { constantsData } from './constantsData.js';
 import { executiveCustomButton } from './executiveBoardroom.js';
 import { resourceIdNameMap } from '../constants/resourceMap.js';
+import { registerExportInfo } from '../core/exportInfo.js';
+
+registerExportInfo({
+    name: '合同高价提醒设置',
+    scope: 'global',
+    keys: ['SC_Contract_HighPrice_Settings']
+});
 
 const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
 

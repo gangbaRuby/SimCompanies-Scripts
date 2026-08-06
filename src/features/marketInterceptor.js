@@ -1,4 +1,13 @@
 ﻿import { state } from '../core/state.js';
+import { registerExportInfo } from '../core/exportInfo.js';
+
+registerExportInfo({
+    name: '市场缓存',
+    scope: 'realm',
+    match: realmId => realmId === null
+        ? /(?!)/ : new RegExp(`^(?:market_|market_all_)${realmId}_\\d+$`)
+});
+
 const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
 
 (function () {

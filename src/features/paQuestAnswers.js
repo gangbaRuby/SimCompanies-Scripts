@@ -1,8 +1,16 @@
+import { registerExportInfo } from '../core/exportInfo.js';
+
     const PAQuestAnswers = (function () {
         const PA_DATA_KEY = 'SC_PA_Quests_Cache';
         const PA_DATA_URL = 'https://sc.22-7.top/scripts/PA-Quests.json';
         const CACHE_TTL = 3600000; // 1小时
         const MATCH_THRESHOLD = 0.7;
+
+        registerExportInfo({
+            name: 'PA 任务答案缓存',
+            scope: 'global',
+            keys: [PA_DATA_KEY]
+        });
 
         let questData = null;
         let dataLoadAttempted = false;

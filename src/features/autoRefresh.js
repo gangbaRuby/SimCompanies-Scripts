@@ -1,9 +1,17 @@
+import { registerExportInfo } from '../core/exportInfo.js';
+
     (function () {
         // --- 配置项 ---
         const CUSTOM_AMOUNTS_STORAGE_KEY = 'SC_AutoAmount_CustomAmounts';
         const ENABLED_STORAGE_KEY = 'SC_AutoAmount_Enabled'; // 新增：功能开关的存储键
         const DEFAULT_AMOUNTS_STRING = '10pm';
         const DEFAULT_BUTTON_CLASS = 'btn btn-secondary';
+
+        registerExportInfo({
+            name: '自定义运行时长设置',
+            scope: 'global',
+            keys: [ENABLED_STORAGE_KEY, CUSTOM_AMOUNTS_STORAGE_KEY]
+        });
 
         // --- 目标元素选择器 ---
         const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center'; //前者生产，后者零售 如果自定义运行时长不显示，则需要检查css是否更改

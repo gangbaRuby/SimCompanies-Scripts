@@ -29,6 +29,8 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 - 在适用处使用既有通信方式和共享工具。
 - 没有既有约定时，新的 DOM ID/class/data 属性和持久化键使用 `sc-` 前缀。
 - 每个 Observer、计时器、Worker 请求和事件监听都必须有明确所有者与清理/重新初始化路径。
+- 新增功能若引入 `localStorage`/`sessionStorage` 持久化键或需要排错的持久化状态，必须通过 `src/core/exportInfo.js` 的 `registerExportInfo` 注册导出信息；导出中心本身不维护固定键清单。
+- 注册时必须标注 `scope`（`realm`/`global`）并只登记插件自身写入的键；删除或改名存储键时同步更新注册。
 
 修复 Bug 或修改功能时，不得进行架构迁移、大范围清理、命名变更或无关格式化。
 

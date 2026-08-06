@@ -1,5 +1,6 @@
 ﻿import { getRealmIdFromLink } from '../core/storage.js';
 import { DM } from '../utils/ui.js';
+import { registerExportInfo } from '../core/exportInfo.js';
 
     const ExecutiveTrainingModule = (function () {
         const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
@@ -250,6 +251,14 @@ import { DM } from '../utils/ui.js';
             }
         };
     })();
+
+registerExportInfo({
+    name: '高管培训记录',
+    scope: 'realm',
+    keys: realmId => realmId === null
+        ? ['SC-my-offers', 'SC-AGENCY_FOUND_EXECUTIVE']
+        : [`R${realmId}-SC-my-offers`, `R${realmId}-SC-AGENCY_FOUND_EXECUTIVE`]
+});
 
 window.SC_Modules = window.SC_Modules || {};
 window.SC_Modules.ExecutiveTrainingModule = ExecutiveTrainingModule;

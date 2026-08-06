@@ -1,5 +1,13 @@
+import { registerExportInfo } from '../core/exportInfo.js';
+
 (function () {
     const PAGE_ACTIONS_CONFIG_KEY = 'SC_PageActions_Settings';
+
+    registerExportInfo({
+        name: '页面功能开关设置',
+        scope: 'global',
+        keys: [PAGE_ACTIONS_CONFIG_KEY]
+    });
 
     // 将函数定义在外部，或挂载到 window
     window.isPageModuleEnabled = (key) => {

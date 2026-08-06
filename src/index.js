@@ -24,11 +24,40 @@ import './features/pageModuleConfig.js';
 import { getRealmIdFromLink, getScopedKey } from './core/storage.js';
 import { isDarkMode, DM, theme, showToast } from './utils/ui.js';
 import { createGlobalCustomToggle } from './utils/uiComponents.js';
+import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
 (function () {
     'use strict';
     let hasNewVersion = false;
     let latestVersion = null;
     let { localVersion, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
+
+    registerExportInfo({
+        name: '面板与全局设置',
+        scope: 'global',
+        keys: ['SC_PanelPosition', 'mp_inputPercent', 'sc_ignored_version']
+    });
+
+    registerExportInfo({
+        name: '库存/合同/市场计算结果',
+        scope: 'realm',
+        keys: (realmId) => {
+            if (realmId === null) return [];
+            try {
+                const raw = localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`);
+                const src = raw ? JSON.parse(raw) : null;
+                const companyId = src && src.companyId;
+                if (companyId == null) return [];
+                return [
+                    `wareHouse-${companyId}`,
+                    `contractsOutgoing-${companyId}`,
+                    `contractsIncoming-${companyId}`,
+                    `marketOrders-${companyId}`
+                ];
+            } catch (e) {
+                return [];
+            }
+        }
+    });
 
 
 
@@ -911,11 +940,34 @@ import { createGlobalCustomToggle } from './utils/uiComponents.js';
             const version = GM_info?.script?.version || '未知版本';
 
             info.innerHTML = `
-                作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" class="sc-info-link">Rabbit House</a> 反馈请说明问题<br>
+                作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" class="sc-info-link">Rabbit House</a> <span id="sc-feedback-export" style="cursor:pointer;">反馈请说明问题</span><br>
                 反馈群：798670333 <br>
                 源码：<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" class="sc-info-link">GitHub</a> ⭐🙇<br>
                 版本：<span id="script-version">${version}</span>
             `;
+
+            // 在“反馈请说明问题”上连续点击 3 次触发排错数据导出
+            let feedbackClickCount = 0;
+            let feedbackClickTimer = null;
+            const feedbackExportEl = info.querySelector('#sc-feedback-export');
+            if (feedbackExportEl) {
+                feedbackExportEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    feedbackClickCount += 1;
+                    clearTimeout(feedbackClickTimer);
+                    feedbackClickTimer = setTimeout(() => { feedbackClickCount = 0; }, 1200);
+                    if (feedbackClickCount < 3) return;
+                    feedbackClickCount = 0;
+                    if (!confirm('是否要导出当前领域数据？')) return;
+                    try {
+                        downloadExportData();
+                        showToast('排错数据已导出', 'success');
+                    } catch (err) {
+                        console.error('导出排错数据失败', err);
+                        showToast('导出失败，请查看控制台', 'error');
+                    }
+                });
+            }
 
             // 轮询检测 hasNewVersion
             let checkTimer = setInterval(() => {

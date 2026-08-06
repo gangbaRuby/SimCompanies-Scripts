@@ -2,6 +2,7 @@
 import { DM, showToast, theme } from '../utils/ui.js';
 import { Storage } from './dataStorage.js';
 import { Network } from '../core/network.js';
+import { registerExportInfo } from '../core/exportInfo.js';
 
 export const executiveCustomButton = (function () {
         let boardroomState = {
@@ -890,3 +891,11 @@ export const executiveCustomButton = (function () {
 
         return { forceInject: injectCustomButton };
     })();
+
+registerExportInfo({
+    name: '自定义高管数据',
+    scope: 'realm',
+    keys: realmId => realmId === null
+        ? ['SC-Saved-Boardroom', 'SC-Saved-Bonuses']
+        : [`R${realmId}-SC-Saved-Boardroom`, `R${realmId}-SC-Saved-Bonuses`]
+});
