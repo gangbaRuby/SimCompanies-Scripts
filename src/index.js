@@ -870,6 +870,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                     }
                 },
                 { type: 'toggle', key: 'marketProfit', label: '交易所计算时利润' },
+                { type: 'toggle', key: 'marketMessageIcon', label: '交易所私信图标', defaultEnabled: false },
                 { type: 'toggle', key: 'contractProfit', label: '合同计算时利润' },
                 { type: 'toggle', key: 'executiveHistory', label: '显示高管培训记录' },
                 { type: 'toggle', key: 'formerExecEnhance', label: '前任高管更多信息' },

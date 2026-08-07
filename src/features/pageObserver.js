@@ -12,7 +12,12 @@ const RestaurantStockReminder = { init: (...args) => window.SC_Modules?.Restaura
             marketPage: { //交易所页面
                 pattern: /^https:\/\/www\.simcompanies\.com(?:\/[^\/]+)?\/market\/resource\/(\d+)\/?$/,
                 action: (url) => {
-                    if (!isPageModuleEnabled('marketProfit')) return;
+                    let messageIconEnabled = false;
+                    try {
+                        const config = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+                        messageIconEnabled = config['marketMessageIcon'] === true;
+                    } catch (e) { /* ignore */ }
+                    if (!isPageModuleEnabled('marketProfit') && !messageIconEnabled) return;
 
                     const match = url.match(/\/resource\/(\d+)\/?/);
                     const resourceId = match ? match[1] : null;
