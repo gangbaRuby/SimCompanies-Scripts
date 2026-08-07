@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.42
+// @version      1.33.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3626,7 +3626,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.32.42",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.0",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -5731,10 +5731,10 @@
             }
             if (braceCount2 === 0) {
               const objText = str2.slice(startIndex2, currentIndex);
-              const dbLetterMatch = objText.match(/dbLetter\s*:\s*"(\w+)"/);
+              const dbLetterMatch2 = objText.match(/dbLetter\s*:\s*"(\w+)"/);
               const salaryMatch = objText.match(/salaryModifier\s*:\s*([.\d]+)/);
-              if (dbLetterMatch && salaryMatch) {
-                const dbLetter = dbLetterMatch[1];
+              if (dbLetterMatch2 && salaryMatch) {
+                const dbLetter = dbLetterMatch2[1];
                 const salary = parseFloat(salaryMatch[1]);
                 result[dbLetter] = salary;
               }
@@ -5743,12 +5743,30 @@
           const objectEntryRegex = /\d+\s*:\s*{[\s\S]*?}/g;
           const entries = str2.match(objectEntryRegex) || [];
           for (const entry of entries) {
-            const dbLetterMatch = entry.match(/dbLetter\s*:\s*"(\w+)"/);
+            const dbLetterMatch2 = entry.match(/dbLetter\s*:\s*"(\w+)"/);
             const salaryMatch = entry.match(/salaryModifier\s*:\s*([.\d]+)/);
-            if (dbLetterMatch && salaryMatch) {
-              const dbLetter = dbLetterMatch[1];
+            if (dbLetterMatch2 && salaryMatch) {
+              const dbLetter = dbLetterMatch2[1];
               const salary = parseFloat(salaryMatch[1]);
               result[dbLetter] = salary;
+            }
+          }
+          const dbLetterRegex = /dbLetter\s*:\s*"(\w+)"/g;
+          let dbLetterMatch;
+          while ((dbLetterMatch = dbLetterRegex.exec(str2)) !== null) {
+            const openBrace = str2.lastIndexOf("{", dbLetterMatch.index);
+            if (openBrace === -1) continue;
+            let depth = 0;
+            for (let i = openBrace; i < str2.length; i++) {
+              const ch = str2[i];
+              if (ch === "{") depth++;
+              else if (ch === "}") depth--;
+              if (depth === 0) {
+                const objText = str2.slice(openBrace, i + 1);
+                const salaryMatch = objText.match(/salaryModifier\s*:\s*([.\d]+)/);
+                if (salaryMatch) result[dbLetterMatch[1]] = parseFloat(salaryMatch[1]);
+                break;
+              }
             }
           }
           return result;
@@ -11996,4 +12014,4 @@
   })();
 })();
 
-// @changelog 修复餐馆与合同接受按钮在英文/简中/繁中界面的文字匹配；增加现任高管详情与交易所私信快捷入口；领域数据每分钟自动检查更新；增加排错数据导出。
+// @changelog 修复汽车类商品时利润工资系数缺失的问题（汽车经销商 salaryModifier 解析遗漏，导致交易所/合同/仓库与商店口径不一致）；请更新基本数据后生效。销售算法调整，版本升至 1.33.0。

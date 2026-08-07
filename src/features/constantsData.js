@@ -122,6 +122,26 @@ export const constantsData = (() => {
                     }
                 }
 
+                // Fallback: scan every quoted dbLetter and read salaryModifier from its own object.
+                const dbLetterRegex = /dbLetter\s*:\s*"(\w+)"/g;
+                let dbLetterMatch;
+                while ((dbLetterMatch = dbLetterRegex.exec(str)) !== null) {
+                    const openBrace = str.lastIndexOf('{', dbLetterMatch.index);
+                    if (openBrace === -1) continue;
+                    let depth = 0;
+                    for (let i = openBrace; i < str.length; i++) {
+                        const ch = str[i];
+                        if (ch === '{') depth++;
+                        else if (ch === '}') depth--;
+                        if (depth === 0) {
+                            const objText = str.slice(openBrace, i + 1);
+                            const salaryMatch = objText.match(/salaryModifier\s*:\s*([.\d]+)/);
+                            if (salaryMatch) result[dbLetterMatch[1]] = parseFloat(salaryMatch[1]);
+                            break;
+                        }
+                    }
+                }
+
                 return result;
             }
             const buildingsSalaryModifier = extractSalaryModifiers(rawContent);
