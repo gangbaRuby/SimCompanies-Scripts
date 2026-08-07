@@ -2,10 +2,19 @@
 import { DM } from '../utils/ui.js';
 import { registerExportInfo } from '../core/exportInfo.js';
 
-    const ExecutiveTrainingModule = (function () {
+        const ExecutiveTrainingModule = (function () {
+        let panelRelocateTimer = null;
+
         const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
         const NOTIFICATIONS_KEYWORD = "/game-notifications/";
         const EXEC_API_REGEX = /\/api\/v4\/executives\/(\d+)\/$/;
+        const CURRENT_EXECS_API_REGEX = /\/api\/v3\/companies\/\d+\/executives\/?(\?|$)/;
+        const CURRENT_EXECS_STORAGE_KEY = 'SC-Current-Executives';
+        const SLOT_MAP = {
+            "coo": "o", "cfo": "f", "cmo": "m", "cto": "t",
+            "coo-apprentice": "v", "cfo-apprentice": "x", "cmo-apprentice": "y", "cto-apprentice": "z",
+            "g1": "1", "g2": "2", "g3": "3", "g4": "4", "g5": "5"
+        };
 
         // --- 内部工具函数 ---
         const getScopedKey = (k) => {
@@ -41,6 +50,66 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
         const getCompanyLink = (realm, name) => `https://www.simcompanies.com/company/${realm}/${encodeURIComponent(name)}/`;
 
+        const getCurrentExecSlot = () => {
+            const match = location.pathname.match(/\/executives\/([a-z0-9-]+)\/?$/);
+            return match ? (SLOT_MAP[match[1]] || null) : null;
+        };
+
+        const getCurrentExecRecord = () => {
+            const slot = getCurrentExecSlot();
+            if (!slot) return null;
+            return load(CURRENT_EXECS_STORAGE_KEY).find(e => e.position === slot) || null;
+        };
+
+        const getCurrentExecPanelContainer = () =>
+            document.querySelector('#page .row > .col-lg-6') || null;
+
+        const ensureAgencyPanelRelocated = () => {
+            const panel = document.getElementById('sc-plugin-panel');
+            if (!panel) {
+                if (panelRelocateTimer) {
+                    clearInterval(panelRelocateTimer);
+                    panelRelocateTimer = null;
+                }
+                return;
+            }
+            if (getValidTargetContainer()) return;
+            const firstCol = getCurrentExecPanelContainer();
+            if (firstCol && panel.parentElement !== firstCol) {
+                firstCol.appendChild(panel);
+            }
+        };
+
+        const startAgencyPanelRelocateWatch = () => {
+            if (panelRelocateTimer) return;
+            panelRelocateTimer = setInterval(ensureAgencyPanelRelocated, 500);
+            window.addEventListener('pagehide', () => {
+                if (panelRelocateTimer) {
+                    clearInterval(panelRelocateTimer);
+                    panelRelocateTimer = null;
+                }
+            }, { once: true });
+        };
+
+        const isExecutiveHistoryEnabled = () =>
+            typeof window.isPageModuleEnabled === 'function'
+                ? window.isPageModuleEnabled('executiveHistory')
+                : true;
+
+        function processCurrentExecutives(d) {
+            const list = Array.isArray(d) ? d : (d.executives || []);
+            const current = list
+                .filter(e => e && e.id != null)
+                .map(e => ({
+                    id: e.id,
+                    name: e.name || '',
+                    age: e.age ?? null,
+                    position: e.currentWorkHistory?.position ?? e.position ?? null
+                }))
+                .filter(e => e.position != null);
+            if (current.length > 0) save(CURRENT_EXECS_STORAGE_KEY, current);
+        }
+
         function getValidTargetContainer() {
             const TARGET_BUTTON_CLASS = 'css-1r3lxky'; //调查雇主按钮
             const PARENT_CONTAINER_CLASS = 'css-1flj9lk'; //包含调查雇主按钮的父级容器
@@ -52,14 +121,15 @@ import { registerExportInfo } from '../core/exportInfo.js';
         }
 
         // --- UI 渲染函数 ---
-        function renderSkillPanel(data, isError = false) {
-            const targetContainer = getValidTargetContainer();
-            if (!targetContainer || document.getElementById('sc-plugin-panel')) return;
+        function renderSkillPanel(data, isError = false, mode = 'agency') {
+            const targetContainer = mode === 'current' ? getCurrentExecPanelContainer() : getValidTargetContainer();
+            const panelId = mode === 'current' ? 'sc-current-exec-panel' : 'sc-plugin-panel';
+            if (!targetContainer || document.getElementById(panelId)) return;
 
             const d14 = DM();
             const panel = document.createElement('div');
-            panel.id = 'sc-plugin-panel';
-            const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14 ? '#2c2c2c' : '#f2f2f2'}; border: 1px solid ${d14 ? '#555' : '#d1d1d1'}; color: ${d14 ? '#efefef' : '#333'};`;
+            panel.id = panelId;
+            const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14 ? '#2c2c2c' : '#f2f2f2'}; border: 1px solid ${d14 ? '#555' : '#d1d1d1'}; color: ${d14 ? '#efefef' : '#333'};${mode === 'current' ? ' width:100%; box-sizing:border-box;' : ''}`;
 
             let contentHtml = "";
             if (isError) {
@@ -88,20 +158,61 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 const bg4border = d14 ? '#5a3030' : '#ffcccc';
                 const linkColor = '#2196f3';
 
-                // 1. 详细培训历史
+                // 1. 详细培训历史（已完成次数排除正在培训，历史仍展示并标注）
+                const trainings = Array.isArray(data.trainings) ? data.trainings : [];
+                const currentTraining = data.currentTraining || null;
+                const trainingTime = (t) => {
+                    const raw = t?.datetime || t?.start || t?.end || t?.time;
+                    const ts = raw ? Date.parse(raw) : NaN;
+                    return Number.isNaN(ts) ? Infinity : ts;
+                };
+                const formatTrainingTime = (t) => {
+                    const raw = t?.datetime || t?.start || t?.end || t?.time;
+                    const d = new Date(raw);
+                    if (!raw || Number.isNaN(d.getTime())) return '';
+                    const parts = new Intl.DateTimeFormat('zh-CN', {
+                        timeZone: 'Asia/Shanghai',
+                        year: 'numeric', month: 'numeric', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit', hour12: false
+                    }).formatToParts(d);
+                    const map = {};
+                    parts.forEach(p => { map[p.type] = p.value; });
+                    return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`;
+                };
+                const isCurrentTrainingEntry = (t) => {
+                    if (currentTraining) {
+                        if (t.id != null && currentTraining.id != null && String(t.id) === String(currentTraining.id)) return true;
+                        if (t.datetime && currentTraining.datetime && t.datetime === currentTraining.datetime) return true;
+                    }
+                    const startRaw = t?.datetime || t?.start || t?.time;
+                    const start = startRaw ? Date.parse(startRaw) : NaN;
+                    if (Number.isNaN(start) || start > Date.now() || t.end) return false;
+                    return start + 27 * 60 * 60 * 1000 > Date.now();
+                };
+                const sortedTrainings = [...trainings].sort((a, b) => trainingTime(a) - trainingTime(b));
+                const completedTrainings = sortedTrainings.filter(t => !isCurrentTrainingEntry(t));
                 let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
-                const trainings = data.trainings || [];
-                const historyHtml = trainings.map(t => {
+                sortedTrainings.forEach(t => {
                     total.coo += t.skillCoo || 0; total.cfo += t.skillCfo || 0;
                     total.cmo += t.skillCmo || 0; total.cto += t.skillCto || 0;
+                });
+                const historyHtml = sortedTrainings.map((t, index) => {
+                    const isCurrent = isCurrentTrainingEntry(t);
                     const details = [];
                     if (t.skillCoo) details.push(`管理+${t.skillCoo}`);
                     if (t.skillCfo) details.push(`会计+${t.skillCfo}`);
                     if (t.skillCmo) details.push(`沟通+${t.skillCmo}`);
                     if (t.skillCto) details.push(`科学+${t.skillCto}`);
                     const detailStr = details.length > 0 ? `<span style="color:${fg3}; margin-left:4px;">(${details.join(' ')})</span>` : '';
+                    const timeText = formatTrainingTime(t);
+                    const timeHtml = timeText
+                        ? `<span style="color:${fg3}; margin-left:6px;">${timeText}</span>`
+                        : '';
+                    const currentBadge = isCurrent
+                        ? `<span style="color:${d14 ? '#81c784' : '#2e7d32'}; margin-left:4px;">（正在培训）</span>`
+                        : '';
                     const cUrl = getCompanyLink(t.employer.realmId ?? currentRealm, t.employer.company);
-                    return `<div style="padding:2px 0; border-bottom:1px dashed ${border1}; color:${fg2}; font-size:14px;">在 <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
+                    return `<div style="padding:2px 0; border-bottom:1px dashed ${border1}; color:${fg2}; font-size:14px;">${index + 1}. 在 <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}${timeHtml}${currentBadge}</div>`;
                 }).join('') || '无历史培训记录';
 
                 // 2. 从业履历
@@ -126,10 +237,20 @@ import { registerExportInfo } from '../core/exportInfo.js';
                     ? `<b style="color:${linkColor};">${trainingNameMap(data.currentTraining.training)}</b>`
                     : `<span style="color:${d14 ? '#888' : '#999'};">当前无培训</span>`;
 
-                contentHtml = `
-                <div style="font-weight:bold; border-bottom:1px solid ${d14 ? '#555' : '#ccc'}; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">高管解析 <span style="color:${d14 ? '#aaa' : '#888'}; font-size:14px; font-weight:normal;">高管名字: ${data.name}  ID: ${data.id}</span></div>
+                const panelTitle = mode === 'current' ? '现任高管详情' : '高管解析';
+                const warningHtml = mode === 'current'
+                    ? ''
+                    : `<div style="margin-top:10px; padding:8px; background-color:${d14 ? '#3a2020' : '#fff5f5'}; border:1px solid ${d14 ? '#5a3030' : '#ffcccc'}; border-radius:4px; font-size:14px; color:${d14 ? '#ef5350' : '#c62828'}; line-height:1.4;">
+                    <b>⚠️请注意：</b><br>
+                    1. 本功能为插件功能，<b>禁止在游戏内聊天室提及</b>。<br>
+                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不再显示。<br>
+                    3. 若通知内高管被他人抢先招募，<b>在点击“寻找其他候选人”后显示的数据无效</b>。
+                </div>`;
 
-                <div style="font-size:14px; font-weight:bold; color:${d14 ? '#bbb' : '#666'}; margin-bottom:4px;">📊 目前培训技能总和 <span style="font-weight:normal; color:${d14 ? '#aaa' : '#888'};">(已完成 ${trainings.length} 次)</span></div>
+                contentHtml = `
+                <div style="font-weight:bold; border-bottom:1px solid ${d14 ? '#555' : '#ccc'}; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">${panelTitle} <span style="color:${d14 ? '#aaa' : '#888'}; font-size:14px; font-weight:normal;">高管名字: ${data.name}  ID: ${data.id}</span></div>
+
+                <div style="font-size:14px; font-weight:bold; color:${d14 ? '#bbb' : '#666'}; margin-bottom:4px;">📊 目前培训技能总和 <span style="font-weight:normal; color:${d14 ? '#aaa' : '#888'};">(已完成 ${completedTrainings.length} 次)</span></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
                     <div style="background:${d14 ? '#3a3a3a' : '#e6e6e6'}; padding:4px 8px; border:1px solid ${d14 ? '#444' : '#ddd'};">管理: <b style="color:${d14 ? '#ef5350' : '#d32f2f'};">+${total.coo}</b></div>
                     <div style="background:${d14 ? '#3a3a3a' : '#e6e6e6'}; padding:4px 8px; border:1px solid ${d14 ? '#444' : '#ddd'};">会计: <b style="color:${d14 ? '#ef5350' : '#d32f2f'};">+${total.cfo}</b></div>
@@ -146,26 +267,40 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 <div style="font-size:14px; font-weight:bold; color:${d14 ? '#bbb' : '#666'}; margin-bottom:4px;">🎓 详细培训历史</div>
                 <div style="max-height:100px; overflow-y:auto; background:${d14 ? '#333' : '#fff'}; border:1px solid ${d14 ? '#444' : '#ddd'}; padding:4px; font-size:14px;">${historyHtml}</div>
 
-                <div style="margin-top:10px; padding:8px; background-color:${d14 ? '#3a2020' : '#fff5f5'}; border:1px solid ${d14 ? '#5a3030' : '#ffcccc'}; border-radius:4px; font-size:14px; color:${d14 ? '#ef5350' : '#c62828'}; line-height:1.4;">
-                    <b>⚠️请注意：</b><br>
-                    1. 本功能为插件功能，<b>禁止在游戏内聊天室提及</b>。<br>
-                    2. 若在发送通知前点开高管，则可能导致此次挖人数据不再显示。<br>
-                    3. 若通知内高管被他人抢先招募，<b>在点击“寻找其他候选人”后显示的数据无效</b>。
-                </div>`;
+                ${warningHtml}`;
             }
 
             panel.style = baseStyle;
             panel.innerHTML = contentHtml;
-            targetContainer.after(panel);
+            if (mode === 'current') {
+                targetContainer.appendChild(panel);
+            } else {
+                targetContainer.after(panel);
+                startAgencyPanelRelocateWatch();
+            }
         }
 
         // --- 数据处理层 ---
         function processData(url, d) {
             if (!d) return;
 
+            // 0. 现任高管列表
+            if (isExecutiveHistoryEnabled() && CURRENT_EXECS_API_REGEX.test(url)) {
+                processCurrentExecutives(d);
+                return;
+            }
+
             // 1. 渲染高管详情
             if (EXEC_API_REGEX.test(url)) {
-                if (getValidTargetContainer()) renderSkillPanel(d);
+                if (getValidTargetContainer()) {
+                    renderSkillPanel(d);
+                } else {
+                    const current = getCurrentExecRecord();
+                    const execMatch = url.match(EXEC_API_REGEX);
+                    if (current && execMatch && Number(execMatch[1]) === current.id && getCurrentExecPanelContainer()) {
+                        if (isExecutiveHistoryEnabled()) renderSkillPanel(d, false, 'current');
+                    }
+                }
             }
 
             // 2. 处理 My Offers (修正 slotPosition 冲突问题)
@@ -214,7 +349,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
             const res = await _fetch.apply(this, args);
             const url = typeof args[0] === 'string' ? args[0] : (args[0].url || "");
             // 仅当URL匹配目标时才克隆响应体，避免每次请求的性能开销
-            if (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url)) {
+            if (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url) || CURRENT_EXECS_API_REGEX.test(url)) {
                 res.clone().text().then(text => { try { processData(url, JSON.parse(text)); } catch (e) { } });
             }
             return res;
@@ -222,7 +357,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         const _open = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function (m, url) {
             // 仅当URL匹配目标时才添加load监听
-            if (typeof url === 'string' && (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url))) {
+            if (typeof url === 'string' && (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url) || CURRENT_EXECS_API_REGEX.test(url))) {
                 this.addEventListener("load", function () {
                     try {
                         if (this.responseText) {
@@ -237,8 +372,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
         return {
             init: function (slotCode) {
-                const m = { "coo": "o", "cfo": "f", "cmo": "m", "cto": "t", "coo-apprentice": "v", "cfo-apprentice": "x", "cmo-apprentice": "y", "cto-apprentice": "z", "g1": "1", "g2": "2", "g3": "3", "g4": "4", "g5": "5" };
-                const internalSlot = m[slotCode];
+                const internalSlot = SLOT_MAP[slotCode];
                 if (!internalSlot) return;
                 const offers = load("SC-my-offers");
                 const found = load("SC-AGENCY_FOUND_EXECUTIVE");
@@ -253,11 +387,11 @@ import { registerExportInfo } from '../core/exportInfo.js';
     })();
 
 registerExportInfo({
-    name: '高管培训记录',
+    name: '高管培训与现任高管记录',
     scope: 'realm',
     keys: realmId => realmId === null
-        ? ['SC-my-offers', 'SC-AGENCY_FOUND_EXECUTIVE']
-        : [`R${realmId}-SC-my-offers`, `R${realmId}-SC-AGENCY_FOUND_EXECUTIVE`]
+        ? ['SC-my-offers', 'SC-AGENCY_FOUND_EXECUTIVE', 'SC-Current-Executives']
+        : [`R${realmId}-SC-my-offers`, `R${realmId}-SC-AGENCY_FOUND_EXECUTIVE`, `R${realmId}-SC-Current-Executives`]
 });
 
 window.SC_Modules = window.SC_Modules || {};
