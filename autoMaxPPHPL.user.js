@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.32.41
+// @version      1.32.42
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -345,12 +345,99 @@
     };
   })();
 
+  // src/core/exportInfo.js
+  var providers = [];
+  function registerExportInfo(provider) {
+    if (!provider || typeof provider !== "object") return;
+    providers.push(provider);
+  }
+  function collectKeys(provider, realmId) {
+    const keys = typeof provider.keys === "function" ? provider.keys(realmId) : Array.isArray(provider.keys) ? provider.keys : [];
+    return Array.isArray(keys) ? keys : [];
+  }
+  function keyMatches(provider, realmId, key) {
+    if (!provider.match) return false;
+    const pattern = typeof provider.match === "function" ? provider.match(realmId) : provider.match;
+    if (pattern instanceof RegExp) return pattern.test(key);
+    return false;
+  }
+  function readRaw(key) {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
+    const entry = { raw };
+    try {
+      entry.parsed = JSON.parse(raw);
+    } catch (e) {
+    }
+    return entry;
+  }
+  function collectExportData() {
+    const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
+    const realm = {};
+    const global = {};
+    const realmSeen = /* @__PURE__ */ new Set();
+    const globalSeen = /* @__PURE__ */ new Set();
+    const add = (target, seen, key) => {
+      if (seen.has(key)) return;
+      const entry = readRaw(key);
+      if (entry === null) return;
+      seen.add(key);
+      target[key] = entry;
+    };
+    for (const provider of providers) {
+      const isRealm = provider.scope === "realm";
+      const target = isRealm ? realm : global;
+      const seen = isRealm ? realmSeen : globalSeen;
+      for (const key of collectKeys(provider, realmId)) add(target, seen, key);
+      if (provider.match) {
+        for (const key of Object.keys(localStorage)) {
+          if (keyMatches(provider, realmId, key)) add(target, seen, key);
+        }
+      }
+    }
+    const meta = {
+      pluginName: typeof GM_info !== "undefined" ? GM_info.script.name : "autoMaxPPHPL",
+      scriptVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "\u672A\u77E5",
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      pageUrl: location.href,
+      realmId,
+      registeredProviders: providers.map((p) => p.name || "\u672A\u547D\u540D"),
+      realmKeyCount: Object.keys(realm).length,
+      globalKeyCount: Object.keys(global).length
+    };
+    return { meta, realm, global };
+  }
+  function downloadExportData() {
+    const data2 = collectExportData();
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
+    const blob = new Blob([JSON.stringify(data2, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `SC_Export_${data2.meta.realmId ?? "unknown"}_${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+    return data2;
+  }
+  window.SC_ExportInfo = {
+    registerExportInfo,
+    collectExportData,
+    downloadExportData
+  };
+
   // src/features/autoRefresh.js
   (function() {
     const CUSTOM_AMOUNTS_STORAGE_KEY = "SC_AutoAmount_CustomAmounts";
     const ENABLED_STORAGE_KEY = "SC_AutoAmount_Enabled";
     const DEFAULT_AMOUNTS_STRING = "10pm";
     const DEFAULT_BUTTON_CLASS = "btn btn-secondary";
+    registerExportInfo({
+      name: "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F\u8BBE\u7F6E",
+      scope: "global",
+      keys: [ENABLED_STORAGE_KEY, CUSTOM_AMOUNTS_STORAGE_KEY]
+    });
     const CARD_SELECTOR = ".col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center";
     const PROCESSED_DATA_ATTRIBUTE = "data-custom-amount-added";
     function isAutoAmountEnabled() {
@@ -703,6 +790,11 @@
     const PA_DATA_URL = "https://sc.22-7.top/scripts/PA-Quests.json";
     const CACHE_TTL = 36e5;
     const MATCH_THRESHOLD = 0.7;
+    registerExportInfo({
+      name: "PA \u4EFB\u52A1\u7B54\u6848\u7F13\u5B58",
+      scope: "global",
+      keys: [PA_DATA_KEY]
+    });
     let questData = null;
     let dataLoadAttempted = false;
     let initAttempted = false;
@@ -1156,7 +1248,13 @@
         //交易所页面
         pattern: /^https:\/\/www\.simcompanies\.com(?:\/[^\/]+)?\/market\/resource\/(\d+)\/?$/,
         action: (url) => {
-          if (!isPageModuleEnabled("marketProfit")) return;
+          let messageIconEnabled = false;
+          try {
+            const config = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+            messageIconEnabled = config["marketMessageIcon"] === true;
+          } catch (e) {
+          }
+          if (!isPageModuleEnabled("marketProfit") && !messageIconEnabled) return;
           const match2 = url.match(/\/resource\/(\d+)\/?/);
           const resourceId = match2 ? match2[1] : null;
           if (resourceId) {
@@ -1355,6 +1453,11 @@
   // src/features/restaurantStockReminder.js
   var RestaurantStockReminder2 = function() {
     const STORAGE_KEY = "script_restaurant_stock_restaurant_count";
+    registerExportInfo({
+      name: "\u9910\u9986\u5907\u8D27\u63D0\u9192\u8BBE\u7F6E",
+      scope: "global",
+      keys: [STORAGE_KEY]
+    });
     const state2 = {
       menuObserver: null,
       watchTimer: null,
@@ -1406,7 +1509,8 @@
     }
     function getRestaurantDetailAnchor() {
       const labels = Array.from(document.querySelectorAll("label"));
-      return labels.find((label) => label.textContent?.trim() === "\u9910\u9986\u8425\u4E1A\u4E2D") || null;
+      const openTexts = ["Restaurant is open", "\u9910\u9986\u8425\u4E1A\u4E2D", "\u9910\u5EF3\u71DF\u696D\u4E2D"];
+      return labels.find((label) => openTexts.includes(label.textContent?.trim())) || null;
     }
     function isRestaurantPage() {
       return Boolean(getRestaurantDetailAnchor());
@@ -2126,14 +2230,37 @@
     }
     return { forceInject: injectMoreInfoButtons };
   }();
+  registerExportInfo({
+    name: "\u524D\u4EFB\u9AD8\u7BA1\u8BB0\u5F55",
+    scope: "realm",
+    keys: (realmId) => realmId === null ? ["SC-former-executives"] : [`R${realmId}-SC-former-executives`]
+  });
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.FormerExecutivesModule = FormerExecutivesModule2;
 
   // src/features/executiveTrainingModule.js
   var ExecutiveTrainingModule2 = function() {
+    let panelRelocateTimer = null;
     const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
     const NOTIFICATIONS_KEYWORD = "/game-notifications/";
     const EXEC_API_REGEX = /\/api\/v4\/executives\/(\d+)\/$/;
+    const CURRENT_EXECS_API_REGEX = /\/api\/v3\/companies\/\d+\/executives\/?(\?|$)/;
+    const CURRENT_EXECS_STORAGE_KEY = "SC-Current-Executives";
+    const SLOT_MAP = {
+      "coo": "o",
+      "cfo": "f",
+      "cmo": "m",
+      "cto": "t",
+      "coo-apprentice": "v",
+      "cfo-apprentice": "x",
+      "cmo-apprentice": "y",
+      "cto-apprentice": "z",
+      "g1": "1",
+      "g2": "2",
+      "g3": "3",
+      "g4": "4",
+      "g5": "5"
+    };
     const getScopedKey2 = (k) => {
       const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
       return realmId !== null ? `R${realmId}-${k}` : k;
@@ -2179,6 +2306,52 @@
       g: "\u5404\u9886\u57DF\u8BFE\u7A0B"
     })[t] || t;
     const getCompanyLink = (realm, name) => `https://www.simcompanies.com/company/${realm}/${encodeURIComponent(name)}/`;
+    const getCurrentExecSlot = () => {
+      const match2 = location.pathname.match(/\/executives\/([a-z0-9-]+)\/?$/);
+      return match2 ? SLOT_MAP[match2[1]] || null : null;
+    };
+    const getCurrentExecRecord = () => {
+      const slot = getCurrentExecSlot();
+      if (!slot) return null;
+      return load(CURRENT_EXECS_STORAGE_KEY).find((e) => e.position === slot) || null;
+    };
+    const getCurrentExecPanelContainer = () => document.querySelector("#page .row > .col-lg-6") || null;
+    const ensureAgencyPanelRelocated = () => {
+      const panel = document.getElementById("sc-plugin-panel");
+      if (!panel) {
+        if (panelRelocateTimer) {
+          clearInterval(panelRelocateTimer);
+          panelRelocateTimer = null;
+        }
+        return;
+      }
+      if (getValidTargetContainer()) return;
+      const firstCol = getCurrentExecPanelContainer();
+      if (firstCol && panel.parentElement !== firstCol) {
+        firstCol.appendChild(panel);
+      }
+    };
+    const startAgencyPanelRelocateWatch = () => {
+      if (panelRelocateTimer) return;
+      panelRelocateTimer = setInterval(ensureAgencyPanelRelocated, 500);
+      window.addEventListener("pagehide", () => {
+        if (panelRelocateTimer) {
+          clearInterval(panelRelocateTimer);
+          panelRelocateTimer = null;
+        }
+      }, { once: true });
+    };
+    const isExecutiveHistoryEnabled = () => typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled("executiveHistory") : true;
+    function processCurrentExecutives(d) {
+      const list = Array.isArray(d) ? d : d.executives || [];
+      const current = list.filter((e) => e && e.id != null).map((e) => ({
+        id: e.id,
+        name: e.name || "",
+        age: e.age ?? null,
+        position: e.currentWorkHistory?.position ?? e.position ?? null
+      })).filter((e) => e.position != null);
+      if (current.length > 0) save(CURRENT_EXECS_STORAGE_KEY, current);
+    }
     function getValidTargetContainer() {
       const TARGET_BUTTON_CLASS = "css-1r3lxky";
       const PARENT_CONTAINER_CLASS = "css-1flj9lk";
@@ -2188,13 +2361,14 @@
       }
       return null;
     }
-    function renderSkillPanel(data2, isError = false) {
-      const targetContainer = getValidTargetContainer();
-      if (!targetContainer || document.getElementById("sc-plugin-panel")) return;
+    function renderSkillPanel(data2, isError = false, mode = "agency") {
+      const targetContainer = mode === "current" ? getCurrentExecPanelContainer() : getValidTargetContainer();
+      const panelId = mode === "current" ? "sc-current-exec-panel" : "sc-plugin-panel";
+      if (!targetContainer || document.getElementById(panelId)) return;
       const d14 = DM();
       const panel = document.createElement("div");
-      panel.id = "sc-plugin-panel";
-      const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14 ? "#2c2c2c" : "#f2f2f2"}; border: 1px solid ${d14 ? "#555" : "#d1d1d1"}; color: ${d14 ? "#efefef" : "#333"};`;
+      panel.id = panelId;
+      const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14 ? "#2c2c2c" : "#f2f2f2"}; border: 1px solid ${d14 ? "#555" : "#d1d1d1"}; color: ${d14 ? "#efefef" : "#333"};${mode === "current" ? " width:100%; box-sizing:border-box;" : ""}`;
       let contentHtml = "";
       if (isError) {
         const errBg = d14 ? "#3a2e1a" : "#fff3cd";
@@ -2221,21 +2395,64 @@
         const bg4 = d14 ? "#3a2020" : "#fff5f5";
         const bg4border = d14 ? "#5a3030" : "#ffcccc";
         const linkColor = "#2196f3";
+        const trainings = Array.isArray(data2.trainings) ? data2.trainings : [];
+        const currentTraining = data2.currentTraining || null;
+        const trainingTime = (t) => {
+          const raw = t?.datetime || t?.start || t?.end || t?.time;
+          const ts = raw ? Date.parse(raw) : NaN;
+          return Number.isNaN(ts) ? Infinity : ts;
+        };
+        const formatTrainingTime = (t) => {
+          const raw = t?.datetime || t?.start || t?.end || t?.time;
+          const d = new Date(raw);
+          if (!raw || Number.isNaN(d.getTime())) return "";
+          const parts = new Intl.DateTimeFormat("zh-CN", {
+            timeZone: "Asia/Shanghai",
+            year: "numeric",
+            month: "numeric",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          }).formatToParts(d);
+          const map = {};
+          parts.forEach((p) => {
+            map[p.type] = p.value;
+          });
+          return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`;
+        };
+        const isCurrentTrainingEntry = (t) => {
+          if (currentTraining) {
+            if (t.id != null && currentTraining.id != null && String(t.id) === String(currentTraining.id)) return true;
+            if (t.datetime && currentTraining.datetime && t.datetime === currentTraining.datetime) return true;
+          }
+          const startRaw = t?.datetime || t?.start || t?.time;
+          const start = startRaw ? Date.parse(startRaw) : NaN;
+          if (Number.isNaN(start) || start > Date.now() || t.end) return false;
+          return start + 27 * 60 * 60 * 1e3 > Date.now();
+        };
+        const sortedTrainings = [...trainings].sort((a, b) => trainingTime(a) - trainingTime(b));
+        const completedTrainings = sortedTrainings.filter((t) => !isCurrentTrainingEntry(t));
         let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
-        const trainings = data2.trainings || [];
-        const historyHtml = trainings.map((t) => {
+        sortedTrainings.forEach((t) => {
           total.coo += t.skillCoo || 0;
           total.cfo += t.skillCfo || 0;
           total.cmo += t.skillCmo || 0;
           total.cto += t.skillCto || 0;
+        });
+        const historyHtml = sortedTrainings.map((t, index) => {
+          const isCurrent = isCurrentTrainingEntry(t);
           const details = [];
           if (t.skillCoo) details.push(`\u7BA1\u7406+${t.skillCoo}`);
           if (t.skillCfo) details.push(`\u4F1A\u8BA1+${t.skillCfo}`);
           if (t.skillCmo) details.push(`\u6C9F\u901A+${t.skillCmo}`);
           if (t.skillCto) details.push(`\u79D1\u5B66+${t.skillCto}`);
           const detailStr = details.length > 0 ? `<span style="color:${fg3}; margin-left:4px;">(${details.join(" ")})</span>` : "";
+          const timeText = formatTrainingTime(t);
+          const timeHtml = timeText ? `<span style="color:${fg3}; margin-left:6px;">${timeText}</span>` : "";
+          const currentBadge = isCurrent ? `<span style="color:${d14 ? "#81c784" : "#2e7d32"}; margin-left:4px;">\uFF08\u6B63\u5728\u57F9\u8BAD\uFF09</span>` : "";
           const cUrl = getCompanyLink(t.employer.realmId ?? currentRealm2, t.employer.company);
-          return `<div style="padding:2px 0; border-bottom:1px dashed ${border1}; color:${fg2}; font-size:14px;">\u5728 <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}</div>`;
+          return `<div style="padding:2px 0; border-bottom:1px dashed ${border1}; color:${fg2}; font-size:14px;">${index + 1}. \u5728 <a href="${cUrl}" target="_blank" style="color:${linkColor}; text-decoration:none;">${t.employer.company}</a> ${trainingNameMap(t.training)}${detailStr}${timeHtml}${currentBadge}</div>`;
         }).join("") || "\u65E0\u5386\u53F2\u57F9\u8BAD\u8BB0\u5F55";
         const workHistoryHtml = data2.workHistory?.map((w) => {
           const isCurrent = !w.end;
@@ -2252,10 +2469,17 @@
                     </div>`;
         }).join("") || "\u65E0\u4ECE\u4E1A\u8BB0\u5F55";
         const currentTrainingStatus = data2.currentTraining ? `<b style="color:${linkColor};">${trainingNameMap(data2.currentTraining.training)}</b>` : `<span style="color:${d14 ? "#888" : "#999"};">\u5F53\u524D\u65E0\u57F9\u8BAD</span>`;
+        const panelTitle = mode === "current" ? "\u73B0\u4EFB\u9AD8\u7BA1\u8BE6\u60C5" : "\u9AD8\u7BA1\u89E3\u6790";
+        const warningHtml = mode === "current" ? "" : `<div style="margin-top:10px; padding:8px; background-color:${d14 ? "#3a2020" : "#fff5f5"}; border:1px solid ${d14 ? "#5a3030" : "#ffcccc"}; border-radius:4px; font-size:14px; color:${d14 ? "#ef5350" : "#c62828"}; line-height:1.4;">
+                    <b>\u26A0\uFE0F\u8BF7\u6CE8\u610F\uFF1A</b><br>
+                    1. \u672C\u529F\u80FD\u4E3A\u63D2\u4EF6\u529F\u80FD\uFF0C<b>\u7981\u6B62\u5728\u6E38\u620F\u5185\u804A\u5929\u5BA4\u63D0\u53CA</b>\u3002<br>
+                    2. \u82E5\u5728\u53D1\u9001\u901A\u77E5\u524D\u70B9\u5F00\u9AD8\u7BA1\uFF0C\u5219\u53EF\u80FD\u5BFC\u81F4\u6B64\u6B21\u6316\u4EBA\u6570\u636E\u4E0D\u518D\u663E\u793A\u3002<br>
+                    3. \u82E5\u901A\u77E5\u5185\u9AD8\u7BA1\u88AB\u4ED6\u4EBA\u62A2\u5148\u62DB\u52DF\uFF0C<b>\u5728\u70B9\u51FB\u201C\u5BFB\u627E\u5176\u4ED6\u5019\u9009\u4EBA\u201D\u540E\u663E\u793A\u7684\u6570\u636E\u65E0\u6548</b>\u3002
+                </div>`;
         contentHtml = `
-                <div style="font-weight:bold; border-bottom:1px solid ${d14 ? "#555" : "#ccc"}; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">\u9AD8\u7BA1\u89E3\u6790 <span style="color:${d14 ? "#aaa" : "#888"}; font-size:14px; font-weight:normal;">\u9AD8\u7BA1\u540D\u5B57: ${data2.name}  ID: ${data2.id}</span></div>
+                <div style="font-weight:bold; border-bottom:1px solid ${d14 ? "#555" : "#ccc"}; padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between;">${panelTitle} <span style="color:${d14 ? "#aaa" : "#888"}; font-size:14px; font-weight:normal;">\u9AD8\u7BA1\u540D\u5B57: ${data2.name}  ID: ${data2.id}</span></div>
 
-                <div style="font-size:14px; font-weight:bold; color:${d14 ? "#bbb" : "#666"}; margin-bottom:4px;">\u{1F4CA} \u76EE\u524D\u57F9\u8BAD\u6280\u80FD\u603B\u548C <span style="font-weight:normal; color:${d14 ? "#aaa" : "#888"};">(\u5DF2\u5B8C\u6210 ${trainings.length} \u6B21)</span></div>
+                <div style="font-size:14px; font-weight:bold; color:${d14 ? "#bbb" : "#666"}; margin-bottom:4px;">\u{1F4CA} \u76EE\u524D\u57F9\u8BAD\u6280\u80FD\u603B\u548C <span style="font-weight:normal; color:${d14 ? "#aaa" : "#888"};">(\u5DF2\u5B8C\u6210 ${completedTrainings.length} \u6B21)</span></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
                     <div style="background:${d14 ? "#3a3a3a" : "#e6e6e6"}; padding:4px 8px; border:1px solid ${d14 ? "#444" : "#ddd"};">\u7BA1\u7406: <b style="color:${d14 ? "#ef5350" : "#d32f2f"};">+${total.coo}</b></div>
                     <div style="background:${d14 ? "#3a3a3a" : "#e6e6e6"}; padding:4px 8px; border:1px solid ${d14 ? "#444" : "#ddd"};">\u4F1A\u8BA1: <b style="color:${d14 ? "#ef5350" : "#d32f2f"};">+${total.cfo}</b></div>
@@ -2272,21 +2496,33 @@
                 <div style="font-size:14px; font-weight:bold; color:${d14 ? "#bbb" : "#666"}; margin-bottom:4px;">\u{1F393} \u8BE6\u7EC6\u57F9\u8BAD\u5386\u53F2</div>
                 <div style="max-height:100px; overflow-y:auto; background:${d14 ? "#333" : "#fff"}; border:1px solid ${d14 ? "#444" : "#ddd"}; padding:4px; font-size:14px;">${historyHtml}</div>
 
-                <div style="margin-top:10px; padding:8px; background-color:${d14 ? "#3a2020" : "#fff5f5"}; border:1px solid ${d14 ? "#5a3030" : "#ffcccc"}; border-radius:4px; font-size:14px; color:${d14 ? "#ef5350" : "#c62828"}; line-height:1.4;">
-                    <b>\u26A0\uFE0F\u8BF7\u6CE8\u610F\uFF1A</b><br>
-                    1. \u672C\u529F\u80FD\u4E3A\u63D2\u4EF6\u529F\u80FD\uFF0C<b>\u7981\u6B62\u5728\u6E38\u620F\u5185\u804A\u5929\u5BA4\u63D0\u53CA</b>\u3002<br>
-                    2. \u82E5\u5728\u53D1\u9001\u901A\u77E5\u524D\u70B9\u5F00\u9AD8\u7BA1\uFF0C\u5219\u53EF\u80FD\u5BFC\u81F4\u6B64\u6B21\u6316\u4EBA\u6570\u636E\u4E0D\u518D\u663E\u793A\u3002<br>
-                    3. \u82E5\u901A\u77E5\u5185\u9AD8\u7BA1\u88AB\u4ED6\u4EBA\u62A2\u5148\u62DB\u52DF\uFF0C<b>\u5728\u70B9\u51FB\u201C\u5BFB\u627E\u5176\u4ED6\u5019\u9009\u4EBA\u201D\u540E\u663E\u793A\u7684\u6570\u636E\u65E0\u6548</b>\u3002
-                </div>`;
+                ${warningHtml}`;
       }
       panel.style = baseStyle;
       panel.innerHTML = contentHtml;
-      targetContainer.after(panel);
+      if (mode === "current") {
+        targetContainer.appendChild(panel);
+      } else {
+        targetContainer.after(panel);
+        startAgencyPanelRelocateWatch();
+      }
     }
     function processData(url, d) {
       if (!d) return;
+      if (isExecutiveHistoryEnabled() && CURRENT_EXECS_API_REGEX.test(url)) {
+        processCurrentExecutives(d);
+        return;
+      }
       if (EXEC_API_REGEX.test(url)) {
-        if (getValidTargetContainer()) renderSkillPanel(d);
+        if (getValidTargetContainer()) {
+          renderSkillPanel(d);
+        } else {
+          const current = getCurrentExecRecord();
+          const execMatch = url.match(EXEC_API_REGEX);
+          if (current && execMatch && Number(execMatch[1]) === current.id && getCurrentExecPanelContainer()) {
+            if (isExecutiveHistoryEnabled()) renderSkillPanel(d, false, "current");
+          }
+        }
       }
       if (url.includes(OFFERS_URL)) {
         let s = load("SC-my-offers");
@@ -2316,7 +2552,7 @@
     window.fetch = async function(...args) {
       const res = await _fetch.apply(this, args);
       const url = typeof args[0] === "string" ? args[0] : args[0].url || "";
-      if (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url)) {
+      if (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url) || CURRENT_EXECS_API_REGEX.test(url)) {
         res.clone().text().then((text) => {
           try {
             processData(url, JSON.parse(text));
@@ -2328,7 +2564,7 @@
     };
     const _open = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(m, url) {
-      if (typeof url === "string" && (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url))) {
+      if (typeof url === "string" && (url.includes(OFFERS_URL) || url.includes(NOTIFICATIONS_KEYWORD) || EXEC_API_REGEX.test(url) || CURRENT_EXECS_API_REGEX.test(url))) {
         this.addEventListener("load", function() {
           try {
             if (this.responseText) {
@@ -2343,8 +2579,7 @@
     };
     return {
       init: function(slotCode) {
-        const m = { "coo": "o", "cfo": "f", "cmo": "m", "cto": "t", "coo-apprentice": "v", "cfo-apprentice": "x", "cmo-apprentice": "y", "cto-apprentice": "z", "g1": "1", "g2": "2", "g3": "3", "g4": "4", "g5": "5" };
-        const internalSlot = m[slotCode];
+        const internalSlot = SLOT_MAP[slotCode];
         if (!internalSlot) return;
         const offers = load("SC-my-offers");
         const found = load("SC-AGENCY_FOUND_EXECUTIVE");
@@ -2362,10 +2597,25 @@
       }
     };
   }();
+  registerExportInfo({
+    name: "\u9AD8\u7BA1\u57F9\u8BAD\u4E0E\u73B0\u4EFB\u9AD8\u7BA1\u8BB0\u5F55",
+    scope: "realm",
+    keys: (realmId) => realmId === null ? ["SC-my-offers", "SC-AGENCY_FOUND_EXECUTIVE", "SC-Current-Executives"] : [`R${realmId}-SC-my-offers`, `R${realmId}-SC-AGENCY_FOUND_EXECUTIVE`, `R${realmId}-SC-Current-Executives`]
+  });
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.ExecutiveTrainingModule = ExecutiveTrainingModule2;
 
   // src/features/outgoingContractMPHandler.js
+  registerExportInfo({
+    name: "\u51FA\u5E93\u5408\u540C MP \u8BBE\u7F6E",
+    scope: "global",
+    keys: ["SC_OutgoingMP_Presets", "SC_OutgoingMP_UseInput"]
+  });
+  registerExportInfo({
+    name: "\u51FA\u5E93\u5408\u540C VWAP \u7F13\u5B58",
+    scope: "realm",
+    match: (realmId) => realmId === null ? /(?!)/ : new RegExp(`^SC_OutgoingVWAP_Cache_${realmId}_\\d+_\\d+$`)
+  });
   var outgoingContractMPHandler2 = function() {
     const STORAGE_KEY = "SC_OutgoingMP_Presets";
     const USE_INPUT_KEY = "SC_OutgoingMP_UseInput";
@@ -3376,7 +3626,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.32.41",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.32.42",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -3385,7 +3635,7 @@
   };
 
   // src/features/dataStorage.js
-  var Storage = /* @__PURE__ */ (() => {
+  var Storage = (() => {
     const KEYS = {
       region: (realmId) => `SimcompaniesRetailCalculation_${realmId}`,
       constants: "SimcompaniesConstantsData"
@@ -3395,6 +3645,16 @@
       const d = new Date(isoString);
       return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}-${d.getDate().toString().padStart(2, "0")} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
     };
+    registerExportInfo({
+      name: "\u57FA\u7840\u6570\u636E",
+      scope: "global",
+      keys: [KEYS.constants]
+    });
+    registerExportInfo({
+      name: "\u9886\u57DF\u6570\u636E",
+      scope: "realm",
+      keys: (realmId) => [KEYS.region(realmId)]
+    });
     return {
       save: (type, data2) => {
         const key = type === "region" ? KEYS.region(data2.realmId) : KEYS.constants;
@@ -4264,9 +4524,20 @@
     }
     return { forceInject: injectCustomButton };
   }();
+  registerExportInfo({
+    name: "\u81EA\u5B9A\u4E49\u9AD8\u7BA1\u6570\u636E",
+    scope: "realm",
+    keys: (realmId) => realmId === null ? ["SC-Saved-Boardroom", "SC-Saved-Bonuses"] : [`R${realmId}-SC-Saved-Boardroom`, `R${realmId}-SC-Saved-Bonuses`]
+  });
 
   // src/features/resourceMarketHandler.js
+  registerExportInfo({
+    name: "\u4EA4\u6613\u6240\u8BA1\u7B97\u53C2\u6570",
+    scope: "global",
+    keys: ["sc_building_level", "sc_building_hours"]
+  });
   var { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
+  var MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" style="display:block;width:14px;height:14px;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="envelope" class="css-0" role="img" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48H48zM0 176V384c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V176L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"></path></svg>`;
   var ResourceMarketHandler2 = function() {
     let currentResourceId = null;
     let currentRealmId = null;
@@ -4279,6 +4550,7 @@
     let _pendingAutoSelectPollTimer = null;
     let _globalObserver = null;
     let _tableObserver = null;
+    let _messageIconObserver = null;
     let _quantityCheckInterval = null;
     let _formClickHandler = null;
     let _initDone = false;
@@ -4836,6 +5108,89 @@
         currentRealmId = match2[1];
       }
     }
+    function injectMessageIcon(row) {
+      if (row.hasAttribute("data-sc-message-added")) return;
+      const link = row.querySelector('td > div > div > a[href*="/company/"]');
+      if (!link || !link.parentElement) return;
+      const nameEl = link.nextElementSibling?.querySelector("span") || link.parentElement.querySelector("div span, span");
+      const companyName = nameEl?.textContent?.trim();
+      if (!companyName) return;
+      const messageLink = document.createElement("a");
+      messageLink.href = `https://www.simcompanies.com/zh-cn/messages/${encodeURIComponent(companyName)}`;
+      messageLink.target = "_blank";
+      messageLink.rel = "noopener";
+      messageLink.title = "\u7ED9\u516C\u53F8\u53D1\u79C1\u4FE1";
+      messageLink.style.cssText = `display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-right:3px; color:inherit; vertical-align:middle; flex-shrink:0; line-height:1; text-decoration:none;`;
+      messageLink.innerHTML = MESSAGE_ICON_SVG;
+      messageLink.setAttribute("data-sc-market-message-icon", "true");
+      messageLink.addEventListener("click", (e) => e.stopPropagation());
+      link.parentElement.insertBefore(messageLink, link);
+      row.setAttribute("data-sc-message-added", "true");
+    }
+    const isMarketMessageIconEnabled = () => {
+      try {
+        const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+        return cfg["marketMessageIcon"] === true;
+      } catch (e) {
+        return false;
+      }
+    };
+    const stopMessageIconWatch = () => {
+      if (_messageIconObserver) {
+        _messageIconObserver.disconnect();
+        _messageIconObserver = null;
+      }
+      document.querySelectorAll("tr[data-sc-message-added]").forEach((row) => {
+        row.querySelectorAll("a[data-sc-market-message-icon]").forEach((a) => a.remove());
+        row.removeAttribute("data-sc-message-added");
+      });
+    };
+    const startMessageIconWatch = () => {
+      stopMessageIconWatch();
+      if (!isMarketMessageIconEnabled()) return;
+      const injectMessageIconStyles = () => {
+        if (document.getElementById("sc-market-message-icon-style")) return;
+        const style = document.createElement("style");
+        style.id = "sc-market-message-icon-style";
+        style.textContent = `
+                    a[data-sc-market-message-icon] {
+                        display: inline-flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        width: 18px !important;
+                        height: 18px !important;
+                        margin: 0 3px 0 0 !important;
+                        color: inherit !important;
+                        vertical-align: middle !important;
+                        line-height: 1 !important;
+                        text-decoration: none !important;
+                        align-self: center !important;
+                        flex: 0 0 auto !important;
+                    }
+                    a[data-sc-market-message-icon] svg {
+                        display: block !important;
+                        width: 14px !important;
+                        height: 14px !important;
+                        margin: 0 !important;
+                    }
+                `;
+        document.head.appendChild(style);
+      };
+      injectMessageIconStyles();
+      const injectRows = () => {
+        if (!/\/market\/resource\/\d+/.test(location.pathname) || !isMarketMessageIconEnabled()) {
+          stopMessageIconWatch();
+          return;
+        }
+        const tbody = findValidTbody();
+        if (tbody) tbody.querySelectorAll("tr").forEach(injectMessageIcon);
+      };
+      injectRows();
+      _messageIconObserver = new MutationObserver(() => {
+        requestAnimationFrame(injectRows);
+      });
+      _messageIconObserver.observe(document.body, { childList: true, subtree: true });
+    };
     function buildSharedContext(SCD, SRC, currentResourceId2) {
       const resource = parseInt(currentResourceId2);
       const zn = SCD.data;
@@ -5030,6 +5385,7 @@
           _tableObserver.disconnect();
           _tableObserver = null;
         }
+        stopMessageIconWatch();
         _initDone = false;
         pendingRows.clear();
         allProfitSpans.clear();
@@ -5042,6 +5398,10 @@
         summaryDisplay = null;
         currentResourceId = resourceId;
         currentRealmId = null;
+        const marketProfitEnabled = typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled("marketProfit") : true;
+        if (!marketProfitEnabled && !isMarketMessageIconEnabled()) return;
+        startMessageIconWatch();
+        if (!marketProfitEnabled) return;
         let currentIsRetail = false;
         const SCD_raw = localStorage.getItem("SimcompaniesConstantsData");
         if (SCD_raw) {
@@ -5509,10 +5869,21 @@
   var resourceIdNameMap = { 1: "\u7535\u529B", 2: "\u6C34", 3: "\u82F9\u679C", 4: "\u6A58\u5B50", 5: "\u8461\u8404", 6: "\u8C37\u7269", 7: "\u725B\u6392", 8: "\u9999\u80A0", 9: "\u9E21\u86CB", 10: "\u539F\u6CB9", 11: "\u6C7D\u6CB9", 12: "\u67F4\u6CB9", 13: "\u8FD0\u8F93\u5355\u4F4D", 14: "\u77FF\u7269", 15: "\u94DD\u571F\u77FF", 16: "\u7845\u6750", 17: "\u5316\u5408\u7269", 18: "\u94DD\u6750", 19: "\u5851\u6599", 20: "\u5904\u7406\u5668", 21: "\u7535\u5B50\u5143\u4EF6", 22: "\u7535\u6C60", 23: "\u663E\u793A\u5C4F", 24: "\u667A\u80FD\u624B\u673A", 25: "\u5E73\u677F\u7535\u8111", 26: "\u7B14\u8BB0\u672C\u7535\u8111", 27: "\u663E\u793A\u5668", 28: "\u7535\u89C6\u673A", 29: "\u4F5C\u7269\u7814\u7A76", 30: "\u80FD\u6E90\u7814\u7A76", 31: "\u91C7\u77FF\u7814\u7A76", 32: "\u7535\u5668\u7814\u7A76", 33: "\u755C\u7267\u7814\u7A76", 34: "\u5316\u5B66\u7814\u7A76", 35: "\u8F6F\u4EF6", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "\u68C9\u82B1", 41: "\u68C9\u5E03", 42: "\u94C1\u77FF\u77F3", 43: "\u94A2\u6750", 44: "\u6C99\u5B50", 45: "\u73BB\u7483", 46: "\u76AE\u9769", 47: "\u8F66\u8F7D\u7535\u8111", 48: "\u7535\u52A8\u9A6C\u8FBE", 49: "\u8C6A\u534E\u8F66\u5185\u9970", 50: "\u57FA\u672C\u5185\u9970", 51: "\u8F66\u8EAB", 52: "\u5185\u71C3\u673A", 53: "\u7ECF\u6D4E\u7535\u52A8\u8F66", 54: "\u8C6A\u534E\u7535\u52A8\u8F66", 55: "\u7ECF\u6D4E\u71C3\u6CB9\u8F66", 56: "\u8C6A\u534E\u71C3\u6CB9\u8F66", 57: "\u5361\u8F66", 58: "\u6C7D\u8F66\u7814\u7A76", 59: "\u65F6\u88C5\u7814\u7A76", 60: "\u5185\u8863", 61: "\u624B\u5957", 62: "\u88D9\u5B50", 63: "\u9AD8\u8DDF\u978B", 64: "\u624B\u888B", 65: "\u8FD0\u52A8\u978B", 66: "\u79CD\u5B50", 67: "\u5723\u8BDE\u7206\u7AF9", 68: "\u91D1\u77FF\u77F3", 69: "\u91D1\u6761", 70: "\u540D\u724C\u624B\u8868", 71: "\u9879\u94FE", 72: "\u7518\u8517", 73: "\u4E59\u9187", 74: "\u7532\u70F7", 75: "\u78B3\u7EA4\u7EF4", 76: "\u78B3\u7EA4\u590D\u5408\u6750", 77: "\u673A\u8EAB", 78: "\u673A\u7FFC", 79: "\u7CBE\u5BC6\u7535\u5B50\u5143\u4EF6", 80: "\u98DE\u884C\u8BA1\u7B97\u673A", 81: "\u5EA7\u8231", 82: "\u59FF\u6001\u63A7\u5236\u5668", 83: "\u706B\u7BAD\u71C3\u6599", 84: "\u71C3\u6599\u50A8\u7F50", 85: "\u56FA\u4F53\u71C3\u6599\u52A9\u63A8\u5668", 86: "\u706B\u7BAD\u53D1\u52A8\u673A", 87: "\u9694\u70ED\u677F", 88: "\u79BB\u5B50\u63A8\u8FDB\u5668", 89: "\u55B7\u6C14\u53D1\u52A8\u673A", 90: "\u4E9A\u8F68\u9053\u4E8C\u7EA7\u706B\u7BAD", 91: "\u4E9A\u8F68\u9053\u706B\u7BAD", 92: "\u8F68\u9053\u52A9\u63A8\u5668", 93: "\u661F\u9645\u98DE\u8239", 94: "BFR", 95: "\u55B7\u6C14\u5BA2\u673A", 96: "\u8C6A\u534E\u98DE\u673A", 97: "\u5355\u5F15\u64CE\u98DE\u673A", 98: "\u65E0\u4EBA\u673A", 99: "\u4EBA\u9020\u536B\u661F", 100: "\u822A\u7A7A\u822A\u5929\u7814\u7A76", 101: "\u94A2\u7B4B\u6DF7\u51DD\u571F", 102: "\u7816\u5757", 103: "\u6C34\u6CE5", 104: "\u9ECF\u571F", 105: "\u77F3\u7070\u77F3", 106: "\u6728\u6750", 107: "\u94A2\u7B4B", 108: "\u6728\u677F", 109: "\u7A97\u6237", 110: "\u5DE5\u5177", 111: "\u5EFA\u7B51\u9884\u6784\u4EF6", 112: "\u63A8\u571F\u673A", 113: "\u6750\u6599\u7814\u7A76", 114: "\u673A\u5668\u4EBA", 115: "\u725B", 116: "\u732A", 117: "\u725B\u5976", 118: "\u5496\u5561\u8C46", 119: "\u5496\u5561\u7C89", 120: "\u852C\u83DC", 121: "\u9762\u5305", 122: "\u829D\u58EB", 123: "\u82F9\u679C\u6D3E", 124: "\u6A59\u6C41", 125: "\u82F9\u679C\u6C41", 126: "\u59DC\u6C41\u6C7D\u6C34", 127: "\u62AB\u8428", 128: "\u9762\u6761", 129: "\u6C49\u5821\u5305", 130: "\u5343\u5C42\u9762", 131: "\u8089\u4E38", 132: "\u6DF7\u5408\u679C\u6C41", 133: "\u9762\u7C89", 134: "\u9EC4\u6CB9", 135: "\u7CD6", 136: "\u53EF\u53EF", 137: "\u9762\u56E2", 138: "\u9171\u6C41", 139: "\u52A8\u7269\u9972\u6599", 140: "\u5DE7\u514B\u529B", 141: "\u690D\u7269\u6CB9", 142: "\u6C99\u62C9", 143: "\u5496\u55B1\u89D2", 144: "\u5723\u8BDE\u88C5\u9970\u54C1", 145: "\u98DF\u8C31", 146: "\u5357\u74DC", 147: "\u6770\u514B\u706F\u7B3C", 148: "\u5973\u5DEB\u670D", 149: "\u5357\u74DC\u6C64", 150: "\u6811", 151: "\u590D\u6D3B\u8282\u5154\u5154", 152: "\u658B\u6708\u7CD6\u679C", 153: "\u5DE7\u514B\u529B\u51B0\u6DC7\u6DCB", 154: "\u82F9\u679C\u51B0\u6DC7\u6DCB", 155: "\u5976\u6CB9\u9E21\u86CB" };
 
   // src/features/incomingContractsHandler.js
+  registerExportInfo({
+    name: "\u5408\u540C\u9AD8\u4EF7\u63D0\u9192\u8BBE\u7F6E",
+    scope: "global",
+    keys: ["SC_Contract_HighPrice_Settings"]
+  });
   var { SCXXCS: SCXXCS2, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL2, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT2 } = state;
   var incomingContractsHandler2 = function() {
     let cardIdCounter = 0;
     const pendingCards = /* @__PURE__ */ new Map();
+    const ACCEPT_CONTRACT_SELECTOR = [
+      'a[aria-label="\u63A5\u53D7\u5408\u540C"]',
+      'a[aria-label="Sign contract"]',
+      'a[aria-label="\u63A5\u53D7\u5408\u7D04"]',
+      "a.css-14hcbmv"
+    ].join(", ");
     let processDebounceTimer = null;
     let activeObserver = null;
     let checkPageTimer = null;
@@ -5951,7 +6322,7 @@
         if (!forceReset && card.hasAttribute("data-found") && !card.hasAttribute("data-retry")) {
           if (card.__contractSignature === currentSignature) {
             const hasProfitUI = card.__profitDisplayEl && document.body.contains(card.__profitDisplayEl);
-            const acceptBtn = card.querySelector('a[aria-label="\u63A5\u53D7\u5408\u540C"], a.css-14hcbmv');
+            const acceptBtn = card.querySelector(ACCEPT_CONTRACT_SELECTOR);
             const lostInterceptor = card.__wasHighPrice && acceptBtn && !acceptBtn.__hasHighPriceInterceptor;
             if (hasProfitUI && !lostInterceptor) {
               continue;
@@ -5961,7 +6332,7 @@
             if (oldEl && oldEl.parentNode) oldEl.remove();
             card.style.border = "";
             card.style.borderRadius = "";
-            const acceptBtn = card.querySelector('a[aria-label="\u63A5\u53D7\u5408\u540C"], a.css-14hcbmv');
+            const acceptBtn = card.querySelector(ACCEPT_CONTRACT_SELECTOR);
             if (acceptBtn) delete acceptBtn.__hasHighPriceInterceptor;
           }
           card.removeAttribute("data-found");
@@ -6703,7 +7074,7 @@
     function checkAndApplyDoubleConfirm(card) {
       const isHigh = isContractHighPrice(card);
       card.__wasHighPrice = isHigh;
-      const acceptBtn = card.querySelector('a[aria-label="\u63A5\u53D7\u5408\u540C"], a.css-14hcbmv');
+      const acceptBtn = card.querySelector(ACCEPT_CONTRACT_SELECTOR);
       if (isHigh) {
         card.style.border = "2px dashed #ff4444";
         card.style.borderRadius = "8px";
@@ -6721,7 +7092,7 @@
               e.preventDefault();
               acceptBtn.dataset.confirmed = "true";
               const span = acceptBtn.querySelector("span");
-              acceptBtn.__originalText = span ? span.textContent : "\u63A5\u53D7";
+              acceptBtn.__originalText = span ? span.textContent : acceptBtn.textContent || "\u63A5\u53D7";
               if (span) span.textContent = acceptBtn.__originalText + "?";
               acceptBtn.__originalBg = acceptBtn.style.backgroundColor;
               acceptBtn.style.backgroundColor = "#ff4444";
@@ -7001,6 +7372,11 @@
   window.SC_Modules.incomingContractsHandler = incomingContractsHandler2;
 
   // src/features/marketInterceptor.js
+  registerExportInfo({
+    name: "\u5E02\u573A\u7F13\u5B58",
+    scope: "realm",
+    match: (realmId) => realmId === null ? /(?!)/ : new RegExp(`^(?:market_|market_all_)${realmId}_\\d+$`)
+  });
   var { SCXXCS: SCXXCS3, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL3, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT3 } = state;
   (function() {
     let cachedRetailIds = null;
@@ -7911,6 +8287,11 @@
   // src/features/pageModuleConfig.js
   (function() {
     const PAGE_ACTIONS_CONFIG_KEY = "SC_PageActions_Settings";
+    registerExportInfo({
+      name: "\u9875\u9762\u529F\u80FD\u5F00\u5173\u8BBE\u7F6E",
+      scope: "global",
+      keys: [PAGE_ACTIONS_CONFIG_KEY]
+    });
     window.isPageModuleEnabled = (key) => {
       try {
         const stored = localStorage.getItem(PAGE_ACTIONS_CONFIG_KEY);
@@ -7939,6 +8320,32 @@
     let hasNewVersion = false;
     let latestVersion = null;
     let { localVersion, SCXXCS: SCXXCS5, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL5, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT5 } = state;
+    registerExportInfo({
+      name: "\u9762\u677F\u4E0E\u5168\u5C40\u8BBE\u7F6E",
+      scope: "global",
+      keys: ["SC_PanelPosition", "mp_inputPercent", "sc_ignored_version"]
+    });
+    registerExportInfo({
+      name: "\u5E93\u5B58/\u5408\u540C/\u5E02\u573A\u8BA1\u7B97\u7ED3\u679C",
+      scope: "realm",
+      keys: (realmId) => {
+        if (realmId === null) return [];
+        try {
+          const raw = localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`);
+          const src = raw ? JSON.parse(raw) : null;
+          const companyId = src && src.companyId;
+          if (companyId == null) return [];
+          return [
+            `wareHouse-${companyId}`,
+            `contractsOutgoing-${companyId}`,
+            `contractsIncoming-${companyId}`,
+            `marketOrders-${companyId}`
+          ];
+        } catch (e) {
+          return [];
+        }
+      }
+    });
     let zn, lwe;
     let size, acceleration, economyState, resource, salesModifierWithRecreationBonus, skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, cogs, quality, quantity;
     const Ul = (overhead, skillCOO2) => {
@@ -8625,6 +9032,7 @@
             }
           },
           { type: "toggle", key: "marketProfit", label: "\u4EA4\u6613\u6240\u8BA1\u7B97\u65F6\u5229\u6DA6" },
+          { type: "toggle", key: "marketMessageIcon", label: "\u4EA4\u6613\u6240\u79C1\u4FE1\u56FE\u6807", defaultEnabled: false },
           { type: "toggle", key: "contractProfit", label: "\u5408\u540C\u8BA1\u7B97\u65F6\u5229\u6DA6" },
           { type: "toggle", key: "executiveHistory", label: "\u663E\u793A\u9AD8\u7BA1\u57F9\u8BAD\u8BB0\u5F55" },
           { type: "toggle", key: "formerExecEnhance", label: "\u524D\u4EFB\u9AD8\u7BA1\u66F4\u591A\u4FE1\u606F" },
@@ -8706,11 +9114,34 @@
         info.style.cssText = `margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:#ccc;border-top:1px solid #555;`;
         const version = GM_info?.script?.version || "\u672A\u77E5\u7248\u672C";
         info.innerHTML = `
-                \u4F5C\u8005\uFF1A<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" class="sc-info-link">Rabbit House</a> \u53CD\u9988\u8BF7\u8BF4\u660E\u95EE\u9898<br>
+                \u4F5C\u8005\uFF1A<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" class="sc-info-link">Rabbit House</a> <span id="sc-feedback-export" style="cursor:pointer;">\u53CD\u9988\u8BF7\u8BF4\u660E\u95EE\u9898</span><br>
                 \u53CD\u9988\u7FA4\uFF1A798670333 <br>
                 \u6E90\u7801\uFF1A<a href="https://github.com/gangbaRuby/SimCompanies-Scripts" target="_blank" class="sc-info-link">GitHub</a> \u2B50\u{1F647}<br>
                 \u7248\u672C\uFF1A<span id="script-version">${version}</span>
             `;
+        let feedbackClickCount = 0;
+        let feedbackClickTimer = null;
+        const feedbackExportEl = info.querySelector("#sc-feedback-export");
+        if (feedbackExportEl) {
+          feedbackExportEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            feedbackClickCount += 1;
+            clearTimeout(feedbackClickTimer);
+            feedbackClickTimer = setTimeout(() => {
+              feedbackClickCount = 0;
+            }, 1200);
+            if (feedbackClickCount < 3) return;
+            feedbackClickCount = 0;
+            if (!confirm("\u662F\u5426\u8981\u5BFC\u51FA\u5F53\u524D\u9886\u57DF\u6570\u636E\uFF1F")) return;
+            try {
+              downloadExportData();
+              showToast("\u6392\u9519\u6570\u636E\u5DF2\u5BFC\u51FA", "success");
+            } catch (err) {
+              console.error("\u5BFC\u51FA\u6392\u9519\u6570\u636E\u5931\u8D25", err);
+              showToast("\u5BFC\u51FA\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u63A7\u5236\u53F0", "error");
+            }
+          });
+        }
         let checkTimer = setInterval(() => {
           console.log(hasNewVersion);
           if (hasNewVersion === true) {
@@ -9616,6 +10047,10 @@
     setTimeout(() => {
       RegionAutoUpdater.checkAndUpdate(getRealmIdFromLink());
     }, 3e3);
+    const regionUpdateTimer = setInterval(() => {
+      RegionAutoUpdater.checkAndUpdate(getRealmIdFromLink());
+    }, 60 * 1e3);
+    window.addEventListener("pagehide", () => clearInterval(regionUpdateTimer), { once: true });
     (function() {
       async function calculateAllDecayResources() {
         try {
@@ -11561,4 +11996,4 @@
   })();
 })();
 
-// @changelog 增加餐馆备货提醒：在餐馆建筑页展示菜品库存、每日消耗与剩余天数，低于 2 天预警；可设置餐馆数量，并支持功能开关。
+// @changelog 修复餐馆与合同接受按钮在英文/简中/繁中界面的文字匹配；增加现任高管详情与交易所私信快捷入口；领域数据每分钟自动检查更新；增加排错数据导出。
