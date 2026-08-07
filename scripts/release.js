@@ -121,10 +121,23 @@ function addChangelogEntry(changelogText, version, changelog) {
   if (markerIndex === -1) throw new Error('Could not find the [未发布] section in CHANGELOG.md.');
 
   const nextSectionIndex = changelogText.indexOf('\n## ', markerIndex + marker.length);
-  const insertionIndex = nextSectionIndex === -1 ? changelogText.length : nextSectionIndex;
+  const sectionEnd = nextSectionIndex === -1 ? changelogText.length : nextSectionIndex;
+  const unreleasedSection = changelogText.slice(markerIndex, sectionEnd);
+
+  const bulletRegex = /^\s*-\s+(.+)$/gm;
+  const unreleasedBullets = [];
+  let bulletMatch;
+  while ((bulletMatch = bulletRegex.exec(unreleasedSection)) !== null) {
+    unreleasedBullets.push(bulletMatch[1].trim());
+  }
+
   const date = new Date().toISOString().slice(0, 10);
-  const entry = `\n\n## [${version}] - ${date}\n\n- ${changelog}`;
-  return `${changelogText.slice(0, insertionIndex)}${entry}${changelogText.slice(insertionIndex)}`;
+  const entryLines = [`## [${version}] - ${date}`, '', `- ${changelog}`];
+  for (const item of unreleasedBullets) entryLines.push(`- ${item}`);
+  const entry = `\n\n${entryLines.join('\n')}`;
+  const emptyUnreleased = '## [未发布]\n\n### 已变更\n\n';
+
+  return `${changelogText.slice(0, markerIndex)}${emptyUnreleased}${entry}${changelogText.slice(sectionEnd)}`;
 }
 
 function fail(message) {
