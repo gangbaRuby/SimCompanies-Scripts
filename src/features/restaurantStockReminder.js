@@ -67,7 +67,8 @@ const RestaurantStockReminder = (function () {
 
     function getRestaurantDetailAnchor() {
         const labels = Array.from(document.querySelectorAll('label'));
-        return labels.find(label => label.textContent?.trim() === '餐馆营业中') || null;
+        const openTexts = ['Restaurant is open', '餐馆营业中', '餐廳營業中'];
+        return labels.find(label => openTexts.includes(label.textContent?.trim())) || null;
     }
 
     function isRestaurantPage() {
