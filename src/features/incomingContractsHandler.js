@@ -21,6 +21,12 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
     const incomingContractsHandler = (function () {
         let cardIdCounter = 0;
         const pendingCards = new Map(); // cardId -> DOM element
+        const ACCEPT_CONTRACT_SELECTOR = [
+            'a[aria-label="接受合同"]',
+            'a[aria-label="Sign contract"]',
+            'a[aria-label="接受合約"]',
+            'a.css-14hcbmv'
+        ].join(', ');
         let processDebounceTimer = null; // 防抖计时器
         let activeObserver = null;       // 当前活跃的 MutationObserver
         let checkPageTimer = null;       // 页面轮询计时器（SAP 离开检测）
@@ -510,7 +516,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     if (card.__contractSignature === currentSignature) {
                         // 检查 UI 是否丢失 (React 可能会重绘卡片内部并抹除我们注入的 DOM)
                         const hasProfitUI = card.__profitDisplayEl && document.body.contains(card.__profitDisplayEl);
-                        const acceptBtn = card.querySelector('a[aria-label="接受合同"], a.css-14hcbmv');
+                        const acceptBtn = card.querySelector(ACCEPT_CONTRACT_SELECTOR);
                         const lostInterceptor = card.__wasHighPrice && acceptBtn && !acceptBtn.__hasHighPriceInterceptor;
 
                         if (hasProfitUI && !lostInterceptor) {
@@ -522,7 +528,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                         if (oldEl && oldEl.parentNode) oldEl.remove();
                         card.style.border = "";
                         card.style.borderRadius = "";
-                        const acceptBtn = card.querySelector('a[aria-label="接受合同"], a.css-14hcbmv');
+                        const acceptBtn = card.querySelector(ACCEPT_CONTRACT_SELECTOR);
                         if (acceptBtn) delete acceptBtn.__hasHighPriceInterceptor;
                     }
                     
@@ -1452,7 +1458,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
         function checkAndApplyDoubleConfirm(card) {
             const isHigh = isContractHighPrice(card);
             card.__wasHighPrice = isHigh;
-            const acceptBtn = card.querySelector('a[aria-label="接受合同"], a.css-14hcbmv');
+            const acceptBtn = card.querySelector(ACCEPT_CONTRACT_SELECTOR);
 
             if (isHigh) {
                 // 卡片边框变红以示警告
@@ -1481,7 +1487,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                             acceptBtn.dataset.confirmed = 'true';
 
                             const span = acceptBtn.querySelector('span');
-                            acceptBtn.__originalText = span ? span.textContent : "接受";
+                            acceptBtn.__originalText = span ? span.textContent : (acceptBtn.textContent || '接受');
                             if (span) span.textContent = acceptBtn.__originalText + "?";
 
                             acceptBtn.__originalBg = acceptBtn.style.backgroundColor;
