@@ -12,6 +12,7 @@ import './features/incomingContractsHandler.js';
 import './features/marketInterceptor.js';
 import './features/warehouseRetailProfit.js';
 import './features/chatAccessibility.js';
+import './features/chatEmojiPicker.js';
 import './features/executiveBoardroom.js';
 import { Network } from './core/network.js';
 import { state } from './core/state.js';
@@ -650,6 +651,9 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
 
                     localStorage.setItem(configKey, JSON.stringify(config));
                     updateUI(); // 保存后立即同步 UI
+                    if (typeof window.scChatEmojiPickerRefresh === 'function') {
+                        window.scChatEmojiPickerRefresh();
+                    }
                 };
 
                 // 初始状态下手动更新一次文字，避免显示空白
@@ -883,6 +887,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
                 { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
                 { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true, heightInput: true },
+                { type: 'toggle', key: 'chatEmojiPicker', label: '聊天表情选择器', defaultEnabled: true },
             ];
             const ITEMS_PER_PAGE = 5;
             let currentPage = 0;
