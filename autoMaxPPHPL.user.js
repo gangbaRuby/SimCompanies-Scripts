@@ -785,7 +785,7 @@
   })();
 
   // src/features/paQuestAnswers.js
-  var PAQuestAnswers = function() {
+  var PAQuestAnswers = (function() {
     const PA_DATA_KEY = "SC_PA_Quests_Cache";
     const PA_DATA_URL = "https://sc.22-7.top/scripts/PA-Quests.json";
     const CACHE_TTL = 36e5;
@@ -1232,7 +1232,7 @@
     }).observe(document, { subtree: true, childList: true });
     setTimeout(init2, 500);
     return { init: init2 };
-  }();
+  })();
 
   // src/features/pageObserver.js
   var ResourceMarketHandler = { init: (...args) => window.SC_Modules?.ResourceMarketHandler?.init(...args) };
@@ -1363,7 +1363,7 @@
   })();
 
   // src/features/landscapeIdleBuildingHighlight.js
-  var LandscapeIdleBuildingHighlight2 = /* @__PURE__ */ function() {
+  var LandscapeIdleBuildingHighlight2 = /* @__PURE__ */ (function() {
     const EXCLUDED_KINDS = ["n", "y", "3", "4", "5"];
     function getBuildingsData() {
       const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
@@ -1446,12 +1446,12 @@
       setTimeout(processBuildings, 500);
     }
     return { init: init2 };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.LandscapeIdleBuildingHighlight = LandscapeIdleBuildingHighlight2;
 
   // src/features/restaurantStockReminder.js
-  var RestaurantStockReminder2 = function() {
+  var RestaurantStockReminder2 = (function() {
     const STORAGE_KEY = "script_restaurant_stock_restaurant_count";
     registerExportInfo({
       name: "\u9910\u9986\u5907\u8D27\u63D0\u9192\u8BBE\u7F6E",
@@ -1819,7 +1819,7 @@
       state2.handleDragEnd = null;
     }
     return { init: init2 };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.RestaurantStockReminder = RestaurantStockReminder2;
 
@@ -1933,7 +1933,7 @@
   }
 
   // src/features/formerExecutivesModule.js
-  var FormerExecutivesModule2 = function() {
+  var FormerExecutivesModule2 = (function() {
     const FORMER_EXEC_API_REGEX = /\/api\/v2\/companies\/(\d+)\/former-executives\//;
     const EXEC_DETAIL_API = (id) => `/api/v4/executives/${id}/`;
     const getScopedKey2 = (k) => {
@@ -2229,7 +2229,7 @@
       observer.observe(document.body, { childList: true, subtree: true });
     }
     return { forceInject: injectMoreInfoButtons };
-  }();
+  })();
   registerExportInfo({
     name: "\u524D\u4EFB\u9AD8\u7BA1\u8BB0\u5F55",
     scope: "realm",
@@ -2239,7 +2239,7 @@
   window.SC_Modules.FormerExecutivesModule = FormerExecutivesModule2;
 
   // src/features/executiveTrainingModule.js
-  var ExecutiveTrainingModule2 = function() {
+  var ExecutiveTrainingModule2 = (function() {
     let panelRelocateTimer = null;
     const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
     const NOTIFICATIONS_KEYWORD = "/game-notifications/";
@@ -2596,7 +2596,7 @@
         }
       }
     };
-  }();
+  })();
   registerExportInfo({
     name: "\u9AD8\u7BA1\u57F9\u8BAD\u4E0E\u73B0\u4EFB\u9AD8\u7BA1\u8BB0\u5F55",
     scope: "realm",
@@ -2616,7 +2616,7 @@
     scope: "realm",
     match: (realmId) => realmId === null ? /(?!)/ : new RegExp(`^SC_OutgoingVWAP_Cache_${realmId}_\\d+_\\d+$`)
   });
-  var outgoingContractMPHandler2 = function() {
+  var outgoingContractMPHandler2 = (function() {
     const STORAGE_KEY = "SC_OutgoingMP_Presets";
     const USE_INPUT_KEY = "SC_OutgoingMP_UseInput";
     const DEFAULT_PRESETS = "MP-4%";
@@ -3618,7 +3618,7 @@
       }, 500);
     }
     return { init: init2 };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.outgoingContractMPHandler = outgoingContractMPHandler2;
 
@@ -3736,7 +3736,7 @@
   })();
 
   // src/features/executiveBoardroom.js
-  var executiveCustomButton = /* @__PURE__ */ function() {
+  var executiveCustomButton = /* @__PURE__ */ (function() {
     let boardroomState = {
       "o": null,
       "f": null,
@@ -4489,8 +4489,8 @@
       calculateResults();
     }
     return { show };
-  }();
-  var ExecutiveCustomButtonModule = function() {
+  })();
+  var ExecutiveCustomButtonModule = (function() {
     function injectCustomButton() {
       const container = document.querySelector(".css-1wne25x");
       if (!container) return;
@@ -4523,7 +4523,7 @@
       init2();
     }
     return { forceInject: injectCustomButton };
-  }();
+  })();
   registerExportInfo({
     name: "\u81EA\u5B9A\u4E49\u9AD8\u7BA1\u6570\u636E",
     scope: "realm",
@@ -4538,7 +4538,7 @@
   });
   var { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
   var MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" style="display:block;width:14px;height:14px;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="envelope" class="css-0" role="img" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48H48zM0 176V384c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V176L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"></path></svg>`;
-  var ResourceMarketHandler2 = function() {
+  var ResourceMarketHandler2 = (function() {
     let currentResourceId = null;
     let currentRealmId = null;
     let rowIdCounter = 0;
@@ -5666,7 +5666,7 @@
         }
       }
     };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.ResourceMarketHandler = ResourceMarketHandler2;
 
@@ -5893,7 +5893,7 @@
     keys: ["SC_Contract_HighPrice_Settings"]
   });
   var { SCXXCS: SCXXCS2, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL2, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT2 } = state;
-  var incomingContractsHandler2 = function() {
+  var incomingContractsHandler2 = (function() {
     let cardIdCounter = 0;
     const pendingCards = /* @__PURE__ */ new Map();
     const ACCEPT_CONTRACT_SELECTOR = [
@@ -7385,7 +7385,7 @@
       };
     }
     return { init: init2 };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.incomingContractsHandler = incomingContractsHandler2;
 
@@ -7635,7 +7635,7 @@
 
   // src/features/warehouseRetailProfit.js
   var { SCXXCS: SCXXCS4, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL4, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT4 } = state;
-  var WarehouseRetailProfit = function() {
+  var WarehouseRetailProfit = (function() {
     const workerCode = `
         self.onmessage = function(e) {
         const { items, shared, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
@@ -8048,10 +8048,10 @@
     }).observe(document, { subtree: true, childList: true });
     setTimeout(init2, 600);
     return { init: init2 };
-  }();
+  })();
 
   // src/features/chatAccessibility.js
-  var ChatAccessibility = function() {
+  var ChatAccessibility = (function() {
     const EMOJI_TEXT = {
       "\u{1F7E2}": "\u7EFF",
       "\u{1F534}": "\u7EA2",
@@ -8208,7 +8208,7 @@
     }).observe(document, { subtree: true, childList: true });
     setTimeout(init2, 1e3);
     return { init: init2, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
-  }();
+  })();
 
   // src/features/chatEmojiPicker.js
   registerExportInfo({
@@ -12847,4 +12847,4 @@
   })();
 })();
 
-// @changelog 修复与旧建筑皮肤脚本同时启用时，更新提示按钮绑定冲突、忽略记录互相影响的问题。
+// @changelog 新增聊天表情选择器：运行时读取游戏当前前端包，自动展示最近使用、资源、建筑、彩蛋、领域、特殊和 Unicode 其它表情，点击直接插入；面板顶部显示测试提示。修复与旧建筑皮肤脚本同时启用时，更新提示按钮绑定冲突、忽略记录互相影响的问题。
