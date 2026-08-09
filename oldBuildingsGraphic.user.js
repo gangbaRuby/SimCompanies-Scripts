@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      2.6.0
+// @version      3.0.0
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
 // @match        *://www.simcompanies.com/*
+// @run-at       document-start
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=simcompanies.com
 // @updateURL    https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js
 // @downloadURL  https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js
@@ -44,6 +45,160 @@
     // 声明为 let，允许被外部配置覆盖
     let PATH_MAP = {}; // 由远程配置填充
     let UI_MANIFEST = {}; // 由远程配置填充
+    let HQ_CONFIG = {}; // 由远程配置中的 hqSettings 填充
+
+    // ==========================================
+    // HQ 主题管理：将配置中的 HQ 数据注入管理面板
+    // ==========================================
+    const HQManager = {
+        injectManifest() {
+            if (Object.keys(this.getHqRows()).length > 0) return;
+            if (!HQ_CONFIG || !Array.isArray(HQ_CONFIG.themes) || HQ_CONFIG.themes.length === 0) {
+                delete UI_MANIFEST['HQ 总部'];
+                return;
+            }
+            const rows = {};
+            const presetList = HQ_CONFIG.themes.map(theme => ({
+                name: theme.name,
+                url: theme.url || `${CONSTANTS.CDN_BASE}${theme.path.replace(/^images\//, '')}`,
+                legacy: !!theme.legacy
+            }));
+            for (const theme of HQ_CONFIG.themes) {
+                if (theme.legacy) continue;
+                const key = theme.key || theme.path.split('/').pop();
+                rows[key] = { name: theme.name, presets: presetList.slice() };
+                PATH_MAP[key] = theme.path;
+            }
+            UI_MANIFEST['HQ 总部'] = { 'HQ 皮肤': { 'HQ 主题': rows } };
+            console.log(`[SC-Skin] HQ 配置已注入，共 ${HQ_CONFIG.themes.length} 个主题`);
+        },
+
+        getHqRows() {
+            return (UI_MANIFEST && UI_MANIFEST['HQ 总部']
+                && UI_MANIFEST['HQ 总部']['HQ 皮肤']
+                && UI_MANIFEST['HQ 总部']['HQ 皮肤']['HQ 主题']) || {};
+        },
+
+        getSourceThemes() {
+            const rows = this.getHqRows();
+            return Object.entries(rows).map(([key, meta]) => ({
+                key,
+                name: meta.name,
+                path: PATH_MAP[key] || `images/${key}`,
+                presets: meta.presets || []
+            }));
+        },
+
+        getTargetThemes() {
+            const map = new Map();
+            for (const source of this.getSourceThemes()) {
+                for (const preset of source.presets) {
+                    const path = this.toLogicalPath(preset.url);
+                    if (path && !map.has(path)) {
+                        map.set(path, {
+                            name: preset.name,
+                            url: preset.url,
+                            path,
+                            legacy: !!preset.legacy
+                        });
+                    }
+                }
+            }
+            return [...map.values()];
+        },
+
+        isHqKey(key) {
+            return this.getSourceThemes().some(theme => theme.key === key);
+        },
+
+        applyHqChange() {
+            clearTimeout(this._reloadTimer);
+            this._reloadTimer = setTimeout(() => location.reload(), 300);
+        },
+
+        getFallbackTierKey(level) {
+            if (typeof level !== 'number' || !isFinite(level)) return null;
+            const levels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 18, 21, 25, 29, 34, 39, 45, 52, 60];
+            let index = 0;
+            for (let i = 0; i < levels.length; i++) {
+                if (level >= levels[i]) index = i;
+                else break;
+            }
+            return `hq_tier${String(index + 1).padStart(2, '0')}.png`;
+        },
+
+        isLegacyTargetPath(targetPath) {
+            if (!targetPath) return false;
+            return this.getTargetThemes().some(theme => theme.legacy && theme.path === targetPath);
+        },
+
+        toLogicalPath(targetUrl) {
+            if (!targetUrl) return null;
+            let path = targetUrl.split('?')[0];
+            if (path.startsWith(CONSTANTS.CDN_BASE)) return 'images/' + path.slice(CONSTANTS.CDN_BASE.length);
+            if (path.startsWith(CONSTANTS.STATIC_ROOT)) return path.slice(CONSTANTS.STATIC_ROOT.length);
+            return null;
+        },
+
+        getReplacementForHqImage(hqImage, level) {
+            const sources = this.getSourceThemes();
+            const getEnabledTarget = (key) => {
+                const cfg = Settings.data[key];
+                if (!cfg || !cfg.enabled || !cfg.target) return null;
+                const target = this.toLogicalPath(cfg.target);
+                return target && !this.isLegacyTargetPath(target) ? target : null;
+            };
+
+            let fileName = null;
+            let fallbackKey = null;
+            if (typeof hqImage === 'string' && hqImage) {
+                fileName = hqImage.split('/').pop().toLowerCase().replace(/\.(png|svg)$/, '');
+            } else if (typeof hqImage === 'string' && hqImage === '') {
+                fallbackKey = this.getFallbackTierKey(level);
+                if (!fallbackKey) {
+                    for (const theme of sources) {
+                        const target = getEnabledTarget(theme.key);
+                        if (target) return target;
+                    }
+                    return null;
+                }
+                fileName = fallbackKey.toLowerCase().replace(/\.png$/, '');
+            } else {
+                return null;
+            }
+            for (const theme of sources) {
+                const baseKey = theme.key.toLowerCase().replace(/\.(png|svg)$/, '');
+                if (fileName === baseKey) {
+                    const target = getEnabledTarget(theme.key);
+                    if (target) return target;
+                }
+            }
+            if (fallbackKey) {
+                for (const theme of sources) {
+                    const target = getEnabledTarget(theme.key);
+                    if (target) return target;
+                }
+            }
+            return null;
+        },
+
+        getImageFallback(originalUrl) {
+            if (typeof originalUrl !== 'string' || !originalUrl) return null;
+            const fileName = originalUrl.split('/').pop().split('?')[0].toLowerCase()
+                .replace(/\.(png|svg)$/, '')
+                .replace(/\.[a-f0-9]+$/, '');
+            const sources = this.getSourceThemes();
+            for (const theme of sources) {
+                const cfg = Settings.data[theme.key];
+                if (!cfg || !cfg.enabled || !cfg.target) continue;
+                const targetPath = this.toLogicalPath(cfg.target);
+                if (!targetPath) continue;
+                const targetFile = targetPath.split('/').pop().toLowerCase().replace(/\.(png|svg)$/, '');
+                if (targetFile === fileName) return cfg.target;
+            }
+            return null;
+        }
+    };
 
     // ==========================================
     // 新增：远程配置与数据管理器
@@ -61,6 +216,8 @@
                     if (parsed.uiManifest && parsed.pathMap) {
                         UI_MANIFEST = parsed.uiManifest;
                         PATH_MAP = parsed.pathMap;
+                        HQ_CONFIG = parsed.hqSettings || {};
+                        HQManager.injectManifest();
                         this.currentVersion = parsed.version || 0;
                         console.log(`[SC-Skin] 已加载本地配置缓存，当前数据版本: ${this.currentVersion}`);
                     }
@@ -94,6 +251,8 @@
                     // 动态更新内存中的数据
                     UI_MANIFEST = remoteData.uiManifest;
                     PATH_MAP = remoteData.pathMap;
+                    HQ_CONFIG = remoteData.hqSettings || {};
+                    HQManager.injectManifest();
                     this.currentVersion = remoteVersion;
 
                     // ==========================================
@@ -126,7 +285,6 @@
                     }
                     // ==========================================
 
-                    this.showUpdateNotification();
                 }
             } catch (err) {
                 console.error('[SC-Skin] 后台更新数据失败:', err);
@@ -142,6 +300,7 @@
         data: {}, // 存储用户的自定义设置 { "power_plant_tier01.png": { enabled: true, target: "url" } }
         allKeys: [], // 存储所有在 UI_MANIFEST 中定义的图片 key
         _keyMap: null, // 缓存：baseKey.toLowerCase() -> key
+        _presetMap: null, // 缓存：预设文件名 -> key，用于匹配游戏当前已带季节后缀的图片
 
         /** 从 localStorage 加载用户设置（不刷新 key 列表） */
         load() {
@@ -161,12 +320,27 @@
         /** 从 UI_MANIFEST 重新提取所有图片 key */
         refreshKeys() {
             this.allKeys = [];
+            this._presetMap = new Map();
+            const normalizeBase = (filename) => filename.toLowerCase().replace(/\.(png|svg)$/, '').replace(/\.[a-f0-9]+$/, '');
             const traverse = (obj) => {
                 for (let k in obj) {
-                    if (k.endsWith('.png')) {
+                    const value = obj[k];
+                    if (k.endsWith('.png') || k.endsWith('.svg')) {
                         this.allKeys.push(k);
-                    } else if (typeof obj[k] === 'object') {
-                        traverse(obj[k]);
+                    }
+                    if (value && typeof value === 'object') {
+                        if (Array.isArray(value.presets)) {
+                            for (const preset of value.presets) {
+                                if (preset && preset.url) {
+                                    const presetBase = normalizeBase(preset.url.split('/').pop().split('?')[0]);
+                                    if (presetBase && !this._presetMap.has(presetBase)) {
+                                        this._presetMap.set(presetBase, k);
+                                    }
+                                }
+                            }
+                        } else {
+                            traverse(value);
+                        }
                     }
                 }
             };
@@ -174,7 +348,7 @@
             // 重建快速查找 Map
             this._keyMap = new Map();
             for (const key of this.allKeys) {
-                const baseKey = key.replace('.png', '').toLowerCase();
+                const baseKey = key.replace(/\.(png|svg)$/, '').toLowerCase();
                 this._keyMap.set(baseKey, key);
             }
         },
@@ -222,7 +396,7 @@
         getReplacementUrl(originalUrl) {
             if (!originalUrl) return null;
             const fullFileName = originalUrl.split('/').pop().split('?')[0].toLowerCase();
-            const fileNameNoExt = fullFileName.replace('.png', '');
+            const fileNameNoExt = fullFileName.replace(/\.(png|svg)$/, '');
 
             // 1. 精确匹配
             const exactKey = this._keyMap && this._keyMap.get(fileNameNoExt);
@@ -233,9 +407,19 @@
 
             // 2. 模糊匹配（应对文件名有额外后缀如 -dmg 的情况）
             for (const key of this.allKeys) {
-                const baseKey = key.replace('.png', '').toLowerCase();
+                const baseKey = key.replace(/\.(png|svg)$/, '').toLowerCase();
                 if (fullFileName.includes(baseKey)) {
                     const cfg = this.data[key];
+                    if (cfg && cfg.enabled && cfg.target) return cfg.target;
+                }
+            }
+
+            // 3. 预设匹配：游戏当前图片可能已带季节后缀（如 concrete-summer-0000）
+            if (this._presetMap) {
+                const presetBase = fullFileName.replace(/\.(png|svg)$/, '').replace(/\.[a-f0-9]+$/, '');
+                const presetKey = this._presetMap.get(presetBase);
+                if (presetKey) {
+                    const cfg = this.data[presetKey];
                     if (cfg && cfg.enabled && cfg.target) return cfg.target;
                 }
             }
@@ -302,108 +486,247 @@
 
 
     // ==========================================
-    // 4. 核心逻辑：DOM 处理器 (来自 oldBuildingsGraphic)
+    // 4. 源头接管：在图片 URL 赋值时直接替换
     // ==========================================
-    const DOMProcessor = {
-        originalImageMap: new Map(), // 新增：存储 imageName -> fullOriginalUrl 的映射
+    const UrlReplacer = {
+        installed: false,
+        imageStates: new WeakMap(), // img -> { original, replacement }
+        backgroundStates: new WeakMap(), // CSSStyleDeclaration -> { original, mapped }
+        stylesheetRuleStates: new WeakMap(), // CSSRule -> { originalCssText, mappedCssText }
 
-        processImg(img) {
-            if (!img.src) return;
+        mapUrl(url, element) {
+            if (typeof url !== 'string' || !url || url.startsWith('data:') || url.startsWith('blob:')) return url;
 
-            // 1. 保护机制：绝对不处理设置面板内的 UI 图片
-            if (img.classList.contains('scobg-ui-img') || img.closest('#scobg-panel')) return;
+            if (element) {
+                try {
+                    if (element.closest('#scobg-panel') || (element.classList && element.classList.contains('scobg-ui-img'))) return url;
+                } catch (e) { /* 忽略非 Element 对象 */ }
 
-            // 2. 记录原始身世 (只在第一次遇到时记录)
-            // 如果没有记录过原始地址，说明这是第一次扫描到它
-            if (!img.dataset.scOriginalSrc) {
-                img.dataset.scOriginalSrc = img.src;
+                const state = this.imageStates.get(element);
+                if (state && state.replacement === url) return url;
+
+                const replacement = Settings.getReplacementUrl(url) || HQManager.getImageFallback(url);
+                if (replacement && replacement !== url) {
+                    this.imageStates.set(element, { original: url, replacement });
+                    return replacement;
+                }
+                this.imageStates.delete(element);
+                return url;
             }
 
-            // 3. 获取“真名” (始终基于原始 URL 判断，而不是基于当前可能已经被改过的 URL)
-            const originalSrc = img.dataset.scOriginalSrc;
-
-            // 4. 去配置里查：这个原始 URL 对应的配置是什么？
-            // 注意：这里我们需要稍微修改 Settings.getReplacementUrl 让他接受 originalSrc
-            const newUrl = Settings.getReplacementUrl(originalSrc);
-
-            // 5. 执行替换或还原逻辑
-            if (newUrl) {
-                // 情况A: 用户启用了替换，且有目标图
-                // 只有当当前 src 不等于新 url 时才赋值（避免重复刷新闪烁）
-                if (img.src !== newUrl) {
-                    img.src = newUrl;
-                    img.dataset.scReplaced = 'true'; // 标记已被替换
-                }
-            } else {
-                // 情况B: 用户没启用，或者禁用了
-                // 如果之前被替换过 (scReplaced 为 true)，现在需要还原
-                if (img.dataset.scReplaced === 'true') {
-                    img.src = originalSrc; // 还原回原始地址
-                    img.dataset.scReplaced = 'false'; // 标记未被替换
-                }
-            }
+            const replacement = Settings.getReplacementUrl(url) || HQManager.getImageFallback(url);
+            return replacement && replacement !== url ? replacement : url;
         },
 
-        processBgString(originalBgStr) {
-            if (!originalBgStr || originalBgStr === 'none') return null;
-
-            // 关键：剥离可能存在的 !important，否则 join 后会变成 url(...) !important, url(...)
-            const cleanBg = originalBgStr.replace(/\s*!important/g, '').trim();
-            const parts = cleanBg.split(/,(?=(?:(?:[^"']*["']){2})*[^"']*$)/).map(s => s.trim());
-
-            let hasChanged = false;
-            const newParts = parts.map(part => {
-                const urlMatch = part.match(/url\(['"]?([^'"]+)['"]?\)/);
-                if (urlMatch && urlMatch[1]) {
-                    const oldUrl = urlMatch[1];
-                    const newUrl = Settings.getReplacementUrl(oldUrl);
-                    if (newUrl) {
-                        hasChanged = true;
-                        return `url("${newUrl}")`;
-                    }
-                }
-                return part;
+        mapCss(value) {
+            if (typeof value !== 'string' || !value) return value;
+            const urlPattern = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+            return value.replace(urlPattern, (whole, quote, url) => {
+                if (url.startsWith('data:') || url.startsWith('blob:')) return whole;
+                const replacement = Settings.getReplacementUrl(url);
+                return replacement ? `url("${replacement}")` : whole;
             });
-
-            return hasChanged ? newParts.join(', ') : null;
         },
 
-        processElementStyle(el) {
-            const style = el.style;
-            if (!style || !style.backgroundImage) return;
-
-            // 使用 dataset 记录最初的状态
-            if (!el.dataset.scOriginalBg) {
-                el.dataset.scOriginalBg = style.backgroundImage;
+        mapBackground(value, declaration) {
+            const state = declaration ? this.backgroundStates.get(declaration) : null;
+            if (state && state.mapped === value) return value;
+            const mapped = this.mapCss(value);
+            if (mapped !== value && declaration) {
+                this.backgroundStates.set(declaration, { original: value, mapped });
+            } else if (declaration && state) {
+                this.backgroundStates.delete(declaration);
             }
+            return mapped;
+        },
 
-            const newBg = this.processBgString(el.dataset.scOriginalBg);
-            if (newBg) {
-                // 统一添加 !important 确保覆盖游戏原生样式
-                style.setProperty('background-image', newBg, 'important');
-            } else if (el.dataset.scOriginalBg) {
-                // 如果没有匹配到替换，且当前已经被改动过，则还原
-                style.setProperty('background-image', el.dataset.scOriginalBg);
+        applyToElement(img) {
+            if (!img || !img.src) return;
+            const state = this.imageStates.get(img);
+            if (state && state.replacement === img.src) {
+                const replacement = Settings.getReplacementUrl(state.original);
+                if (replacement && replacement !== state.original && replacement !== state.replacement) {
+                    img.src = replacement;
+                    this.imageStates.set(img, { original: state.original, replacement });
+                } else if (!replacement) {
+                    img.src = state.original;
+                    this.imageStates.delete(img);
+                }
+                return;
+            }
+            const mapped = this.mapUrl(img.src, img);
+            if (mapped !== img.src) img.src = mapped;
+        },
+
+        applyToElementStyle(el) {
+            if (!el || !el.style) return;
+            const declaration = el.style;
+            const current = declaration.backgroundImage;
+            if (!current) return;
+            const state = this.backgroundStates.get(declaration);
+            if (state && state.mapped === current) {
+                const mapped = this.mapCss(state.original);
+                if (mapped !== state.original && mapped !== state.mapped) {
+                    declaration.backgroundImage = mapped;
+                    this.backgroundStates.set(declaration, { original: state.original, mapped });
+                } else if (mapped === state.original) {
+                    declaration.backgroundImage = state.original;
+                    this.backgroundStates.delete(declaration);
+                }
+                return;
+            }
+            const mapped = this.mapCss(current);
+            if (mapped !== current) {
+                declaration.backgroundImage = mapped;
+                if (!this.backgroundStates.has(declaration)) {
+                    this.backgroundStates.set(declaration, { original: current, mapped });
+                }
             }
         },
 
-        processStyleSheets() {
+        applyToStylesheets() {
             for (const sheet of document.styleSheets) {
                 try {
-                    if (sheet.href && !sheet.href.startsWith(location.origin)) continue;
                     const rules = sheet.cssRules || sheet.rules;
                     if (!rules) continue;
-
-                    for (const rule of rules) {
-                        if (rule.style && rule.style.backgroundImage) {
-                            const newBg = this.processBgString(rule.style.backgroundImage);
-                            if (newBg) {
-                                rule.style.setProperty('background-image', newBg, 'important');
+                    for (let i = 0; i < rules.length; i++) {
+                        const rule = rules[i];
+                        if (!rule.style || !rule.style.backgroundImage) continue;
+                        const state = this.stylesheetRuleStates.get(rule);
+                        const originalText = state ? state.originalCssText : rule.cssText;
+                        const mappedText = this.mapCss(originalText);
+                        if (state) {
+                            if (mappedText !== state.originalCssText && mappedText !== state.mappedCssText) {
+                                if (this.replaceRule(sheet, i, mappedText)) {
+                                    this.stylesheetRuleStates.set(rules[i], { originalCssText: state.originalCssText, mappedCssText: mappedText });
+                                }
+                            } else if (mappedText === state.originalCssText && rule.cssText !== state.originalCssText) {
+                                if (this.replaceRule(sheet, i, state.originalCssText)) {
+                                    this.stylesheetRuleStates.delete(rules[i]);
+                                }
+                            }
+                        } else if (mappedText !== rule.cssText) {
+                            if (this.replaceRule(sheet, i, mappedText)) {
+                                this.stylesheetRuleStates.set(rules[i], { originalCssText: rule.cssText, mappedCssText: mappedText });
                             }
                         }
                     }
-                } catch (e) { /* 忽略跨域错误 */ }
+                } catch (e) { /* 忽略跨域样式表 */ }
             }
+        },
+
+        replaceRule(sheet, index, text) {
+            try {
+                sheet.deleteRule(index);
+                sheet.insertRule(text, index);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+
+        install() {
+            if (this.installed) return;
+            this.installed = true;
+            const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            if (W.__scSkinUrlReplacerInstalled) return;
+            try { W.__scSkinUrlReplacerInstalled = true; } catch (e) { /* 非关键 */ }
+            const self = this;
+
+            const patch = (label, apply) => {
+                try {
+                    apply();
+                } catch (e) {
+                    console.warn(`[SC-Skin] ${label} 安装失败`, e);
+                }
+            };
+
+            patch('img src 接管', () => {
+                const originalSetAttribute = W.Element.prototype.setAttribute;
+                W.Element.prototype.setAttribute = function (name, value) {
+                    if (name === 'src' && typeof value === 'string') {
+                        try {
+                            value = self.mapUrl(value, this);
+                        } catch (e) { /* 保持原值 */ }
+                    }
+                    return originalSetAttribute.call(this, name, value);
+                };
+
+                const srcDescriptor = Object.getOwnPropertyDescriptor(W.HTMLImageElement.prototype, 'src');
+                if (srcDescriptor && srcDescriptor.configurable) {
+                    Object.defineProperty(W.HTMLImageElement.prototype, 'src', {
+                        configurable: true,
+                        enumerable: srcDescriptor.enumerable,
+                        get() {
+                            return srcDescriptor.get.call(this);
+                        },
+                        set(value) {
+                            try {
+                                value = self.mapUrl(value, this);
+                            } catch (e) { /* 保持原值 */ }
+                            srcDescriptor.set.call(this, value);
+                        }
+                    });
+                }
+            });
+
+            patch('CSS 背景接管', () => {
+                const originalSetProperty = W.CSSStyleDeclaration.prototype.setProperty;
+                W.CSSStyleDeclaration.prototype.setProperty = function (propertyName, value, priority) {
+                    const lower = String(propertyName).toLowerCase();
+                    if ((lower === 'background-image' || lower === 'background') && typeof value === 'string') {
+                        try {
+                            value = self.mapBackground(value, this);
+                        } catch (e) { /* 保持原值 */ }
+                    }
+                    return originalSetProperty.call(this, propertyName, value, priority);
+                };
+
+                const bgDescriptor = Object.getOwnPropertyDescriptor(W.CSSStyleDeclaration.prototype, 'backgroundImage');
+                if (bgDescriptor && bgDescriptor.configurable) {
+                    Object.defineProperty(W.CSSStyleDeclaration.prototype, 'backgroundImage', {
+                        configurable: true,
+                        enumerable: bgDescriptor.enumerable,
+                        get() {
+                            return bgDescriptor.get.call(this);
+                        },
+                        set(value) {
+                            try {
+                                value = self.mapBackground(value, this);
+                            } catch (e) { /* 保持原值 */ }
+                            bgDescriptor.set.call(this, value);
+                        }
+                    });
+                }
+            });
+
+            patch('样式表规则接管', () => {
+                const originalInsertRule = W.CSSStyleSheet.prototype.insertRule;
+                W.CSSStyleSheet.prototype.insertRule = function (rule, index) {
+                    let originalText = typeof rule === 'string' ? rule : null;
+                    if (originalText) {
+                        try {
+                            const mappedText = self.mapCss(originalText);
+                            if (mappedText !== originalText) {
+                                rule = mappedText;
+                            }
+                        } catch (e) { /* 保持原规则 */ }
+                    }
+                    const result = originalInsertRule.call(this, rule, index);
+                    if (originalText && result !== undefined && result >= 0) {
+                        const inserted = this.cssRules && this.cssRules[result];
+                        if (inserted) {
+                            self.stylesheetRuleStates.set(inserted, {
+                                originalCssText: originalText,
+                                mappedCssText: rule
+                            });
+                        }
+                    }
+                    return result;
+                };
+            });
+
+            console.log('[SC-Skin] 图片 URL 源头接管已安装');
         }
     };
 
@@ -414,9 +737,16 @@
     const SCobgUIManager = {
         panel: null,
         overlay: null,
+        searchQuery: '',
+        showModifiedOnly: false,
+        showEnabledOnly: false,
+        currentSelection: null,
+        lastAppliedSet: null,
+        lastAppliedSetGroup: null,
 
         init() {
             if (document.getElementById('scobg-panel')) return;
+            HQManager.injectManifest();
             this.injectCSS();
             this.createPanel();
             this.registerTampermonkeyMenu();
@@ -445,7 +775,7 @@
         },
 
         showOverlay() {
-            if (window.innerWidth > 768) return; // 仅移动端显示遮罩
+            if (window.innerWidth > 640) return; // 仅移动端显示遮罩
             if (!this.overlay) {
                 this.overlay = document.createElement('div');
                 this.overlay.id = 'scobg-overlay';
@@ -553,20 +883,68 @@
                     border-radius: 12px; z-index: 100001; padding: 12px; 
                     width: 90vw; max-width: 320px; box-sizing: border-box;
                     display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; 
+                    max-height: 75vh; overflow-y: auto;
                     box-shadow: 0 15px 50px rgba(0,0,0,0.7);
                 }
                 .scobg-menu-item { text-align: center; cursor: pointer; }
                 .scobg-menu-item img { width: 100%; height: 50px; object-fit: contain; background: #000; border-radius: 4px; }
                 .scobg-menu-item span { font-size: 11px; color: #bbb; display: block; margin-top: 5px; }
-                .scobg-menu-foot { grid-column: span 2; }
+                .scobg-menu-foot { grid-column: span 2; position: sticky; bottom: -12px; background: #2c323d; z-index: 1; padding: 10px 0 0; }
     
                 .scobg-btn-blue { background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
                 .scobg-btn-sm { padding: 5px 10px; font-size: 12px; }
+
+                /* 搜索与筛选工具栏 */
+                .scobg-toolbar {
+                    position: sticky; top: 0; z-index: 5;
+                    padding: 10px; border-bottom: 1px solid #2a2f3a;
+                    background: #10131a; flex-shrink: 0;
+                }
+                .scobg-search {
+                    width: 100%; padding: 8px 10px; border-radius: 6px;
+                    border: 1px solid #444; background: #0c0f14; color: #fff;
+                    font-size: 13px; outline: none;
+                }
+                .scobg-search::placeholder { color: #666; }
+                .scobg-filters { display: flex; gap: 12px; margin-top: 8px; font-size: 12px; color: #aaa; }
+                .scobg-filter { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+                .scobg-filter input { width: 16px; height: 16px; accent-color: #2196f3; }
+                .scobg-count { margin-top: 8px; font-size: 11px; color: #777; }
+                .scobg-tree-empty { padding: 16px 12px; color: #666; font-size: 12px; text-align: center; }
+
+                /* 已修改/启用标记 */
+                .scobg-badge {
+                    display: inline-block; margin-left: 8px; padding: 2px 6px;
+                    border-radius: 4px; font-size: 10px; font-weight: bold; vertical-align: middle;
+                }
+                .scobg-badge-modified { background: #e67e22; color: #fff; }
+                .scobg-badge-enabled { background: #2ecc71; color: #fff; }
+                .scobg-reset {
+                    margin-top: 8px; padding: 3px 8px; border: 1px solid #555;
+                    background: transparent; color: #aaa; border-radius: 4px;
+                    font-size: 11px; cursor: pointer;
+                }
+                .scobg-reset:hover { color: #fff; border-color: #e67e22; }
+
+                /* 整套替换 */
+                .scobg-setbar {
+                    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+                    padding: 10px 15px; border-bottom: 1px solid #2a2f3a;
+                    background: rgba(33,150,243,0.06);
+                }
+                .scobg-setbar-label { font-size: 12px; color: #999; }
+                .scobg-set-btn {
+                    padding: 5px 10px; border-radius: 14px; border: 1px solid #2196f3;
+                    background: rgba(33,150,243,0.12); color: #6db8ff;
+                    font-size: 12px; cursor: pointer;
+                }
+                .scobg-set-btn:hover { background: rgba(33,150,243,0.25); }
+                .scobg-set-note { font-size: 11px; color: #2ecc71; }
     
                 /* ================================ */
-                /* 📱 平板端 (≤768px)                */
+                /* 📱 手机端 (≤640px)                */
                 /* ================================ */
-                @media screen and (max-width: 768px) {
+                @media screen and (max-width: 640px) {
                     #scobg-panel { 
                         width: 96vw; height: 92vh; max-height: 92vh; 
                         top: 50%; left: 50%; transform: translate(-50%, -50%); 
@@ -595,13 +973,13 @@
     
                     .scobg-body { flex-direction: column; }
                     
-                    /* 侧边栏：30% 让更多空间给内容 */
+                    /* 侧边栏：搜索和分类各占一定空间 */
                     .scobg-sidebar { 
-                        width: 100%; min-height: 100px; height: 30%; 
+                        width: 100%; min-height: 130px; height: 38%;
                         border-right: none; border-bottom: 1px solid #2a2f3a; 
                         overflow-y: auto; 
                     }
-                    .scobg-content { height: 70%; overflow-y: auto; }
+                    .scobg-content { height: 62%; overflow-y: auto; }
     
                     /* 树形菜单：增大触控区域 */
                     .scobg-tree-item { 
@@ -664,9 +1042,9 @@
                         display: inline-flex !important; 
                     }
     
-                    /* 侧边栏占 30% */
-                    .scobg-sidebar { height: 30%; min-height: 80px; }
-                    .scobg-content { height: 70%; }
+                    /* 侧边栏占比提高，方便搜索和筛选 */
+                    .scobg-sidebar { height: 42%; min-height: 150px; }
+                    .scobg-content { height: 58%; }
     
                     /* 树形菜单：更紧凑 */
                     .scobg-tree-item { 
@@ -715,6 +1093,36 @@
                         font-size: 10px !important; 
                     }
                 }
+
+                /* ================================ */
+                /* 📱 极限小屏 (≤360px)              */
+                /* ================================ */
+                @media screen and (max-width: 360px) {
+                    .scobg-header { padding: 4px 6px; gap: 2px; min-height: 38px; }
+                    .scobg-header-title { font-size: 11px; }
+                    .scobg-header-actions { gap: 2px; }
+                    .scobg-header-actions .scobg-btn-blue {
+                        padding: 3px 5px; font-size: 10px; min-height: 26px;
+                    }
+                    .scobg-header-actions #scobg-close {
+                        font-size: 18px; padding: 3px 5px; min-height: 26px;
+                    }
+                    .scobg-toolbar { padding: 8px; }
+                    .scobg-search { padding: 7px 8px; font-size: 12px; }
+                    .scobg-filters { gap: 8px; font-size: 11px; }
+                    .scobg-sidebar { height: 48%; min-height: 180px; }
+                    .scobg-content { height: 52%; }
+                    .scobg-tree-item { padding: 8px 8px; font-size: 11px; min-height: 34px; }
+                    .scobg-l2 { padding-left: 16px; }
+                    .scobg-l3 { padding-left: 28px; }
+                    .scobg-ui-img { width: 44px; height: 30px; }
+                    .scobg-row { padding: 8px; gap: 8px; }
+                    .scobg-name { font-size: 11px; }
+                    .scobg-menu-item img { height: 34px; }
+                    .scobg-setbar { padding: 8px; gap: 6px; }
+                    .scobg-set-btn { padding: 4px 8px; font-size: 11px; }
+                    .scobg-content > div:first-child { padding: 6px 8px !important; }
+                }
             `;
             document.head.appendChild(style);
         },
@@ -722,7 +1130,7 @@
         createPanel() {
             this.panel = document.createElement('div');
             this.panel.id = 'scobg-panel';
-            const isSmallScreen = window.innerWidth <= 768;
+            const isSmallScreen = window.innerWidth <= 640;
             this.panel.innerHTML = `
                 <div class="scobg-header">
                     <span class="scobg-header-title">SC皮肤管理 <a href="https://showscimg.22-7.top/images" target="_blank" style="margin-left:8px; font-size:13px; color:#3498db; text-decoration:underline;">SC图片一览</a></span>
@@ -824,46 +1232,144 @@
         renderSidebar() {
             const sidebar = this.panel.querySelector('.scobg-sidebar');
             if (!sidebar || typeof UI_MANIFEST === 'undefined') return;
-            sidebar.innerHTML = '';
+            this.currentSelection = null;
+            sidebar.innerHTML = `
+                <div class="scobg-toolbar">
+                    <input id="scobg-search" class="scobg-search" type="search" placeholder="搜索名称或文件名">
+                    <div class="scobg-filters">
+                        <label class="scobg-filter"><input type="checkbox" id="scobg-filter-modified"> 仅已修改</label>
+                        <label class="scobg-filter"><input type="checkbox" id="scobg-filter-enabled"> 仅已启用</label>
+                    </div>
+                    <div class="scobg-count" id="scobg-count"></div>
+                </div>
+                <div class="scobg-tree"></div>
+            `;
+
+            const searchInput = sidebar.querySelector('#scobg-search');
+            searchInput.value = this.searchQuery;
+            searchInput.oninput = () => {
+                this.searchQuery = searchInput.value;
+                this.renderTree();
+                this.refreshCurrentContent();
+            };
+
+            const modifiedFilter = sidebar.querySelector('#scobg-filter-modified');
+            modifiedFilter.checked = this.showModifiedOnly;
+            modifiedFilter.onchange = () => {
+                this.showModifiedOnly = modifiedFilter.checked;
+                this.renderTree();
+                this.refreshCurrentContent();
+            };
+
+            const enabledFilter = sidebar.querySelector('#scobg-filter-enabled');
+            enabledFilter.checked = this.showEnabledOnly;
+            enabledFilter.onchange = () => {
+                this.showEnabledOnly = enabledFilter.checked;
+                this.renderTree();
+                this.refreshCurrentContent();
+            };
+
+            this.renderTree();
+        },
+
+        renderTree() {
+            const tree = this.panel.querySelector('.scobg-tree');
+            if (!tree) return;
+            tree.innerHTML = '';
+            let visibleCount = 0;
 
             for (const [l1Name, l1Data] of Object.entries(UI_MANIFEST)) {
                 const l1El = this.createTreeItem(l1Name, 'scobg-l1');
                 const l1Container = document.createElement('div');
                 l1Container.className = 'scobg-sub-container';
-
                 l1El.onclick = () => this.toggleTree(l1El, l1Container);
+                let l1HasVisible = false;
 
                 for (const [l2Name, l2Data] of Object.entries(l1Data)) {
                     const l2El = this.createTreeItem(l2Name, 'scobg-l2');
                     const l2Container = document.createElement('div');
                     l2Container.className = 'scobg-sub-container';
-
                     l2El.onclick = (e) => {
                         e.stopPropagation();
                         this.toggleTree(l2El, l2Container);
                     };
+                    let l2HasVisible = false;
 
                     for (const [l3Name, l3Items] of Object.entries(l2Data)) {
+                        const filteredItems = this.filterItems(l3Items, l1Name, l2Name, l3Name);
+                        const keys = Object.keys(filteredItems);
+                        if (!keys.length) continue;
+
                         const l3El = document.createElement('div');
                         l3El.className = 'scobg-tree-item scobg-l3';
-                        l3El.textContent = l3Name;
+                        l3El.textContent = `${l3Name} (${keys.length})`;
                         l3El.onclick = (e) => {
                             e.stopPropagation();
-                            sidebar.querySelectorAll('.scobg-l3').forEach(el => el.classList.remove('active'));
+                            tree.querySelectorAll('.scobg-l3').forEach(el => el.classList.remove('active'));
                             l3El.classList.add('active');
                             this.renderContent(l1Name, l2Name, l3Name, l3Items);
-                            // 手机端点击后自动滚动到内容区
-                            if (window.innerWidth <= 768) {
+                            if (window.innerWidth <= 640) {
                                 this.panel.querySelector('.scobg-content').scrollIntoView({ behavior: 'smooth' });
                             }
                         };
                         l2Container.appendChild(l3El);
+                        l2HasVisible = true;
+                        visibleCount += keys.length;
                     }
-                    l1Container.appendChild(l2El);
-                    l1Container.appendChild(l2Container);
+
+                    if (l2HasVisible) {
+                        l1Container.appendChild(l2El);
+                        l1Container.appendChild(l2Container);
+                        l1HasVisible = true;
+                    }
                 }
-                sidebar.appendChild(l1El);
-                sidebar.appendChild(l1Container);
+
+                if (l1HasVisible) {
+                    tree.appendChild(l1El);
+                    tree.appendChild(l1Container);
+                }
+            }
+
+            if (!tree.children.length) {
+                const empty = document.createElement('div');
+                empty.className = 'scobg-tree-empty';
+                empty.textContent = '没有匹配的皮肤项';
+                tree.appendChild(empty);
+            } else if (this.searchQuery || this.showModifiedOnly || this.showEnabledOnly) {
+                tree.querySelectorAll('.scobg-sub-container').forEach(el => el.classList.add('show'));
+            }
+
+            this.updateCount(visibleCount);
+        },
+
+        filterItems(items, l1, l2, l3) {
+            const q = this.searchQuery.trim().toLowerCase();
+            const groupMatch = !q || l1.toLowerCase().includes(q) || l2.toLowerCase().includes(q) || l3.toLowerCase().includes(q);
+            const out = {};
+            const isHq = l1 === 'HQ 总部';
+            for (const [key, meta] of Object.entries(items)) {
+                if (!/\.(png|svg|jpg|jpeg|webp|gif)$/i.test(key)) continue;
+                if (!isHq && this.showModifiedOnly && !Object.prototype.hasOwnProperty.call(Settings.data, key)) continue;
+                if (!isHq && this.showEnabledOnly && !(Settings.data[key] && Settings.data[key].enabled)) continue;
+                if (q && !groupMatch && !meta.name.toLowerCase().includes(q) && !key.toLowerCase().includes(q)) continue;
+                out[key] = meta;
+            }
+            return out;
+        },
+
+        updateCount(visibleCount) {
+            const countEl = this.panel.querySelector('#scobg-count');
+            if (!countEl) return;
+            const total = (typeof Settings !== 'undefined' && Settings.allKeys) ? Settings.allKeys.length : 0;
+            const modified = (typeof Settings !== 'undefined' && Settings.allKeys)
+                ? Settings.allKeys.filter(key => Object.prototype.hasOwnProperty.call(Settings.data, key)).length
+                : 0;
+            countEl.textContent = `已修改 ${modified} / 全部 ${total}` + (visibleCount != null ? ` · 显示 ${visibleCount}` : '');
+        },
+
+        refreshCurrentContent() {
+            if (this.currentSelection) {
+                this.renderContent(this.currentSelection.l1, this.currentSelection.l2, this.currentSelection.l3, this.currentSelection.items);
             }
         },
 
@@ -881,22 +1387,103 @@
         },
 
         renderContent(l1, l2, l3, items) {
+            this.currentSelection = { l1, l2, l3, items };
             const content = this.panel.querySelector('.scobg-content');
+            const filteredItems = this.filterItems(items, l1, l2, l3);
+            if (!Object.keys(filteredItems).length) {
+                content.innerHTML = `
+                    <div class="scobg-content-empty">
+                        <span>没有匹配的皮肤项</span>
+                    </div>`;
+                return;
+            }
+            const showSetOptions = l1 === '背景和环境' && l2 === '季节性';
+            const setOptions = showSetOptions ? this.getSetOptions(items) : [];
+            const setbarHtml = showSetOptions ? `
+                <div class="scobg-setbar">
+                    <span class="scobg-setbar-label">整套替换</span>
+                    ${setOptions.map(name => `<button class="scobg-set-btn" data-set="${name}">${name}</button>`).join('')}
+                    <button class="scobg-set-btn" data-set="__reset__">整套还原</button>
+                    ${this.lastAppliedSet && this.lastAppliedSetGroup === `${l1}|${l2}|${l3}` ? `<span class="scobg-set-note">已应用：${this.lastAppliedSet}</span>` : ''}
+                </div>` : '';
             content.innerHTML = `
                 <div style="padding:15px; border-bottom:1px solid #333; position:sticky; top:0; background:rgba(26,30,38,0.95); z-index:10; backdrop-filter:blur(4px);">
                     <div style="font-size:11px; color:#666; margin-bottom:2px;">${l1} > ${l2}</div>
-                    <div style="font-size:17px; font-weight:bold;">${l3}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                        <div style="font-size:17px; font-weight:bold;">${l3}</div>
+                        ${l1 === 'HQ 总部' ? '<span style="font-size:10px; color:#f5a623; border:1px solid #f5a623; border-radius:4px; padding:2px 6px; text-align:right;">旧版 HQ 无法正确渲染，不推荐使用</span>' : ''}
+                    </div>
                 </div>
+                ${setbarHtml}
                 <div class="scobg-grid"></div>
             `;
             const grid = content.querySelector('.scobg-grid');
-            for (const [key, meta] of Object.entries(items)) {
+            for (const [key, meta] of Object.entries(filteredItems)) {
                 this.renderRow(grid, key, meta, () => this.renderContent(l1, l2, l3, items));
             }
+            content.querySelectorAll('.scobg-set-btn').forEach(btn => {
+                btn.onclick = () => {
+                    if (btn.dataset.set === '__reset__') {
+                        this.resetSet(l1, l2, l3, items);
+                    } else {
+                        this.applySet(l1, l2, l3, items, btn.dataset.set);
+                    }
+                };
+            });
+        },
+
+        getSetOptions(items) {
+            const counts = {};
+            for (const meta of Object.values(items)) {
+                for (const preset of meta.presets || []) {
+                    counts[preset.name] = (counts[preset.name] || 0) + 1;
+                }
+            }
+            const total = Object.keys(items).length;
+            return Object.entries(counts)
+                .filter(([, count]) => count === total)
+                .map(([name]) => name);
+        },
+
+        applySet(l1, l2, l3, items, setName) {
+            if (typeof Settings === 'undefined') return;
+            let applied = 0;
+            for (const [key, meta] of Object.entries(items)) {
+                const preset = (meta.presets || []).find(p => p.name === setName);
+                if (!preset) continue;
+                Settings.data[key] = { target: preset.url, enabled: true };
+                applied++;
+            }
+            Settings.save();
+            this.lastAppliedSet = setName;
+            this.lastAppliedSetGroup = `${l1}|${l2}|${l3}`;
+            if (l1 === 'HQ 总部' || Object.keys(items).some(key => HQManager.isHqKey(key))) {
+                HQManager.applyHqChange();
+            }
+            this.renderContent(l1, l2, l3, items);
+            this.renderTree();
+            if (typeof Scheduler !== 'undefined') Scheduler.scanAll();
+            if (typeof StyleManager !== 'undefined') StyleManager.updateTheme();
+        },
+
+        resetSet(l1, l2, l3, items) {
+            if (typeof Settings === 'undefined') return;
+            for (const key of Object.keys(items)) {
+                delete Settings.data[key];
+            }
+            Settings.save();
+            this.lastAppliedSet = null;
+            this.lastAppliedSetGroup = null;
+            this.renderContent(l1, l2, l3, items);
+            this.renderTree();
+            if (typeof Scheduler !== 'undefined') Scheduler.scanAll();
+            if (typeof StyleManager !== 'undefined') StyleManager.updateTheme();
         },
 
         renderRow(container, key, meta, refresh) {
-            const cfg = (typeof Settings !== 'undefined' && Settings.data[key]) || { enabled: false, target: "" };
+            const hasSettings = typeof Settings !== 'undefined';
+            const isModified = hasSettings && Object.prototype.hasOwnProperty.call(Settings.data, key);
+            const cfg = (hasSettings && Settings.data[key]) || { enabled: false, target: "" };
             const relPath = (typeof PATH_MAP !== 'undefined' && PATH_MAP[key]) || `images/${key}`;
             const originalUrl = `${(typeof CONSTANTS !== 'undefined' ? CONSTANTS.STATIC_ROOT : '')}${relPath}`;
 
@@ -904,11 +1491,15 @@
             row.className = 'scobg-row';
             row.innerHTML = `
                 <div class="scobg-info">
-                    <div class="scobg-name">${meta.name}</div>
+                    <div class="scobg-name">${meta.name}
+                        ${isModified ? '<span class="scobg-badge scobg-badge-modified">已改</span>' : ''}
+                        ${cfg.enabled ? '<span class="scobg-badge scobg-badge-enabled">启用</span>' : ''}
+                    </div>
                     <label class="scobg-check">
                         <input type="checkbox" ${cfg.enabled ? 'checked' : ''}>
                         <span>使用自定义皮肤</span>
                     </label>
+                    ${isModified ? '<button class="scobg-reset">恢复默认</button>' : ''}
                 </div>
                 <div class="scobg-imgs">
                     <div style="text-align:center"><div style="font-size:9px;color:#555;margin-bottom:2px">原图</div><img src="${originalUrl}" class="scobg-ui-img" style="opacity:0.2;filter:grayscale(1)"></div>
@@ -919,7 +1510,20 @@
 
             row.querySelector('input').onchange = (e) => this.update(key, cfg.target, e.target.checked, refresh);
             row.querySelector('.select-trigger').onclick = (e) => this.showMenu(e, meta, (url) => this.update(key, url, true, refresh));
+            const resetBtn = row.querySelector('.scobg-reset');
+            if (resetBtn) resetBtn.onclick = () => this.resetItem(key, refresh);
             container.appendChild(row);
+        },
+
+        resetItem(key, refresh) {
+            if (typeof Settings !== 'undefined') {
+                delete Settings.data[key];
+                Settings.save();
+            }
+            if (refresh) refresh();
+            if (HQManager.isHqKey(key)) HQManager.applyHqChange();
+            if (typeof Scheduler !== 'undefined') Scheduler.scanAll();
+            if (typeof StyleManager !== 'undefined') StyleManager.updateTheme();
         },
 
         showMenu(e, meta, onSelect) {
@@ -929,22 +1533,17 @@
 
             // 响应式定位：极小屏走 CSS bottom sheet，中等屏居中，大屏跟随鼠标
             const vw = window.innerWidth;
-            if (vw <= 480) {
-                // 极小屏：让 CSS 的 bottom sheet 样式接管，不设 inline 定位
-            } else if (vw <= 768) {
+            if (vw <= 640) {
                 menu.style.left = '50%';
                 menu.style.top = '50%';
                 menu.style.transform = 'translate(-50%, -50%)';
-            } else {
-                menu.style.left = `${Math.min(e.clientX, window.innerWidth - 330)}px`;
-                menu.style.top = `${Math.min(e.clientY, window.innerHeight - 350)}px`;
             }
 
             if (meta.presets) {
                 meta.presets.forEach(p => {
                     const item = document.createElement('div');
                     item.className = 'scobg-menu-item';
-                    item.innerHTML = `<img src="${p.url}"><span>${p.name}</span>`;
+                    item.innerHTML = `<img src="${p.url}"><span>${p.name}${p.legacy ? ' <b style="color:#f5a623;font-weight:normal;font-size:10px;border:1px solid #f5a623;border-radius:3px;padding:0 3px;margin-left:4px;">旧版</b>' : ''}</span>`;
                     item.onclick = (ev) => { ev.stopPropagation(); onSelect(p.url); menu.remove(); };
                     menu.appendChild(item);
                 });
@@ -971,6 +1570,13 @@
             menu.appendChild(foot);
             document.body.appendChild(menu);
 
+            if (vw > 640) {
+                const menuWidth = menu.offsetWidth;
+                const menuHeight = menu.offsetHeight;
+                menu.style.left = `${Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 10))}px`;
+                menu.style.top = `${Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 10))}px`;
+            }
+
             setTimeout(() => {
                 const outClick = (ev) => {
                     if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', outClick); }
@@ -985,32 +1591,28 @@
                 Settings.save();
             }
             if (refresh) refresh();
+            if (HQManager.isHqKey(key)) HQManager.applyHqChange();
             if (typeof Scheduler !== 'undefined') Scheduler.scanAll();
             if (typeof StyleManager !== 'undefined') StyleManager.updateTheme();
         }
     };
 
     // ==========================================
-    // 6. 调度器与监听
+    // 6. 触发扫描（仅用于设置变更后的即时生效/还原）
     // ==========================================
     const Scheduler = {
-        timer: null,
-        run() {
-            if (this.timer) return;
-            this.timer = setTimeout(() => {
-                this.scanAll();
-                this.timer = null;
-            }, 100);
-        },
         scanAll() {
-            document.querySelectorAll('img').forEach(img => DOMProcessor.processImg(img));
-            document.querySelectorAll('[style*="background-image"]').forEach(div => DOMProcessor.processElementStyle(div));
-            DOMProcessor.processStyleSheets();
+            document.querySelectorAll('img').forEach(img => UrlReplacer.applyToElement(img));
+            document.querySelectorAll('[style*="background-image"]').forEach(el => UrlReplacer.applyToElementStyle(el));
+            UrlReplacer.applyToStylesheets();
+            StyleManager.updateTheme();
+        },
+        initialScan() {
+            document.querySelectorAll('img').forEach(img => UrlReplacer.applyToElement(img));
+            document.querySelectorAll('[style*="background-image"]').forEach(el => UrlReplacer.applyToElementStyle(el));
             StyleManager.updateTheme();
         }
     };
-
-    const observer = new MutationObserver(() => Scheduler.run());
 
 
     // ==========================================
@@ -1055,8 +1657,150 @@
 
 
     // ==========================================
+    // 7.5 HQ 数据层替换：重写 API 中的 hqImage，让游戏按目标主题完整渲染
+    // ==========================================
+    const HQNetworkHook = {
+        installed: false,
+
+        shouldHook(url) {
+            if (typeof url !== 'string' || !url || !url.includes('/api/')) return false;
+            return /\/api\/v3\/companies\/(auth-data\/|[^/]+\/?$)|\/api\/v3\/companies-by-company\/|\/api\/v2\/companies\/[^/]+\/?$|\/api\/v2\/players\/unlocked-hqs\//.test(url);
+        },
+
+        rewriteValue(value) {
+            let changed = false;
+            const walk = (node, inheritedLevel) => {
+                if (Array.isArray(node)) {
+                    for (const item of node) walk(item, inheritedLevel);
+                    return;
+                }
+                if (!node || typeof node !== 'object') return;
+                const level = typeof node.level === 'number' ? node.level : inheritedLevel;
+                for (const key of Object.keys(node)) {
+                    if (key === 'hqImage' && typeof node[key] === 'string') {
+                        const replacement = HQManager.getReplacementForHqImage(node[key], level);
+                        if (replacement && replacement !== node[key]) {
+                            node[key] = replacement;
+                            changed = true;
+                        }
+                    } else if (node[key] && typeof node[key] === 'object') {
+                        walk(node[key], level);
+                    }
+                }
+            };
+            walk(value, null);
+            return { value, changed };
+        },
+
+        rewriteJsonText(text) {
+            try {
+                const data = JSON.parse(text);
+                const result = this.rewriteValue(data);
+                return result.changed ? JSON.stringify(result.value) : null;
+            } catch (e) {
+                return null;
+            }
+        },
+
+        init() {
+            if (this.installed) return;
+            this.installed = true;
+            const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            const self = this;
+
+            const originalFetch = W.fetch;
+            if (typeof originalFetch === 'function') {
+                W.fetch = async (...args) => {
+                    const response = await originalFetch.apply(W, args);
+                    try {
+                        const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
+                        if (response && response.ok && self.shouldHook(url)) {
+                            const text = await response.clone().text();
+                            const rewrittenText = self.rewriteJsonText(text);
+                            if (rewrittenText) {
+                                const headers = new Headers(response.headers);
+                                headers.delete('content-length');
+                                headers.delete('content-encoding');
+                                return new Response(rewrittenText, {
+                                    status: response.status,
+                                    statusText: response.statusText,
+                                    headers
+                                });
+                            }
+                        }
+                    } catch (e) { /* 保留原始响应 */ }
+                    return response;
+                };
+            }
+
+            const originalOpen = W.XMLHttpRequest.prototype.open;
+            const originalSend = W.XMLHttpRequest.prototype.send;
+            W.XMLHttpRequest.prototype.open = function (method, url) {
+                this.__scSkinHqApiUrl = typeof url === 'string' ? url : '';
+                return originalOpen.apply(this, arguments);
+            };
+            W.XMLHttpRequest.prototype.send = function (...args) {
+                const xhr = this;
+                const url = xhr.__scSkinHqApiUrl || '';
+                if (self.shouldHook(url)) {
+                    const textDesc = Object.getOwnPropertyDescriptor(W.XMLHttpRequest.prototype, 'responseText');
+                    const responseDesc = Object.getOwnPropertyDescriptor(W.XMLHttpRequest.prototype, 'response');
+                    try {
+                        if (textDesc && textDesc.configurable) {
+                            Object.defineProperty(xhr, 'responseText', {
+                                configurable: true,
+                                get() {
+                                    let raw;
+                                    try {
+                                        raw = textDesc.get.call(xhr);
+                                        if (raw) {
+                                            const rewritten = self.rewriteJsonText(raw);
+                                            if (rewritten) return rewritten;
+                                        }
+                                        return raw;
+                                    } catch (e) {
+                                        return raw;
+                                    }
+                                }
+                            });
+                        }
+                        if (responseDesc && responseDesc.configurable) {
+                            Object.defineProperty(xhr, 'response', {
+                                configurable: true,
+                                get() {
+                                    let raw;
+                                    try {
+                                        raw = responseDesc.get.call(xhr);
+                                        if (typeof raw === 'string') {
+                                            const rewritten = self.rewriteJsonText(raw);
+                                            return rewritten || raw;
+                                        }
+                                        if (raw && typeof raw === 'object') {
+                                            const result = self.rewriteValue(raw);
+                                            return result.changed ? result.value : raw;
+                                        }
+                                        return raw;
+                                    } catch (e) {
+                                        return raw;
+                                    }
+                                }
+                            });
+                        }
+                    } catch (e) { /* 忽略无法接管的情况 */ }
+                }
+                return originalSend.apply(this, args);
+            };
+
+            console.log('[SC-Skin] HQ 数据层替换已启动');
+        }
+    };
+
+
+    // ==========================================
     // 8. 版本更新检查模块
     // ==========================================
+    const UPDATE_IGNORE_KEY = 'sc_oldBuildingsGraphic_ignored_version';
+
     const UpdateChecker = {
         init() {
             // 延迟执行，避免影响页面主要内容加载
@@ -1090,6 +1834,10 @@
                     font-family: sans-serif; box-sizing: border-box;
                 }
                 .sc-update-toast.show { top: 20px; }
+
+                /* 多个脚本同时提示时，后出现的弹窗向下错开，避免叠在一起 */
+                .sc-update-toast-oldBuildingsGraphic.show ~ .sc-update-toast.show,
+                .sc-update-toast.show ~ .sc-update-toast-oldBuildingsGraphic.show { top: 80px; }
                 
                 /* 展开后的卡片样式 */
                 .sc-update-toast.expanded {
@@ -1142,10 +1890,10 @@
 
             // 2. HTML 结构
             const toast = document.createElement('div');
-            toast.className = 'sc-update-toast';
+            toast.className = 'sc-update-toast sc-update-toast-oldBuildingsGraphic';
             toast.innerHTML = `
-                <div class="sc-update-close" id="sc-close" title="暂时关闭">&times;</div>
-                <div class="sc-update-header" id="sc-title">SC图片替换插件 发现新版本 v${version} (点击查看)</div>
+                <div class="sc-update-close" id="sc-oldBuildingsGraphic-close" title="暂时关闭">&times;</div>
+                <div class="sc-update-header" id="sc-oldBuildingsGraphic-title">SC图片替换插件 发现新版本 v${version} (点击查看)</div>
                 <div class="sc-update-body">
                     <p style="margin:0; font-weight:bold;">更新日志：</p>
                     <div class="sc-changelog-box">${changelog.replace(/\n/g, '<br>') || '修复已知问题，优化性能。'}</div>
@@ -1153,8 +1901,8 @@
                         提示：忽略后将不再提示此版本。
                     </p>
                     <div class="sc-update-actions">
-                        <button class="sc-btn sc-btn-link" id="sc-ignore-forever">忽略此次更新</button>
-                        <button class="sc-btn sc-btn-primary" id="sc-confirm">前往更新</button>
+                        <button class="sc-btn sc-btn-link" id="sc-oldBuildingsGraphic-ignore-forever">忽略此次更新</button>
+                        <button class="sc-btn sc-btn-primary" id="sc-oldBuildingsGraphic-confirm">前往更新</button>
                     </div>
                 </div>
             `;
@@ -1169,27 +1917,27 @@
             toast.onclick = (e) => {
                 if (!toast.classList.contains('expanded')) {
                     toast.classList.add('expanded');
-                    document.getElementById('sc-title').innerHTML = `SC图片替换插件 发现新版本 v${version}`;
+                    toast.querySelector('#sc-oldBuildingsGraphic-title').innerHTML = `SC图片替换插件 发现新版本 v${version}`;
                 }
             };
 
             // 右上角关闭：仅仅是本次消失
-            document.getElementById('sc-close').onclick = (e) => {
+            toast.querySelector('#sc-oldBuildingsGraphic-close').onclick = (e) => {
                 e.stopPropagation();
                 toast.classList.remove('show');
                 setTimeout(() => toast.remove(), 400);
             };
 
             // 左下角：忽略此版本
-            document.getElementById('sc-ignore-forever').onclick = (e) => {
+            toast.querySelector('#sc-oldBuildingsGraphic-ignore-forever').onclick = (e) => {
                 e.stopPropagation();
-                localStorage.setItem('sc_ignored_version', version);
+                localStorage.setItem(UPDATE_IGNORE_KEY, version);
                 toast.classList.remove('show');
                 setTimeout(() => toast.remove(), 400);
             };
 
             // 右下角：去更新
-            document.getElementById('sc-confirm').onclick = (e) => {
+            toast.querySelector('#sc-oldBuildingsGraphic-confirm').onclick = (e) => {
                 e.stopPropagation();
                 window.open(downloadUrl, '_blank');
                 toast.classList.remove('show');
@@ -1200,7 +1948,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    新增首次用户引导；优化手机端面板布局
+            // @changelog    图片替换改为 URL 赋值时源头接管，去掉全量 DOM 扫描，修复启动卡加载，移除关闭页面时的重复配置保存，皮肤面板新增搜索、已修改筛选、320px 适配与季节性整套替换，修复季节性当前主题图片匹配
 
             fetch(scriptUrl)
                 .then(res => res.text())
@@ -1221,7 +1969,7 @@
                         console.log(`SC图片替换插件 发现新版本 v${latestVersion}`);
 
                         // 3. 检查是否被用户手动忽略过
-                        const ignoredVersion = localStorage.getItem('sc_ignored_version');
+                        const ignoredVersion = localStorage.getItem(UPDATE_IGNORE_KEY);
                         if (ignoredVersion && this.compareVersions(ignoredVersion, latestVersion) >= 0) {
                             console.log(`[Update] 用户已忽略此版本，不弹出 UI 提示`);
                             return;
@@ -1365,38 +2113,55 @@
     // ==========================================
     // 10. 启动 & 全局暴露
     // ==========================================
+    function onDomReady(callback) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', callback, { once: true });
+        } else {
+            callback();
+        }
+    }
+
     function main() {
-        ConfigManager.init(); // 1. 先读取本地缓存的最新的 UI_MANIFEST (如果有)
-        Settings.init();      // 2. 初始化用户个人设置 (这步会遍历 UI_MANIFEST)
-        StyleManager.init();
-        NetworkHook.init();
-        SCobgUIManager.init();
+        try {
+            UrlReplacer.install(); // 1. 先接管 URL 赋值，游戏脚本运行前生效
+        } catch (e) {
+            console.warn('[SC-Skin] URL 接管安装失败', e);
+        }
+        ConfigManager.init(); // 2. 先读取本地缓存的最新的 UI_MANIFEST (如果有)
+        Settings.init();      // 3. 初始化用户个人设置 (这步会遍历 UI_MANIFEST)
+        try {
+            HQNetworkHook.init(); // 3.5 尽早接管 API，让 auth-data 加载时就能改写 hqImage
+        } catch (e) {
+            console.warn('[SC-Skin] HQ 数据层替换启动失败', e);
+        }
         UpdateChecker.init();
 
-        // 首次运行自动弹出使用说明
-        if (InstructionsManager.checkFirstRun()) {
-            setTimeout(() => InstructionsManager.show(), 1500);
-        }
-
-        // 注册 Tampermonkey 菜单（使用说明）
+        // 注册 Tampermonkey 菜单（使用说明），不依赖 DOM，可立即注册
         if (typeof GM_registerMenuCommand !== 'undefined') {
             GM_registerMenuCommand('📖 使用说明', () => InstructionsManager.show());
         }
 
-        // 暴露到全局，方便调试
-        window.SC_Instructions = InstructionsManager;
+        onDomReady(() => {
+            StyleManager.init();
+            SCobgUIManager.init();
+            try {
+                NetworkHook.init();
+            } catch (e) {
+                console.warn('[SC-Skin] 网络监听启动失败', e);
+            }
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['src', 'style', 'class']
+            // 首次运行自动弹出使用说明
+            if (InstructionsManager.checkFirstRun()) {
+                setTimeout(() => InstructionsManager.show(), 1500);
+            }
+
+            // 暴露到全局，方便调试
+            window.SC_Instructions = InstructionsManager;
+
+            // 兜底扫描一次；常规替换由 UrlReplacer 在赋值时完成
+            Scheduler.initialScan();
+
         });
-
-        Scheduler.run();
-
-        // 页面关闭前确保设置已保存
-        window.addEventListener('beforeunload', () => Settings.save());
 
         window.SC_Skin_Manager = {
             settings: Settings,
