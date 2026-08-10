@@ -1549,6 +1549,20 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 const d = DM();
                 const list = data.ResourcesRetailInfo;
                 const weatherMultiplier = data.sellingSpeedMultiplier.sellingSpeedMultiplier;
+                const weatherData = data.sellingSpeedMultiplier || {};
+                const weatherUntilRaw = weatherData.Until || weatherData.until || weatherData.weatherUntil ||
+                    (data.weatherUntil && (data.weatherUntil.Until || data.weatherUntil.until));
+                const weatherUntilDate = weatherUntilRaw ? new Date(weatherUntilRaw) : null;
+                const weatherUntilText = weatherUntilDate && !isNaN(weatherUntilDate.getTime())
+                    ? weatherUntilDate.toLocaleString([], {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    })
+                    : '未知';
 
                 // 1. 创建容器
                 saturationTableElement = document.createElement("div");
@@ -1564,7 +1578,8 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 const headerInfo = document.createElement("div");
                 headerInfo.innerHTML = `
                 <div style="margin-bottom:6px; font-size:14px; font-weight:bold; color:${d ? '#f1c40f' : '#b8860b'};">天气速度加成: ${weatherMultiplier}</div>
-                <div style="margin-bottom:6px; font-size:13px; color:${d ? '#ddd' : '#666'};">查询历史饱和度: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">点击查看</a></div>
+                <div style="margin-bottom:6px; font-size:13px; color:${d ? '#ddd' : '#666'};">下次变更时间: ${weatherUntilText}（本地时间）</div>
+                <div style="margin-bottom:6px; font-size:13px; color:${d ? '#ddd' : '#666'};">查询历史饱和度: <a href="https://sc.22-7.top/marketsaturation" target="_blank" style="color:#3498db; text-decoration:underline;">https://sc.22-7.top/marketsaturation</a></div>
             `;
 
                 // 3. 关闭按钮
