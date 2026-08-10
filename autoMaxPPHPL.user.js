@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.0
+// @version      1.33.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -785,7 +785,7 @@
   })();
 
   // src/features/paQuestAnswers.js
-  var PAQuestAnswers = function() {
+  var PAQuestAnswers = (function() {
     const PA_DATA_KEY = "SC_PA_Quests_Cache";
     const PA_DATA_URL = "https://sc.22-7.top/scripts/PA-Quests.json";
     const CACHE_TTL = 36e5;
@@ -1232,7 +1232,7 @@
     }).observe(document, { subtree: true, childList: true });
     setTimeout(init2, 500);
     return { init: init2 };
-  }();
+  })();
 
   // src/features/pageObserver.js
   var ResourceMarketHandler = { init: (...args) => window.SC_Modules?.ResourceMarketHandler?.init(...args) };
@@ -1363,7 +1363,7 @@
   })();
 
   // src/features/landscapeIdleBuildingHighlight.js
-  var LandscapeIdleBuildingHighlight2 = /* @__PURE__ */ function() {
+  var LandscapeIdleBuildingHighlight2 = /* @__PURE__ */ (function() {
     const EXCLUDED_KINDS = ["n", "y", "3", "4", "5"];
     function getBuildingsData() {
       const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
@@ -1446,12 +1446,12 @@
       setTimeout(processBuildings, 500);
     }
     return { init: init2 };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.LandscapeIdleBuildingHighlight = LandscapeIdleBuildingHighlight2;
 
   // src/features/restaurantStockReminder.js
-  var RestaurantStockReminder2 = function() {
+  var RestaurantStockReminder2 = (function() {
     const STORAGE_KEY = "script_restaurant_stock_restaurant_count";
     registerExportInfo({
       name: "\u9910\u9986\u5907\u8D27\u63D0\u9192\u8BBE\u7F6E",
@@ -1819,7 +1819,7 @@
       state2.handleDragEnd = null;
     }
     return { init: init2 };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.RestaurantStockReminder = RestaurantStockReminder2;
 
@@ -1933,7 +1933,7 @@
   }
 
   // src/features/formerExecutivesModule.js
-  var FormerExecutivesModule2 = function() {
+  var FormerExecutivesModule2 = (function() {
     const FORMER_EXEC_API_REGEX = /\/api\/v2\/companies\/(\d+)\/former-executives\//;
     const EXEC_DETAIL_API = (id) => `/api/v4/executives/${id}/`;
     const getScopedKey2 = (k) => {
@@ -2229,7 +2229,7 @@
       observer.observe(document.body, { childList: true, subtree: true });
     }
     return { forceInject: injectMoreInfoButtons };
-  }();
+  })();
   registerExportInfo({
     name: "\u524D\u4EFB\u9AD8\u7BA1\u8BB0\u5F55",
     scope: "realm",
@@ -2239,7 +2239,7 @@
   window.SC_Modules.FormerExecutivesModule = FormerExecutivesModule2;
 
   // src/features/executiveTrainingModule.js
-  var ExecutiveTrainingModule2 = function() {
+  var ExecutiveTrainingModule2 = (function() {
     let panelRelocateTimer = null;
     const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
     const NOTIFICATIONS_KEYWORD = "/game-notifications/";
@@ -2596,7 +2596,7 @@
         }
       }
     };
-  }();
+  })();
   registerExportInfo({
     name: "\u9AD8\u7BA1\u57F9\u8BAD\u4E0E\u73B0\u4EFB\u9AD8\u7BA1\u8BB0\u5F55",
     scope: "realm",
@@ -2616,7 +2616,7 @@
     scope: "realm",
     match: (realmId) => realmId === null ? /(?!)/ : new RegExp(`^SC_OutgoingVWAP_Cache_${realmId}_\\d+_\\d+$`)
   });
-  var outgoingContractMPHandler2 = function() {
+  var outgoingContractMPHandler2 = (function() {
     const STORAGE_KEY = "SC_OutgoingMP_Presets";
     const USE_INPUT_KEY = "SC_OutgoingMP_UseInput";
     const DEFAULT_PRESETS = "MP-4%";
@@ -3618,7 +3618,7 @@
       }, 500);
     }
     return { init: init2 };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.outgoingContractMPHandler = outgoingContractMPHandler2;
 
@@ -3626,7 +3626,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.0",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.1",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -3736,7 +3736,7 @@
   })();
 
   // src/features/executiveBoardroom.js
-  var executiveCustomButton = /* @__PURE__ */ function() {
+  var executiveCustomButton = /* @__PURE__ */ (function() {
     let boardroomState = {
       "o": null,
       "f": null,
@@ -4489,8 +4489,8 @@
       calculateResults();
     }
     return { show };
-  }();
-  var ExecutiveCustomButtonModule = function() {
+  })();
+  var ExecutiveCustomButtonModule = (function() {
     function injectCustomButton() {
       const container = document.querySelector(".css-1wne25x");
       if (!container) return;
@@ -4523,7 +4523,7 @@
       init2();
     }
     return { forceInject: injectCustomButton };
-  }();
+  })();
   registerExportInfo({
     name: "\u81EA\u5B9A\u4E49\u9AD8\u7BA1\u6570\u636E",
     scope: "realm",
@@ -4538,7 +4538,7 @@
   });
   var { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
   var MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" style="display:block;width:14px;height:14px;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="envelope" class="css-0" role="img" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48H48zM0 176V384c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V176L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"></path></svg>`;
-  var ResourceMarketHandler2 = function() {
+  var ResourceMarketHandler2 = (function() {
     let currentResourceId = null;
     let currentRealmId = null;
     let rowIdCounter = 0;
@@ -5666,7 +5666,7 @@
         }
       }
     };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.ResourceMarketHandler = ResourceMarketHandler2;
 
@@ -5893,7 +5893,7 @@
     keys: ["SC_Contract_HighPrice_Settings"]
   });
   var { SCXXCS: SCXXCS2, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL2, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT2 } = state;
-  var incomingContractsHandler2 = function() {
+  var incomingContractsHandler2 = (function() {
     let cardIdCounter = 0;
     const pendingCards = /* @__PURE__ */ new Map();
     const ACCEPT_CONTRACT_SELECTOR = [
@@ -7385,7 +7385,7 @@
       };
     }
     return { init: init2 };
-  }();
+  })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.incomingContractsHandler = incomingContractsHandler2;
 
@@ -7635,7 +7635,7 @@
 
   // src/features/warehouseRetailProfit.js
   var { SCXXCS: SCXXCS4, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL4, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT4 } = state;
-  var WarehouseRetailProfit = function() {
+  var WarehouseRetailProfit = (function() {
     const workerCode = `
         self.onmessage = function(e) {
         const { items, shared, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
@@ -8048,10 +8048,10 @@
     }).observe(document, { subtree: true, childList: true });
     setTimeout(init2, 600);
     return { init: init2 };
-  }();
+  })();
 
   // src/features/chatAccessibility.js
-  var ChatAccessibility = function() {
+  var ChatAccessibility = (function() {
     const EMOJI_TEXT = {
       "\u{1F7E2}": "\u7EFF",
       "\u{1F534}": "\u7EA2",
@@ -8208,7 +8208,831 @@
     }).observe(document, { subtree: true, childList: true });
     setTimeout(init2, 1e3);
     return { init: init2, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
-  }();
+  })();
+
+  // src/features/chatEmojiPicker.js
+  registerExportInfo({
+    name: "\u804A\u5929\u8868\u60C5\u9009\u62E9\u5668\u6700\u8FD1\u4F7F\u7528",
+    scope: "global",
+    keys: ["SC_EmojiPicker_Recent"]
+  });
+  (function() {
+    "use strict";
+    const MODULE_KEY = "chatEmojiPicker";
+    const BUTTON_SELECTOR = "[data-sc-emoji-picker-added]";
+    const BUNDLE_SELECTOR = 'script[type="module"][crossorigin][src^="https://www.simcompanies.com/static/bundle/assets/index-"][src$=".js"]';
+    const RECENT_KEY = "SC_EmojiPicker_Recent";
+    const RECENT_MAX = 30;
+    const BUILDING_NAMES = {
+      P: "\u519C\u573A",
+      W: "\u6C34\u5E93",
+      E: "\u53D1\u7535\u5382",
+      O: "\u6CB9\u7530",
+      R: "\u70BC\u6CB9\u5382",
+      S: "\u8FD0\u8F93\u7AD9",
+      G: "\u6742\u8D27\u5E97",
+      C: "\u7535\u5B50\u4EA7\u54C1\u5546\u5E97",
+      A: "\u52A0\u6CB9\u7AD9",
+      F: "\u7267\u573A",
+      M: "\u77FF\u4E95",
+      Y: "\u5DE5\u5382",
+      L: "\u7535\u5B50\u5DE5\u5382",
+      T: "\u65F6\u88C5\u5DE5\u5382",
+      B: "\u9500\u552E\u529E\u516C\u5BA4",
+      d: "\u4E94\u91D1\u5E97",
+      g: "\u5EFA\u7B51\u627F\u5305\u5546",
+      H: "\u65F6\u88C5\u5E97",
+      i: "\u78E8\u574A",
+      I: "\u6625\u5B63\u5E02\u573A",
+      j: "\u9762\u5305\u623F",
+      k: "\u98DF\u54C1\u52A0\u5DE5\u5382",
+      m: "\u9910\u996E",
+      n: "\u5C60\u5BB0\u573A",
+      o: "\u6DF7\u51DD\u571F\u5382",
+      p: "\u63A8\u8FDB\u5668\u5DE5\u5382",
+      Q: "\u91C7\u77F3\u573A",
+      r: "\u9910\u5385",
+      t: "\u82D7\u5703",
+      x: "\u5EFA\u7B51\u5DE5\u5382",
+      y: "\u5B66\u9662",
+      z: "\u6CF3\u6C60\u5E02\u573A"
+    };
+    let openPanel = null;
+    let openButton = null;
+    let variantPopup = null;
+    let scanTimer = null;
+    let started = false;
+    let lastUrl = location.href;
+    let emojiDataPromise = null;
+    let insertQueue = Promise.resolve();
+    function isEnabled() {
+      try {
+        const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+        return cfg[MODULE_KEY] !== false;
+      } catch (e) {
+        return true;
+      }
+    }
+    function isChatInput(el) {
+      if (!el || el.tagName !== "TEXTAREA") return false;
+      if (!el.closest(".input-group")) return false;
+      let cur = el.parentElement;
+      while (cur && cur !== document.body) {
+        if (cur.classList.contains("e1llepen1") || cur.querySelector(".e1llepen2") || cur.querySelector('div[style*="column-reverse"]')) {
+          return true;
+        }
+        cur = cur.parentElement;
+      }
+      return false;
+    }
+    function getStaticBaseUrl() {
+      try {
+        const props = window.reactjs && window.reactjs.props;
+        const staticUrl = props && props.staticUrl;
+        if (typeof staticUrl === "string" && staticUrl) {
+          if (staticUrl.startsWith("http")) return staticUrl.replace(/\/?$/, "/");
+          return location.origin + (staticUrl.startsWith("/") ? staticUrl : "/" + staticUrl);
+        }
+      } catch (e) {
+      }
+      return location.origin + "/static/";
+    }
+    function getBundleUrl() {
+      const tag = document.querySelector(BUNDLE_SELECTOR);
+      return tag ? tag.src : "";
+    }
+    function getEmojiSourceUrls() {
+      const urls = /* @__PURE__ */ new Set();
+      const mainUrl = getBundleUrl();
+      if (mainUrl) urls.add(mainUrl);
+      document.querySelectorAll("script[src]").forEach((script) => {
+        const src = script.src;
+        if (!src) return;
+        if (/\.js(\?|#)?$/.test(src) && (src.toLowerCase().includes("emoji") || /\/assets\/[^/]*index-[^/]+\.js$/.test(src))) {
+          urls.add(src);
+        }
+      });
+      return Array.from(urls);
+    }
+    async function requestBundleRaw(url) {
+      const network = window.__SC_Network;
+      if (network && typeof network.requestRaw === "function") {
+        return await network.requestRaw(url);
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("bundle-fetch-failed");
+      return await res.text();
+    }
+    function parseAssetMap(raw) {
+      const match2 = raw.match(/JSON\.parse\('((?:\\.|[^'\\])*)'\)/);
+      if (!match2) return {};
+      try {
+        return JSON.parse(match2[1]);
+      } catch (e) {
+        return {};
+      }
+    }
+    function resolveAssetUrl(assets, path) {
+      const hashed = assets[path] || path;
+      return getStaticBaseUrl() + hashed;
+    }
+    function parseSpecialEmojis(raw, assets) {
+      const fallback = [
+        { code: ":sc:", name: "Sim Companies", image: resolveAssetUrl(assets, "images/logo.png") },
+        { code: ":simboosts:", name: "Sim Boosts", image: resolveAssetUrl(assets, "images/sim-boosts2.png") }
+      ];
+      try {
+        const start2 = raw.indexOf("const qBt =");
+        if (start2 === -1) return fallback;
+        const end = raw.indexOf("tMn =", start2);
+        const segment = end === -1 ? raw.slice(start2) : raw.slice(start2, end);
+        const entryRe = /\{\s*name:\s*"([^"]+)",\s*shortNames:\s*\[([^\]]+)\],\s*imageUrl:\s*xe\("([^"]+)"\)/g;
+        const result = [];
+        let match2;
+        while ((match2 = entryRe.exec(segment)) !== null) {
+          const names = match2[2].match(/"([^"]+)"/g) || [];
+          const first = names[0] ? names[0].slice(1, -1) : "";
+          if (!first) continue;
+          result.push({
+            code: `:${first}:`,
+            name: match2[1],
+            image: resolveAssetUrl(assets, match2[3])
+          });
+        }
+        return result.length > 0 ? result : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+    function parseEmojiData(raw) {
+      const assets = parseAssetMap(raw);
+      const resources = [];
+      const seenResources = /* @__PURE__ */ new Set();
+      const resourceRe = /\bdbLetter:\s*(\d+),[\s\S]{0,2500}?image:\s*"images\/resources\/([^"]+)"/g;
+      let match2;
+      while ((match2 = resourceRe.exec(raw)) !== null) {
+        const id = Number(match2[1]);
+        if (seenResources.has(id)) continue;
+        seenResources.add(id);
+        resources.push({
+          code: `:re-${id}:`,
+          name: resourceIdNameMap[id] || "",
+          image: resolveAssetUrl(assets, "images/resources/" + match2[2])
+        });
+      }
+      resources.sort((a, b) => Number(a.code.replace(/\D/g, "")) - Number(b.code.replace(/\D/g, "")));
+      const buildings = [];
+      const seenBuildings = /* @__PURE__ */ new Set();
+      const buildingRe = /\bdbLetter:\s*"([A-Za-z])",[\s\S]{0,4000}?levelImages:\s*\[\s*\{\s*level:\s*\d+,\s*image:\s*"([^"]+)"/g;
+      while ((match2 = buildingRe.exec(raw)) !== null) {
+        const file = match2[2];
+        if (!file.startsWith("images/buildings/") || seenBuildings.has(match2[1])) continue;
+        seenBuildings.add(match2[1]);
+        buildings.push({
+          code: `:bd-${match2[1]}:`,
+          name: BUILDING_NAMES[match2[1]] || "",
+          image: resolveAssetUrl(assets, file)
+        });
+      }
+      buildings.sort((a, b) => a.code.localeCompare(b.code));
+      const eggs = [];
+      const eggRe = /id:\s*"([A-Z0-9_]+)",\s*rarity:\s*"[A-Z]+",\s*image:\s*"([^"]+)"/g;
+      while ((match2 = eggRe.exec(raw)) !== null) {
+        const file = match2[2];
+        if (!file.startsWith("images/eggs/")) continue;
+        eggs.push({
+          code: `:egg-${match2[1]}:`,
+          name: match2[1].replace(/_/g, " "),
+          image: resolveAssetUrl(assets, file)
+        });
+      }
+      eggs.sort((a, b) => a.code.localeCompare(b.code));
+      const realms = [];
+      const realmRe = /\b(\d+):\s*\{\s*idx:\s*(\d+),\s*textId:\s*"([^"]+)",\s*name:\s*"([^"]+)",\s*logo:\s*"([^"]+)"/g;
+      while ((match2 = realmRe.exec(raw)) !== null) {
+        realms.push({
+          code: `:realm-${Number(match2[2]) + 1}:`,
+          name: match2[4],
+          image: resolveAssetUrl(assets, match2[5])
+        });
+      }
+      realms.sort((a, b) => Number(a.code.replace(/\D/g, "")) - Number(b.code.replace(/\D/g, "")));
+      return {
+        resources,
+        buildings,
+        eggs,
+        realms,
+        special: parseSpecialEmojis(raw, assets),
+        other: parseUnicodeEmojis(raw)
+      };
+    }
+    function parseUnicodeEmojis(raw) {
+      const seen = /* @__PURE__ */ new Set();
+      const result = [];
+      const patterns = [
+        /emoji:\s*"([^"]+)",\s*description:\s*"([^"]+)"/g,
+        /description:\s*"([^"]+)",\s*emoji:\s*"([^"]+)"/g
+      ];
+      for (const pattern of patterns) {
+        let match2;
+        while ((match2 = pattern.exec(raw)) !== null) {
+          const emojiRaw = pattern.source.startsWith("emoji") ? match2[1] : match2[2];
+          const name = pattern.source.startsWith("emoji") ? match2[2] : match2[1];
+          let emoji = emojiRaw;
+          try {
+            emoji = JSON.parse('"' + emojiRaw + '"');
+          } catch (e) {
+          }
+          if (seen.has(emoji)) continue;
+          seen.add(emoji);
+          result.push({
+            code: emoji,
+            emoji,
+            name
+          });
+        }
+      }
+      const grouped = /* @__PURE__ */ new Map();
+      for (const item of result) {
+        const base = item.emoji.replace(/[\u{1F3FB}-\u{1F3FF}\uFE0F]/gu, "");
+        if (!base) continue;
+        if (!grouped.has(base)) {
+          grouped.set(base, { item, variants: [] });
+          continue;
+        }
+        const group = grouped.get(base);
+        if (item.emoji === group.item.emoji) continue;
+        if (item.emoji.length < group.item.emoji.length) {
+          group.variants.push(group.item);
+          group.item = item;
+        } else if (!group.variants.some((variant) => variant.emoji === item.emoji)) {
+          group.variants.push(item);
+        }
+      }
+      return Array.from(grouped.values()).map((group) => ({
+        ...group.item,
+        variants: group.variants
+      }));
+    }
+    function loadEmojiData() {
+      if (!emojiDataPromise) {
+        emojiDataPromise = (async () => {
+          const url = getBundleUrl();
+          if (!url) throw new Error("emoji-bundle-not-found");
+          const raw = await requestBundleRaw(url);
+          const data2 = parseEmojiData(raw);
+          if (data2.other.length === 0) {
+            for (const candidate of getEmojiSourceUrls()) {
+              if (candidate === url) continue;
+              try {
+                const candidateRaw = await requestBundleRaw(candidate);
+                const other = parseUnicodeEmojis(candidateRaw);
+                if (other.length > 0) {
+                  data2.other = other;
+                  break;
+                }
+              } catch (e) {
+              }
+            }
+          }
+          if (data2.other.length === 0) {
+            console.warn("[SC-EmojiPicker] Unicode emoji data not found in loaded scripts.");
+          }
+          return data2;
+        })().catch((err) => {
+          emojiDataPromise = null;
+          throw err;
+        });
+      }
+      return emojiDataPromise;
+    }
+    function getRecentCodes() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+        return Array.isArray(raw) ? raw.filter((code) => typeof code === "string") : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    function rememberRecent(code) {
+      const list = getRecentCodes().filter((item) => item !== code);
+      list.unshift(code);
+      if (list.length > RECENT_MAX) list.length = RECENT_MAX;
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+      } catch (e) {
+      }
+    }
+    function applyPanelTheme(panel) {
+      const dark = typeof DM === "function" ? DM() : false;
+      panel.style.background = dark ? "rgba(35,35,38,0.98)" : "rgba(255,255,255,0.98)";
+      panel.style.setProperty("--sc-fg", dark ? "#efefef" : "#333");
+      panel.style.setProperty("--sc-border", dark ? "#555" : "#ccc");
+      panel.style.setProperty("--sc-input-bg", dark ? "#1d1d1f" : "#f4f4f4");
+      panel.style.setProperty("--sc-hover", dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)");
+      panel.style.setProperty("--sc-accent", "#2196F3");
+    }
+    function positionPanel(panel, btn) {
+      const rect = btn.getBoundingClientRect();
+      const gap = 6;
+      const panelWidth = Math.min(360, window.innerWidth - 16);
+      const panelHeight = panel.offsetHeight || 340;
+      const maxHeight = Math.min(420, window.innerHeight - 16);
+      let top = rect.bottom + gap;
+      if (top + panelHeight > window.innerHeight - 8) {
+        top = Math.max(8, rect.top - panelHeight - gap);
+      }
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
+      panel.style.width = panelWidth + "px";
+      panel.style.maxHeight = maxHeight + "px";
+      panel.style.left = left + "px";
+      panel.style.top = top + "px";
+    }
+    function findMentionsComponent(textarea) {
+      const fiberKey = Object.keys(textarea).find(
+        (key) => key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")
+      );
+      if (!fiberKey) return null;
+      let fiber = textarea[fiberKey];
+      while (fiber) {
+        const node = fiber.stateNode;
+        if (node && typeof node.executeOnChange === "function" && (node.inputElement === textarea || typeof node.handleChange === "function" && typeof node.addMention === "function")) {
+          return node;
+        }
+        fiber = fiber.return;
+      }
+      return null;
+    }
+    function waitForMentionsValue(component, textarea, expected, timeout = 300) {
+      return new Promise((resolve) => {
+        if (component.props.value === expected || textarea.value === expected) {
+          resolve(true);
+          return;
+        }
+        const started2 = Date.now();
+        const timer = setInterval(() => {
+          if (component.props.value === expected || textarea.value === expected) {
+            clearInterval(timer);
+            resolve(true);
+          } else if (Date.now() - started2 > timeout) {
+            clearInterval(timer);
+            resolve(false);
+          }
+        }, 5);
+      });
+    }
+    async function insertViaMentions(component, textarea, code) {
+      const currentValue = typeof component.props.value === "string" ? component.props.value : textarea.value || "";
+      const stateStart = component.state && typeof component.state.selectionStart === "number" ? component.state.selectionStart : typeof textarea.selectionStart === "number" ? textarea.selectionStart : 0;
+      const stateEnd = component.state && typeof component.state.selectionEnd === "number" ? component.state.selectionEnd : stateStart;
+      const start2 = Math.max(0, Math.min(stateStart, currentValue.length));
+      const end = Math.max(start2, Math.min(stateEnd, currentValue.length));
+      const before = currentValue.slice(0, start2);
+      const after = currentValue.slice(end);
+      const leading = before.length > 0 && !/\s$/.test(before) ? " " : "";
+      const trailing = " ";
+      const text = leading + code + trailing;
+      const next = currentValue.slice(0, start2) + text + currentValue.slice(end);
+      const pos = start2 + text.length;
+      component.setState({
+        selectionStart: pos,
+        selectionEnd: pos,
+        setSelectionAfterMentionChange: true
+      });
+      component.executeOnChange({ target: { value: next } }, next, next, []);
+      await waitForMentionsValue(component, textarea, next);
+    }
+    function insertViaDom(textarea, code) {
+      return new Promise((resolve) => {
+        textarea.focus();
+        const start2 = typeof textarea.selectionStart === "number" ? textarea.selectionStart : 0;
+        const end = typeof textarea.selectionEnd === "number" ? textarea.selectionEnd : start2;
+        textarea.setSelectionRange(start2, end);
+        textarea.dispatchEvent(new Event("select", { bubbles: true }));
+        setTimeout(() => {
+          try {
+            if (!textarea.isConnected) return;
+            textarea.focus();
+            const currentStart = typeof textarea.selectionStart === "number" ? textarea.selectionStart : start2;
+            const currentEnd = typeof textarea.selectionEnd === "number" ? textarea.selectionEnd : end;
+            const value = textarea.value || "";
+            const before = value.slice(0, currentStart);
+            const after = value.slice(currentEnd);
+            const leading = before.length > 0 && !/\s$/.test(before) ? " " : "";
+            const trailing = " ";
+            const text = leading + code + trailing;
+            textarea.setSelectionRange(currentStart, currentEnd);
+            const inserted = document.execCommand("insertText", false, text);
+            if (!inserted) {
+              textarea.setRangeText(text, currentStart, currentEnd, "preserve");
+              textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+            const pos = currentStart + text.length;
+            textarea.setSelectionRange(pos, pos);
+            textarea.dispatchEvent(new Event("select", { bubbles: true }));
+            textarea.focus();
+          } catch (e) {
+          }
+          resolve();
+        }, 0);
+      });
+    }
+    function insertCode(textarea, code) {
+      if (!textarea) return Promise.resolve();
+      insertQueue = insertQueue.then(() => {
+        const component = findMentionsComponent(textarea);
+        if (component) {
+          console.log("[SC-EmojiPicker] using react-mentions insertion path.");
+          return insertViaMentions(component, textarea, code).catch(() => insertViaDom(textarea, code));
+        }
+        console.warn("[SC-EmojiPicker] react-mentions component not found, using DOM fallback.");
+        return insertViaDom(textarea, code);
+      });
+      return insertQueue;
+    }
+    function closeVariantPopup() {
+      if (variantPopup) variantPopup.remove();
+      variantPopup = null;
+      document.removeEventListener("pointerdown", onVariantPopupPointerDown, true);
+      document.removeEventListener("keydown", onVariantPopupKeyDown);
+    }
+    function onVariantPopupPointerDown(e) {
+      if (!variantPopup) return;
+      if (variantPopup.contains(e.target)) return;
+      closeVariantPopup();
+    }
+    function onVariantPopupKeyDown(e) {
+      if (e.key === "Escape") closeVariantPopup();
+    }
+    function openVariantPopup(item, anchor, getTextarea, afterInsert) {
+      closeVariantPopup();
+      const popup = document.createElement("div");
+      popup.className = "sc-chat-emoji-variant-popup";
+      popup.style.cssText = "position:fixed;z-index:2147483647;display:flex;flex-wrap:wrap;gap:4px;padding:6px;max-width:190px;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,0.35);";
+      applyPanelTheme(popup);
+      const choices = [item, ...item.variants || []];
+      choices.forEach((choice) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = choice.emoji || choice.code;
+        btn.title = choice.name || choice.code;
+        btn.style.cssText = "width:34px;height:34px;padding:0;border:1px solid var(--sc-border);border-radius:4px;background:var(--sc-input-bg);color:var(--sc-fg);cursor:pointer;font-size:22px;line-height:1;";
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          rememberRecent(choice.code);
+          if (afterInsert) afterInsert();
+          insertCode(getTextarea(), choice.code);
+          closeVariantPopup();
+        });
+        popup.appendChild(btn);
+      });
+      document.body.appendChild(popup);
+      variantPopup = popup;
+      requestAnimationFrame(() => {
+        const rect = anchor.getBoundingClientRect();
+        const popupRect = popup.getBoundingClientRect();
+        let top = rect.bottom + 6;
+        if (top + popupRect.height > window.innerHeight - 8) {
+          top = Math.max(8, rect.top - popupRect.height - 6);
+        }
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupRect.width - 8));
+        popup.style.top = top + "px";
+        popup.style.left = left + "px";
+      });
+      document.addEventListener("pointerdown", onVariantPopupPointerDown, true);
+      document.addEventListener("keydown", onVariantPopupKeyDown);
+    }
+    function buildItemButton(item, getTextarea, afterInsert) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "sc-chat-emoji-picker-item";
+      btn.title = item.name ? `${item.code} ${item.name}` : item.code;
+      const hasVariants = !!(item.variants && item.variants.length > 0);
+      btn.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:52px;height:46px;padding:3px;border:1px solid transparent;border-radius:5px;background:transparent;cursor:pointer;font-size:9px;line-height:1;color:var(--sc-fg);touch-action:manipulation;";
+      btn.addEventListener("mouseenter", () => {
+        btn.style.background = "var(--sc-hover)";
+        btn.style.borderColor = "var(--sc-accent)";
+      });
+      btn.addEventListener("mouseleave", () => {
+        btn.style.background = "transparent";
+        btn.style.borderColor = "transparent";
+      });
+      if (item.emoji) {
+        const emojiSpan = document.createElement("span");
+        emojiSpan.textContent = item.emoji;
+        emojiSpan.style.cssText = "width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:22px;line-height:1;pointer-events:none;";
+        btn.appendChild(emojiSpan);
+      } else if (item.image) {
+        const img = document.createElement("img");
+        img.src = item.image;
+        img.alt = item.name || item.code;
+        img.loading = "lazy";
+        img.style.cssText = "width:24px;height:24px;object-fit:contain;pointer-events:none;";
+        img.addEventListener("error", () => img.remove());
+        btn.appendChild(img);
+      }
+      const code = document.createElement("span");
+      code.textContent = item.code;
+      code.style.cssText = "max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+      btn.appendChild(code);
+      let pressTimer = null;
+      let longPressTriggered = false;
+      if (hasVariants) {
+        btn.addEventListener("pointerdown", (e) => {
+          if (e.pointerType === "mouse" && e.button !== 0) return;
+          clearTimeout(pressTimer);
+          longPressTriggered = false;
+          pressTimer = setTimeout(() => {
+            longPressTriggered = true;
+            e.preventDefault();
+            openVariantPopup(item, btn, getTextarea, afterInsert);
+          }, 420);
+        });
+        ["pointerup", "pointerleave", "pointercancel"].forEach((type) => {
+          btn.addEventListener(type, () => clearTimeout(pressTimer));
+        });
+        btn.addEventListener("contextmenu", (e) => e.preventDefault());
+      }
+      btn.addEventListener("click", (e) => {
+        if (longPressTriggered) {
+          longPressTriggered = false;
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        rememberRecent(item.code);
+        if (afterInsert) afterInsert();
+        insertCode(getTextarea(), item.code);
+      });
+      return btn;
+    }
+    function renderPanelContent(panel, items, inputGroup) {
+      const search = panel.querySelector(".sc-chat-emoji-picker-search");
+      const tabs = panel.querySelector(".sc-chat-emoji-picker-tabs");
+      const grid = panel.querySelector(".sc-chat-emoji-picker-grid");
+      const getTextarea = () => inputGroup.querySelector("textarea");
+      const allItems = [].concat(items.special, items.resources, items.buildings, items.eggs, items.realms, items.other);
+      const groupLabels = {
+        recent: "\u6700\u8FD1",
+        resources: "\u8D44\u6E90",
+        buildings: "\u5EFA\u7B51",
+        eggs: "\u5F69\u86CB",
+        realms: "\u9886\u57DF",
+        special: "\u7279\u6B8A",
+        other: "\u5176\u5B83"
+      };
+      function recentItems() {
+        const byCode = new Map(allItems.map((item) => [item.code, item]));
+        return getRecentCodes().map((code) => byCode.get(code)).filter(Boolean);
+      }
+      let activeKey = recentItems().length > 0 ? "recent" : "resources";
+      const PAGE_SIZE = 240;
+      let visibleLimit = PAGE_SIZE;
+      function getGroupItems(key) {
+        if (key === "recent") return recentItems();
+        return items[key] || [];
+      }
+      function renderTabs() {
+        tabs.textContent = "";
+        Object.entries(groupLabels).forEach(([key, label]) => {
+          const tab = document.createElement("button");
+          tab.type = "button";
+          const active = key === activeKey;
+          const count = getGroupItems(key).length;
+          tab.textContent = label;
+          tab.title = `${label} (${count})`;
+          tab.style.cssText = "flex:0 0 auto;min-height:30px;padding:4px 10px;border:1px solid " + (active ? "var(--sc-accent)" : "var(--sc-border)") + ";border-radius:4px;background:" + (active ? "var(--sc-accent)" : "transparent") + ";color:" + (active ? "#fff" : "var(--sc-fg)") + ";cursor:pointer;font-size:12px;line-height:1.4;white-space:nowrap;box-sizing:border-box;";
+          tab.addEventListener("click", () => {
+            activeKey = key;
+            search.value = "";
+            visibleLimit = PAGE_SIZE;
+            grid.scrollTop = 0;
+            renderTabs();
+            renderGrid();
+          });
+          tabs.appendChild(tab);
+        });
+      }
+      function renderGrid() {
+        const prevScroll = grid.scrollTop;
+        grid.textContent = "";
+        const q = search.value.trim().toLowerCase();
+        const list = getGroupItems(activeKey).filter(
+          (item) => !q || item.code.toLowerCase().includes(q) || (item.name || "").toLowerCase().includes(q)
+        );
+        const shown = list.slice(0, visibleLimit);
+        if (list.length === 0) {
+          const empty = document.createElement("div");
+          empty.textContent = activeKey === "recent" ? "\u8FD8\u6CA1\u6709\u6700\u8FD1\u4F7F\u7528\u7684\u8868\u60C5" : search.value.trim() ? `\u6CA1\u6709\u5339\u914D\u201C${search.value.trim()}\u201D\u7684\u8868\u60C5` : activeKey === "other" && items.other.length === 0 ? "\u5176\u5B83\u8868\u60C5\u6682\u672A\u52A0\u8F7D\u6210\u529F" : "\u8BE5\u5206\u7C7B\u6682\u65E0\u8868\u60C5";
+          empty.style.cssText = "color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;";
+          grid.appendChild(empty);
+          repositionPanel();
+          return;
+        }
+        shown.forEach((item) => grid.appendChild(buildItemButton(item, getTextarea, () => {
+          if (activeKey === "recent") renderGrid();
+        })));
+        if (list.length > shown.length) {
+          const more = document.createElement("button");
+          more.type = "button";
+          more.textContent = `\u663E\u793A\u66F4\u591A (${list.length - shown.length})`;
+          more.style.cssText = "grid-column:1 / -1;min-height:34px;margin-top:4px;border:1px solid var(--sc-border);border-radius:4px;background:var(--sc-input-bg);color:var(--sc-fg);cursor:pointer;font-size:12px;line-height:1.4;";
+          more.addEventListener("click", () => {
+            visibleLimit += PAGE_SIZE;
+            renderGrid();
+          });
+          grid.appendChild(more);
+        }
+        grid.scrollTop = prevScroll;
+        repositionPanel();
+      }
+      function repositionPanel() {
+        if (openPanel === panel && openButton) {
+          requestAnimationFrame(() => positionPanel(panel, openButton));
+        }
+      }
+      search.addEventListener("input", () => {
+        visibleLimit = PAGE_SIZE;
+        renderGrid();
+      });
+      renderTabs();
+      renderGrid();
+    }
+    function buildPanel(btn, inputGroup) {
+      const panel = document.createElement("div");
+      panel.className = "sc-chat-emoji-picker-panel";
+      panel.style.cssText = "position:fixed;z-index:2147483646;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.35);";
+      applyPanelTheme(panel);
+      const hint = document.createElement("div");
+      hint.className = "sc-chat-emoji-picker-hint";
+      hint.textContent = "\u8BE5\u529F\u80FD\u6D4B\u8BD5\u4E2D\uFF0C\u5982\u51FA\u73B0\u95EE\u9898\u8BF7\u53CD\u9988\u5E76\u8BBE\u7F6E\u4E2D\u5173\u95ED\u8BE5\u529F\u80FD";
+      hint.style.cssText = "padding:6px 8px;font-size:11px;line-height:1.4;color:var(--sc-fg);opacity:0.75;border-bottom:1px solid var(--sc-border);";
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--sc-border);";
+      const search = document.createElement("input");
+      search.type = "search";
+      search.className = "sc-chat-emoji-picker-search";
+      search.placeholder = "\u641C\u7D22\u8868\u60C5";
+      search.style.cssText = "flex:1;min-width:0;height:30px;padding:4px 8px;border:1px solid var(--sc-border);border-radius:4px;background:var(--sc-input-bg);color:var(--sc-fg);font-size:13px;outline:none;";
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.textContent = "\xD7";
+      closeBtn.title = "\u5173\u95ED";
+      closeBtn.style.cssText = "flex:0 0 30px;width:30px;height:30px;padding:0;border:1px solid var(--sc-border);border-radius:4px;background:transparent;color:var(--sc-fg);cursor:pointer;font-size:18px;line-height:1;";
+      closeBtn.addEventListener("click", () => closePanel());
+      const tabs = document.createElement("div");
+      tabs.className = "sc-chat-emoji-picker-tabs";
+      tabs.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;padding:8px 8px 4px;";
+      const grid = document.createElement("div");
+      grid.className = "sc-chat-emoji-picker-grid";
+      grid.style.cssText = "flex:1;overflow:auto;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px;align-content:start;";
+      const loading = document.createElement("div");
+      loading.textContent = "\u52A0\u8F7D\u8868\u60C5\u4E2D...";
+      loading.style.cssText = "color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;";
+      grid.appendChild(loading);
+      header.append(search, closeBtn);
+      panel.append(hint, header, tabs, grid);
+      loadEmojiData().then((items) => {
+        if (!panel.isConnected) return;
+        renderPanelContent(panel, items, inputGroup);
+      }).catch(() => {
+        if (!panel.isConnected) return;
+        grid.textContent = "";
+        const error = document.createElement("div");
+        error.textContent = "\u8868\u60C5\u6570\u636E\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u91CD\u8BD5";
+        error.style.cssText = "color:var(--sc-fg);opacity:0.8;font-size:12px;padding:16px;text-align:center;";
+        grid.appendChild(error);
+        if (openPanel === panel && openButton) {
+          requestAnimationFrame(() => positionPanel(panel, openButton));
+        }
+      });
+      return panel;
+    }
+    function ensureButton(inputGroup) {
+      if (inputGroup.querySelector(BUTTON_SELECTOR)) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "sc-chat-emoji-picker-btn";
+      btn.setAttribute("data-sc-emoji-picker-added", "1");
+      btn.title = "\u9009\u62E9\u8868\u60C5";
+      btn.textContent = "\u{1F642}";
+      btn.style.cssText = "display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:34px;min-width:34px;padding:0;margin:0 2px;border:1px solid rgba(128,128,128,0.55);border-radius:4px;background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;vertical-align:middle;box-sizing:border-box;";
+      btn.addEventListener("mouseenter", () => {
+        btn.style.background = "rgba(128,128,128,0.18)";
+      });
+      btn.addEventListener("mouseleave", () => {
+        btn.style.background = "transparent";
+      });
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        togglePanel(btn, inputGroup);
+      });
+      const btnGroup = inputGroup.querySelector(".input-group-btn");
+      if (btnGroup) {
+        btnGroup.insertBefore(btn, btnGroup.firstChild);
+      } else {
+        inputGroup.appendChild(btn);
+      }
+    }
+    function closePanel() {
+      closeVariantPopup();
+      if (openPanel) openPanel.remove();
+      openPanel = null;
+      openButton = null;
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
+    }
+    function onPointerDown(e) {
+      if (variantPopup && variantPopup.contains(e.target)) return;
+      if (!openPanel || !openButton) return;
+      if (openPanel.contains(e.target) || openButton.contains(e.target)) return;
+      closePanel();
+    }
+    function onKeyDown(e) {
+      if (e.key === "Escape") {
+        if (variantPopup) closeVariantPopup();
+        else closePanel();
+      }
+    }
+    function onViewportChange() {
+      if (openPanel && openButton) positionPanel(openPanel, openButton);
+    }
+    function togglePanel(btn, inputGroup) {
+      if (openButton === btn && openPanel) {
+        closePanel();
+        return;
+      }
+      closePanel();
+      if (!inputGroup.querySelector("textarea")) return;
+      const panel = buildPanel(btn, inputGroup);
+      document.body.appendChild(panel);
+      openPanel = panel;
+      openButton = btn;
+      requestAnimationFrame(() => positionPanel(panel, btn));
+      document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("keydown", onKeyDown);
+      window.addEventListener("resize", onViewportChange);
+      window.addEventListener("scroll", onViewportChange, true);
+      const search = panel.querySelector(".sc-chat-emoji-picker-search");
+      if (search) setTimeout(() => search.focus(), 0);
+    }
+    function removeAll() {
+      closePanel();
+      document.querySelectorAll(BUTTON_SELECTOR).forEach((btn) => btn.remove());
+    }
+    function requestScan() {
+      if (scanTimer) return;
+      scanTimer = setTimeout(() => {
+        scanTimer = null;
+        scan();
+      }, 150);
+    }
+    function scan() {
+      if (!isEnabled()) {
+        removeAll();
+        return;
+      }
+      document.querySelectorAll("textarea").forEach((textarea) => {
+        if (!isChatInput(textarea)) return;
+        const inputGroup = textarea.closest(".input-group");
+        if (inputGroup) ensureButton(inputGroup);
+      });
+    }
+    function start() {
+      if (started) return;
+      if (!document.body) {
+        setTimeout(start, 200);
+        return;
+      }
+      started = true;
+      new MutationObserver(() => requestScan()).observe(document.body, { childList: true, subtree: true });
+      new MutationObserver(() => {
+        if (lastUrl !== location.href) {
+          lastUrl = location.href;
+          closePanel();
+          setTimeout(scan, 400);
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+      const themeObserver = new MutationObserver(() => {
+        if (openPanel) applyPanelTheme(openPanel);
+      });
+      [document.documentElement, document.body].forEach((target) => {
+        themeObserver.observe(target, { attributes: true, attributeFilter: ["class", "style"] });
+      });
+      window.scChatEmojiPickerRefresh = () => {
+        removeAll();
+        scan();
+      };
+      scan();
+      loadEmojiData().catch(() => {
+      });
+    }
+    setTimeout(start, 300);
+  })();
 
   // src/features/autoUpdaters.js
   var ConstantsAutoUpdater = (() => {
@@ -8341,7 +9165,7 @@
     registerExportInfo({
       name: "\u9762\u677F\u4E0E\u5168\u5C40\u8BBE\u7F6E",
       scope: "global",
-      keys: ["SC_PanelPosition", "mp_inputPercent", "sc_ignored_version"]
+      keys: ["SC_PanelPosition", "mp_inputPercent", "sc_autoMaxPPHPL_ignored_version"]
     });
     registerExportInfo({
       name: "\u5E93\u5B58/\u5408\u540C/\u5E02\u573A\u8BA1\u7B97\u7ED3\u679C",
@@ -8848,6 +9672,9 @@
             config[key] = newState;
             localStorage.setItem(configKey, JSON.stringify(config));
             updateUI();
+            if (typeof window.scChatEmojiPickerRefresh === "function") {
+              window.scChatEmojiPickerRefresh();
+            }
           };
           const initialConfig = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
           const isEnabled = initialConfig[key] !== void 0 ? initialConfig[key] !== false : defaultEnabled;
@@ -9062,7 +9889,8 @@
           { type: "toggle", key: "restaurantStock", label: "\u9910\u9986\u5907\u8D27\u63D0\u9192" },
           { type: "toggle", key: "paQuestAnswers", label: "PA\u4EFB\u52A1\u7B54\u6848", defaultEnabled: true },
           { type: "toggle", key: "snipboardPreview", label: "Snipboard\u56FE\u7247\u9884\u89C8", defaultEnabled: true },
-          { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, heightInput: true }
+          { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, heightInput: true },
+          { type: "toggle", key: "chatEmojiPicker", label: "\u804A\u5929\u8868\u60C5\u9009\u62E9\u5668", defaultEnabled: true }
         ];
         const ITEMS_PER_PAGE = 5;
         let currentPage = 0;
@@ -11864,6 +12692,7 @@
       init2();
       window.scChatInputExpanderApplyStyles = injectStyles;
     })();
+    const UPDATE_IGNORE_KEY = "sc_autoMaxPPHPL_ignored_version";
     function compareVersions(v1, v2) {
       const a = v1.split(".").map(Number);
       const b = v2.split(".").map(Number);
@@ -11890,6 +12719,10 @@
                 font-family: sans-serif; box-sizing: border-box;
             }
             .sc-update-toast.show { top: 20px; }
+
+            /* \u591A\u4E2A\u811A\u672C\u540C\u65F6\u63D0\u793A\u65F6\uFF0C\u540E\u51FA\u73B0\u7684\u5F39\u7A97\u5411\u4E0B\u9519\u5F00\uFF0C\u907F\u514D\u53E0\u5728\u4E00\u8D77 */
+            .sc-update-toast-autoMaxPPHPL.show ~ .sc-update-toast.show,
+            .sc-update-toast.show ~ .sc-update-toast-autoMaxPPHPL.show { top: 80px; }
 
             /* \u5C55\u5F00\u540E\u7684\u5361\u7247\u6837\u5F0F */
             .sc-update-toast.expanded {
@@ -11940,10 +12773,10 @@
         `;
       document.head.appendChild(style);
       const toast = document.createElement("div");
-      toast.className = "sc-update-toast";
+      toast.className = "sc-update-toast sc-update-toast-autoMaxPPHPL";
       toast.innerHTML = `
-            <div class="sc-update-close" id="sc-close" title="\u6682\u65F6\u5173\u95ED">&times;</div>
-            <div class="sc-update-header" id="sc-title">\u81EA\u52A8\u8BA1\u7B97\u6700\u5927\u65F6\u5229\u6DA6\u63D2\u4EF6 \u53D1\u73B0\u65B0\u7248\u672C v${version} (\u70B9\u51FB\u67E5\u770B)</div>
+            <div class="sc-update-close" id="sc-autoMax-close" title="\u6682\u65F6\u5173\u95ED">&times;</div>
+            <div class="sc-update-header" id="sc-autoMax-title">\u81EA\u52A8\u8BA1\u7B97\u6700\u5927\u65F6\u5229\u6DA6\u63D2\u4EF6 \u53D1\u73B0\u65B0\u7248\u672C v${version} (\u70B9\u51FB\u67E5\u770B)</div>
             <div class="sc-update-body">
                 <p style="margin:0; font-weight:bold;">\u66F4\u65B0\u65E5\u5FD7\uFF1A</p>
                 <div class="sc-changelog-box">${changelog.replace(/\n/g, "<br>") || "\u4FEE\u590D\u5DF2\u77E5\u95EE\u9898\uFF0C\u4F18\u5316\u6027\u80FD\u3002"}</div>
@@ -11951,8 +12784,8 @@
                     \u63D0\u793A\uFF1A\u5FFD\u7565\u540E\u5C06\u4E0D\u518D\u63D0\u793A\u6B64\u7248\u672C\u3002
                 </p>
                 <div class="sc-update-actions">
-                    <button class="sc-btn sc-btn-link" id="sc-ignore-forever">\u5FFD\u7565\u6B64\u6B21\u66F4\u65B0</button>
-                    <button class="sc-btn sc-btn-primary" id="sc-confirm">\u524D\u5F80\u66F4\u65B0</button>
+                    <button class="sc-btn sc-btn-link" id="sc-autoMax-ignore-forever">\u5FFD\u7565\u6B64\u6B21\u66F4\u65B0</button>
+                    <button class="sc-btn sc-btn-primary" id="sc-autoMax-confirm">\u524D\u5F80\u66F4\u65B0</button>
                 </div>
             </div>
         `;
@@ -11961,21 +12794,21 @@
       toast.onclick = (e) => {
         if (!toast.classList.contains("expanded")) {
           toast.classList.add("expanded");
-          document.getElementById("sc-title").innerHTML = `\u81EA\u52A8\u8BA1\u7B97\u6700\u5927\u65F6\u5229\u6DA6\u63D2\u4EF6 \u65B0\u7248\u672C\uFF1Av${version}`;
+          toast.querySelector("#sc-autoMax-title").innerHTML = `\u81EA\u52A8\u8BA1\u7B97\u6700\u5927\u65F6\u5229\u6DA6\u63D2\u4EF6 \u65B0\u7248\u672C\uFF1Av${version}`;
         }
       };
-      document.getElementById("sc-close").onclick = (e) => {
+      toast.querySelector("#sc-autoMax-close").onclick = (e) => {
         e.stopPropagation();
         toast.classList.remove("show");
         setTimeout(() => toast.remove(), 400);
       };
-      document.getElementById("sc-ignore-forever").onclick = (e) => {
+      toast.querySelector("#sc-autoMax-ignore-forever").onclick = (e) => {
         e.stopPropagation();
-        localStorage.setItem("sc_ignored_version", version);
+        localStorage.setItem(UPDATE_IGNORE_KEY, version);
         toast.classList.remove("show");
         setTimeout(() => toast.remove(), 400);
       };
-      document.getElementById("sc-confirm").onclick = (e) => {
+      toast.querySelector("#sc-autoMax-confirm").onclick = (e) => {
         e.stopPropagation();
         window.open(downloadUrl, "_blank");
         toast.classList.remove("show");
@@ -11995,7 +12828,7 @@
         if (isNewer) {
           hasNewVersion = true;
           console.log(`\u{1F4E2} \u53D1\u73B0\u65B0\u7248\u672C v${latestVersion}`);
-          const ignoredVersion = localStorage.getItem("sc_ignored_version");
+          const ignoredVersion = localStorage.getItem(UPDATE_IGNORE_KEY);
           if (ignoredVersion && compareVersions(ignoredVersion, latestVersion) >= 0) {
             console.log(`[Update] \u7528\u6237\u5DF2\u5FFD\u7565\u6B64\u7248\u672C\uFF0C\u4E0D\u5F39\u51FA UI \u63D0\u793A`);
             return;
@@ -12014,4 +12847,4 @@
   })();
 })();
 
-// @changelog 修复汽车类商品时利润工资系数缺失的问题（汽车经销商 salaryModifier 解析遗漏，导致交易所/合同/仓库与商店口径不一致）；请更新基本数据后生效。销售算法调整，版本升至 1.33.0。
+// @changelog 新增聊天表情选择器：运行时读取游戏当前前端包，自动展示最近使用、资源、建筑、彩蛋、领域、特殊和 Unicode 其它表情，点击直接插入；面板顶部显示测试提示。修复与旧建筑皮肤脚本同时启用时，更新提示按钮绑定冲突、忽略记录互相影响的问题。
