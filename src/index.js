@@ -1576,7 +1576,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 // 1. 创建容器
                 saturationTableElement = document.createElement("div");
                 saturationTableElement.style.cssText = `
-                position:fixed; left:10px; right:10px; top:50px; z-index:9998; box-sizing:border-box;
+                position:fixed; left:10px; top:50px; z-index:9998; box-sizing:border-box;
                 background:${d ? '#2c2c2c' : '#fff'}; color:${d ? '#fff' : '#333'}; padding:${containerPadding}px;
                 border-radius:8px; max-height:${containerMaxHeight}; overflow:auto;
                 width:auto; max-width: calc(100vw - 20px);
