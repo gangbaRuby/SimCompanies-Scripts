@@ -54,6 +54,7 @@ registerExportInfo({
 
     let openPanel = null;
     let openButton = null;
+    let openInputGroup = null;
     let variantPopup = null;
     let scanTimer = null;
     let started = false;
@@ -353,14 +354,17 @@ registerExportInfo({
         const gap = 6;
         const panelWidth = Math.min(360, window.innerWidth - 16);
         const panelHeight = panel.offsetHeight || 340;
-        const maxHeight = Math.min(420, window.innerHeight - 16);
-        let top = rect.bottom + gap;
-        if (top + panelHeight > window.innerHeight - 8) {
-            top = Math.max(8, rect.top - panelHeight - gap);
+        const input = openInputGroup ? openInputGroup.querySelector('textarea') : null;
+        const anchorRect = input ? input.getBoundingClientRect() : rect;
+        const availableAbove = anchorRect.top - gap - 8;
+        const maxHeight = Math.max(120, Math.min(420, availableAbove, window.innerHeight - 16));
+        panel.style.maxHeight = maxHeight + 'px';
+        let top = anchorRect.top - gap - Math.min(panelHeight, maxHeight);
+        if (top < 8) {
+            top = Math.max(8, anchorRect.bottom + gap);
         }
         const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
         panel.style.width = panelWidth + 'px';
-        panel.style.maxHeight = maxHeight + 'px';
         panel.style.left = left + 'px';
         panel.style.top = top + 'px';
     }
@@ -824,7 +828,8 @@ registerExportInfo({
         btn.textContent = '🙂';
         btn.style.cssText =
             'display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:34px;' +
-            'min-width:34px;padding:0;margin:0 2px;border:1px solid rgba(128,128,128,0.55);border-radius:4px;' +
+            'min-width:34px;max-width:34px;min-height:34px;max-height:34px;padding:0;margin:0 2px;overflow:hidden;' +
+            'border:1px solid rgba(128,128,128,0.55);border-radius:4px;' +
             'background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;vertical-align:middle;box-sizing:border-box;';
         btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(128,128,128,0.18)'; });
         btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
@@ -847,6 +852,7 @@ registerExportInfo({
         if (openPanel) openPanel.remove();
         openPanel = null;
         openButton = null;
+        openInputGroup = null;
         document.removeEventListener('pointerdown', onPointerDown, true);
         document.removeEventListener('keydown', onKeyDown);
         window.removeEventListener('resize', onViewportChange);
@@ -883,6 +889,7 @@ registerExportInfo({
         document.body.appendChild(panel);
         openPanel = panel;
         openButton = btn;
+        openInputGroup = inputGroup;
 
         requestAnimationFrame(() => positionPanel(panel, btn));
         document.addEventListener('pointerdown', onPointerDown, true);
