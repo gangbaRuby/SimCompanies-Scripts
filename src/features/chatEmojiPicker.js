@@ -57,6 +57,7 @@ registerExportInfo({
     let openInputGroup = null;
     let layoutObserver = null;
     let layoutTimer = null;
+    let buttonPositionTimer = null;
     let variantPopup = null;
     let scanTimer = null;
     let started = false;
@@ -827,19 +828,20 @@ registerExportInfo({
     }
 
     function ensureButton(inputGroup) {
-        if (inputGroup.querySelector(BUTTON_SELECTOR)) return;
+        if (inputGroup.dataset.scEmojiPickerGroup === '1') return;
 
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'sc-chat-emoji-picker-btn';
         btn.setAttribute('data-sc-emoji-picker-added', '1');
+        btn._inputGroup = inputGroup;
         btn.title = '选择表情';
         btn.textContent = '🙂';
         btn.style.cssText =
-            'display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:34px;' +
-            'min-width:34px;max-width:34px;min-height:34px;max-height:34px;padding:0;margin:0 2px;overflow:hidden;' +
+            'position:fixed;z-index:2147483645;display:flex;align-items:center;justify-content:center;' +
+            'width:34px;height:34px;min-width:34px;max-width:34px;min-height:34px;max-height:34px;padding:0;margin:0;overflow:hidden;' +
             'border:1px solid rgba(128,128,128,0.55);border-radius:4px;' +
-            'background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;vertical-align:middle;box-sizing:border-box;';
+            'background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;box-sizing:border-box;';
         btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(128,128,128,0.18)'; });
         btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
         btn.addEventListener('click', (e) => {
@@ -848,12 +850,28 @@ registerExportInfo({
             togglePanel(btn, inputGroup);
         });
 
-        const btnGroup = inputGroup.querySelector('.input-group-btn');
-        if (btnGroup) {
-            btnGroup.insertBefore(btn, btnGroup.firstChild);
-        } else {
-            inputGroup.appendChild(btn);
-        }
+        inputGroup.dataset.scEmojiPickerGroup = '1';
+        document.body.appendChild(btn);
+        positionButton(btn, inputGroup);
+    }
+
+    function positionButton(btn, inputGroup) {
+        const anchor = inputGroup.querySelector('.input-group-btn') || inputGroup;
+        const rect = anchor.getBoundingClientRect();
+        btn.style.left = Math.max(4, rect.right - 42) + 'px';
+        btn.style.top = Math.max(4, rect.bottom - 42) + 'px';
+    }
+
+    function updateButtonPositions() {
+        document.querySelectorAll(BUTTON_SELECTOR).forEach(btn => {
+            const group = btn._inputGroup;
+            if (!group || !group.isConnected) {
+                if (group) delete group.dataset.scEmojiPickerGroup;
+                btn.remove();
+                return;
+            }
+            positionButton(btn, group);
+        });
     }
 
     function stopLayoutObserver() {
@@ -948,7 +966,10 @@ registerExportInfo({
 
     function removeAll() {
         closePanel();
-        document.querySelectorAll(BUTTON_SELECTOR).forEach(btn => btn.remove());
+        document.querySelectorAll(BUTTON_SELECTOR).forEach(btn => {
+            if (btn._inputGroup) delete btn._inputGroup.dataset.scEmojiPickerGroup;
+            btn.remove();
+        });
     }
 
     function requestScan() {
@@ -965,11 +986,13 @@ registerExportInfo({
             return;
         }
 
+        updateButtonPositions();
         document.querySelectorAll('textarea').forEach(textarea => {
             if (!isChatInput(textarea)) return;
             const inputGroup = textarea.closest('.input-group');
             if (inputGroup) ensureButton(inputGroup);
         });
+        updateButtonPositions();
     }
 
     function start() {
@@ -996,6 +1019,10 @@ registerExportInfo({
         [document.documentElement, document.body].forEach(target => {
             themeObserver.observe(target, { attributes: true, attributeFilter: ['class', 'style'] });
         });
+
+        buttonPositionTimer = setInterval(updateButtonPositions, 300);
+        window.addEventListener('scroll', updateButtonPositions, true);
+        window.addEventListener('resize', updateButtonPositions);
 
         window.scChatEmojiPickerRefresh = () => {
             removeAll();
