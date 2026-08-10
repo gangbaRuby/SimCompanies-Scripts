@@ -861,10 +861,10 @@ registerExportInfo({
         const rect = anchor.getBoundingClientRect();
         if (sendBtn) {
             btn.style.left = Math.max(4, rect.left - 42) + 'px';
-            btn.style.top = Math.max(4, rect.top + (rect.height - 34) / 2) + 'px';
+            btn.style.top = Math.max(4, rect.bottom - 34) + 'px';
         } else {
             btn.style.left = Math.max(4, rect.right - 42) + 'px';
-            btn.style.top = Math.max(4, rect.bottom - 42) + 'px';
+            btn.style.top = Math.max(4, rect.bottom - 34) + 'px';
         }
     }
 
