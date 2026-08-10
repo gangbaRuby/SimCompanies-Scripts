@@ -55,6 +55,8 @@ registerExportInfo({
     let openPanel = null;
     let openButton = null;
     let openInputGroup = null;
+    let layoutObserver = null;
+    let layoutTimer = null;
     let variantPopup = null;
     let scanTimer = null;
     let started = false;
@@ -354,15 +356,22 @@ registerExportInfo({
         const gap = 6;
         const panelWidth = Math.min(360, window.innerWidth - 16);
         const panelHeight = panel.offsetHeight || 340;
-        const input = openInputGroup ? openInputGroup.querySelector('textarea') : null;
+        let input = null;
+        if (openInputGroup) {
+            const textareas = openInputGroup.querySelectorAll('textarea');
+            for (const ta of textareas) {
+                if (isChatInput(ta) && ta.getBoundingClientRect().height > 0) {
+                    input = ta;
+                    break;
+                }
+            }
+            if (!input) input = textareas[0] || null;
+        }
         const anchorRect = input ? input.getBoundingClientRect() : rect;
         const availableAbove = anchorRect.top - gap - 8;
-        const maxHeight = Math.max(120, Math.min(420, availableAbove, window.innerHeight - 16));
+        const maxHeight = Math.max(0, Math.min(420, availableAbove, window.innerHeight - 16));
         panel.style.maxHeight = maxHeight + 'px';
-        let top = anchorRect.top - gap - Math.min(panelHeight, maxHeight);
-        if (top < 8) {
-            top = Math.max(8, anchorRect.bottom + gap);
-        }
+        const top = anchorRect.top - gap - Math.min(panelHeight, maxHeight);
         const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
         panel.style.width = panelWidth + 'px';
         panel.style.left = left + 'px';
@@ -847,7 +856,42 @@ registerExportInfo({
         }
     }
 
+    function stopLayoutObserver() {
+        if (layoutObserver) {
+            layoutObserver.disconnect();
+            layoutObserver = null;
+        }
+        if (layoutTimer) {
+            clearInterval(layoutTimer);
+            layoutTimer = null;
+        }
+    }
+
+    function startLayoutObserver() {
+        stopLayoutObserver();
+        layoutTimer = setInterval(() => {
+            if (openPanel && openButton) positionPanel(openPanel, openButton);
+        }, 250);
+        layoutObserver = new MutationObserver(() => {
+            if (openPanel && openButton) {
+                requestAnimationFrame(() => positionPanel(openPanel, openButton));
+            }
+        });
+        const seen = new Set();
+        let el = openInputGroup;
+        while (el && !seen.has(el)) {
+            layoutObserver.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
+            seen.add(el);
+            el = el.parentElement;
+        }
+        const textareas = openInputGroup.querySelectorAll('textarea');
+        for (const textarea of textareas) {
+            layoutObserver.observe(textarea, { attributes: true, attributeFilter: ['class', 'style'] });
+        }
+    }
+
     function closePanel() {
+        stopLayoutObserver();
         closeVariantPopup();
         if (openPanel) openPanel.remove();
         openPanel = null;
@@ -891,6 +935,7 @@ registerExportInfo({
         openButton = btn;
         openInputGroup = inputGroup;
 
+        startLayoutObserver();
         requestAnimationFrame(() => positionPanel(panel, btn));
         document.addEventListener('pointerdown', onPointerDown, true);
         document.addEventListener('keydown', onKeyDown);
