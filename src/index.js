@@ -1513,14 +1513,14 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
             const isNarrow = isNarrowViewport();
             const cellPadding = isNarrow ? '4px 5px' : '4px 8px';
             const table = document.createElement("table");
-            table.style.cssText = `border-collapse:collapse;margin:10px 0;background:${d ? '#333' : '#f9f9f9'};color:${d ? 'white' : '#333'};font-size:${isNarrow ? 12 : 13}px;width:100%;table-layout:fixed;`;
+            table.style.cssText = `border-collapse:collapse;margin:10px 0;background:${d ? '#333' : '#f9f9f9'};color:${d ? 'white' : '#333'};font-size:${isNarrow ? 12 : 13}px;width:auto;table-layout:auto;white-space:nowrap;`;
 
             const thead = document.createElement("thead");
             const headerRow = document.createElement("tr");
             ["物品", "质量", "饱和度"].forEach(text => {
                 const th = document.createElement("th");
                 th.textContent = text;
-                th.style.cssText = `border:1px solid ${d ? '#666' : '#ccc'};padding:${cellPadding};overflow-wrap:anywhere;word-break:break-word;`;
+                th.style.cssText = `border:1px solid ${d ? '#666' : '#ccc'};padding:${cellPadding};text-align:center;vertical-align:middle;white-space:nowrap;`;
                 headerRow.appendChild(th);
             });
             thead.appendChild(headerRow);
@@ -1533,7 +1533,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 [name, item.quality ?? "-", String(item.saturation)].forEach(text => {
                     const td = document.createElement("td");
                     td.textContent = text;
-                    td.style.cssText = `border:1px solid ${d ? '#666' : '#ccc'};padding:${cellPadding};text-align:center;overflow-wrap:anywhere;word-break:break-word;`;
+                    td.style.cssText = `border:1px solid ${d ? '#666' : '#ccc'};padding:${cellPadding};text-align:center;vertical-align:middle;white-space:nowrap;`;
                     row.appendChild(td);
                 });
                 tbody.appendChild(row);
@@ -1553,7 +1553,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 const d = DM();
                 const isNarrow = isNarrowViewport();
                 const containerPadding = isNarrow ? 8 : 12;
-                const containerMaxHeight = isNarrow ? 'calc(100vh - 70px)' : '400px';
+                const containerMaxHeight = isNarrow ? '320px' : '400px';
                 const titleFont = isNarrow ? 13 : 14;
                 const subFont = isNarrow ? 12 : 13;
                 const list = data.ResourcesRetailInfo;
@@ -1579,7 +1579,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 position:fixed; left:10px; top:50px; z-index:9998; box-sizing:border-box;
                 background:${d ? '#2c2c2c' : '#fff'}; color:${d ? '#fff' : '#333'}; padding:${containerPadding}px;
                 border-radius:8px; max-height:${containerMaxHeight}; overflow:auto;
-                width:auto; max-width: calc(100vw - 20px);
+                width:max-content; max-width: calc(100vw - 20px);
                 box-shadow:0 4px 15px rgba(0,0,0,0.5); font-family:Arial, sans-serif;
             `;
 
