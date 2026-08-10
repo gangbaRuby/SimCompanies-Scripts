@@ -856,10 +856,16 @@ registerExportInfo({
     }
 
     function positionButton(btn, inputGroup) {
-        const anchor = inputGroup.querySelector('.input-group-btn') || inputGroup;
+        const sendBtn = inputGroup.querySelector('.input-group-btn button');
+        const anchor = sendBtn || inputGroup.querySelector('.input-group-btn') || inputGroup;
         const rect = anchor.getBoundingClientRect();
-        btn.style.left = Math.max(4, rect.right - 42) + 'px';
-        btn.style.top = Math.max(4, rect.bottom - 42) + 'px';
+        if (sendBtn) {
+            btn.style.left = Math.max(4, rect.left - 42) + 'px';
+            btn.style.top = Math.max(4, rect.top + (rect.height - 34) / 2) + 'px';
+        } else {
+            btn.style.left = Math.max(4, rect.right - 42) + 'px';
+            btn.style.top = Math.max(4, rect.bottom - 42) + 'px';
+        }
     }
 
     function updateButtonPositions() {
