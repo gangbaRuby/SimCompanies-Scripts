@@ -35,7 +35,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
     registerExportInfo({
         name: '面板与全局设置',
         scope: 'global',
-        keys: ['SC_PanelPosition', 'mp_inputPercent', 'sc_ignored_version']
+        keys: ['SC_PanelPosition', 'mp_inputPercent', 'sc_autoMaxPPHPL_ignored_version']
     });
 
     registerExportInfo({
@@ -4212,6 +4212,8 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
     // ======================
     // 检测更新模块
     // ======================
+    const UPDATE_IGNORE_KEY = 'sc_autoMaxPPHPL_ignored_version';
+
     function compareVersions(v1, v2) {
         const a = v1.split('.').map(Number);
         const b = v2.split('.').map(Number);
@@ -4240,6 +4242,10 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 font-family: sans-serif; box-sizing: border-box;
             }
             .sc-update-toast.show { top: 20px; }
+
+            /* 多个脚本同时提示时，后出现的弹窗向下错开，避免叠在一起 */
+            .sc-update-toast-autoMaxPPHPL.show ~ .sc-update-toast.show,
+            .sc-update-toast.show ~ .sc-update-toast-autoMaxPPHPL.show { top: 80px; }
 
             /* 展开后的卡片样式 */
             .sc-update-toast.expanded {
@@ -4292,10 +4298,10 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
 
         // 2. HTML 结构
         const toast = document.createElement('div');
-        toast.className = 'sc-update-toast';
+        toast.className = 'sc-update-toast sc-update-toast-autoMaxPPHPL';
         toast.innerHTML = `
-            <div class="sc-update-close" id="sc-close" title="暂时关闭">&times;</div>
-            <div class="sc-update-header" id="sc-title">自动计算最大时利润插件 发现新版本 v${version} (点击查看)</div>
+            <div class="sc-update-close" id="sc-autoMax-close" title="暂时关闭">&times;</div>
+            <div class="sc-update-header" id="sc-autoMax-title">自动计算最大时利润插件 发现新版本 v${version} (点击查看)</div>
             <div class="sc-update-body">
                 <p style="margin:0; font-weight:bold;">更新日志：</p>
                 <div class="sc-changelog-box">${changelog.replace(/\n/g, '<br>') || '修复已知问题，优化性能。'}</div>
@@ -4303,8 +4309,8 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                     提示：忽略后将不再提示此版本。
                 </p>
                 <div class="sc-update-actions">
-                    <button class="sc-btn sc-btn-link" id="sc-ignore-forever">忽略此次更新</button>
-                    <button class="sc-btn sc-btn-primary" id="sc-confirm">前往更新</button>
+                    <button class="sc-btn sc-btn-link" id="sc-autoMax-ignore-forever">忽略此次更新</button>
+                    <button class="sc-btn sc-btn-primary" id="sc-autoMax-confirm">前往更新</button>
                 </div>
             </div>
         `;
@@ -4319,27 +4325,27 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
         toast.onclick = (e) => {
             if (!toast.classList.contains('expanded')) {
                 toast.classList.add('expanded');
-                document.getElementById('sc-title').innerHTML = `自动计算最大时利润插件 新版本：v${version}`;
+                toast.querySelector('#sc-autoMax-title').innerHTML = `自动计算最大时利润插件 新版本：v${version}`;
             }
         };
 
         // 右上角关闭：仅仅是本次消失
-        document.getElementById('sc-close').onclick = (e) => {
+        toast.querySelector('#sc-autoMax-close').onclick = (e) => {
             e.stopPropagation();
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 400);
         };
 
         // 左下角：忽略此版本
-        document.getElementById('sc-ignore-forever').onclick = (e) => {
+        toast.querySelector('#sc-autoMax-ignore-forever').onclick = (e) => {
             e.stopPropagation();
-            localStorage.setItem('sc_ignored_version', version);
+            localStorage.setItem(UPDATE_IGNORE_KEY, version);
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 400);
         };
 
         // 右下角：去更新
-        document.getElementById('sc-confirm').onclick = (e) => {
+        toast.querySelector('#sc-autoMax-confirm').onclick = (e) => {
             e.stopPropagation();
             window.open(downloadUrl, '_blank');
             toast.classList.remove('show');
@@ -4372,7 +4378,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                     console.log(`📢 发现新版本 v${latestVersion}`);
 
                     // 3. 检查是否被用户手动忽略过
-                    const ignoredVersion = localStorage.getItem('sc_ignored_version');
+                    const ignoredVersion = localStorage.getItem(UPDATE_IGNORE_KEY);
                     if (ignoredVersion && compareVersions(ignoredVersion, latestVersion) >= 0) {
                         console.log(`[Update] 用户已忽略此版本，不弹出 UI 提示`);
                         return;
