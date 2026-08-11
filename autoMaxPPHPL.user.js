@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.1
+// @version      1.33.2
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -3626,7 +3626,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.1",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.2",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -8259,6 +8259,10 @@
     };
     let openPanel = null;
     let openButton = null;
+    let openInputGroup = null;
+    let layoutObserver = null;
+    let layoutTimer = null;
+    let buttonPositionTimer = null;
     let variantPopup = null;
     let scanTimer = null;
     let started = false;
@@ -8537,14 +8541,24 @@
       const gap = 6;
       const panelWidth = Math.min(360, window.innerWidth - 16);
       const panelHeight = panel.offsetHeight || 340;
-      const maxHeight = Math.min(420, window.innerHeight - 16);
-      let top = rect.bottom + gap;
-      if (top + panelHeight > window.innerHeight - 8) {
-        top = Math.max(8, rect.top - panelHeight - gap);
+      let input = null;
+      if (openInputGroup) {
+        const textareas = openInputGroup.querySelectorAll("textarea");
+        for (const ta of textareas) {
+          if (isChatInput(ta) && ta.getBoundingClientRect().height > 0) {
+            input = ta;
+            break;
+          }
+        }
+        if (!input) input = textareas[0] || null;
       }
+      const anchorRect = input ? input.getBoundingClientRect() : rect;
+      const availableAbove = anchorRect.top - gap - 8;
+      const maxHeight = Math.max(0, Math.min(420, availableAbove, window.innerHeight - 16));
+      panel.style.maxHeight = maxHeight + "px";
+      const top = anchorRect.top - gap - Math.min(panelHeight, maxHeight);
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
       panel.style.width = panelWidth + "px";
-      panel.style.maxHeight = maxHeight + "px";
       panel.style.left = left + "px";
       panel.style.top = top + "px";
     }
@@ -8910,14 +8924,15 @@
       return panel;
     }
     function ensureButton(inputGroup) {
-      if (inputGroup.querySelector(BUTTON_SELECTOR)) return;
+      if (inputGroup.dataset.scEmojiPickerGroup === "1") return;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "sc-chat-emoji-picker-btn";
       btn.setAttribute("data-sc-emoji-picker-added", "1");
+      btn._inputGroup = inputGroup;
       btn.title = "\u9009\u62E9\u8868\u60C5";
       btn.textContent = "\u{1F642}";
-      btn.style.cssText = "display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:34px;min-width:34px;padding:0;margin:0 2px;border:1px solid rgba(128,128,128,0.55);border-radius:4px;background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;vertical-align:middle;box-sizing:border-box;";
+      btn.style.cssText = "position:fixed;z-index:2147483645;display:flex;align-items:center;justify-content:center;width:34px;height:34px;min-width:34px;max-width:34px;min-height:34px;max-height:34px;padding:0;margin:0;overflow:hidden;border:1px solid rgba(128,128,128,0.55);border-radius:4px;background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;box-sizing:border-box;";
       btn.addEventListener("mouseenter", () => {
         btn.style.background = "rgba(128,128,128,0.18)";
       });
@@ -8929,18 +8944,72 @@
         e.stopPropagation();
         togglePanel(btn, inputGroup);
       });
-      const btnGroup = inputGroup.querySelector(".input-group-btn");
-      if (btnGroup) {
-        btnGroup.insertBefore(btn, btnGroup.firstChild);
+      inputGroup.dataset.scEmojiPickerGroup = "1";
+      document.body.appendChild(btn);
+      positionButton(btn, inputGroup);
+    }
+    function positionButton(btn, inputGroup) {
+      const sendBtn = inputGroup.querySelector(".input-group-btn button");
+      const anchor = sendBtn || inputGroup.querySelector(".input-group-btn") || inputGroup;
+      const rect = anchor.getBoundingClientRect();
+      if (sendBtn) {
+        btn.style.left = Math.max(4, rect.left - 42) + "px";
+        btn.style.top = Math.max(4, rect.bottom - 34) + "px";
       } else {
-        inputGroup.appendChild(btn);
+        btn.style.left = Math.max(4, rect.right - 42) + "px";
+        btn.style.top = Math.max(4, rect.bottom - 34) + "px";
+      }
+    }
+    function updateButtonPositions() {
+      document.querySelectorAll(BUTTON_SELECTOR).forEach((btn) => {
+        const group = btn._inputGroup;
+        if (!group || !group.isConnected) {
+          if (group) delete group.dataset.scEmojiPickerGroup;
+          btn.remove();
+          return;
+        }
+        positionButton(btn, group);
+      });
+    }
+    function stopLayoutObserver() {
+      if (layoutObserver) {
+        layoutObserver.disconnect();
+        layoutObserver = null;
+      }
+      if (layoutTimer) {
+        clearInterval(layoutTimer);
+        layoutTimer = null;
+      }
+    }
+    function startLayoutObserver() {
+      stopLayoutObserver();
+      layoutTimer = setInterval(() => {
+        if (openPanel && openButton) positionPanel(openPanel, openButton);
+      }, 250);
+      layoutObserver = new MutationObserver(() => {
+        if (openPanel && openButton) {
+          requestAnimationFrame(() => positionPanel(openPanel, openButton));
+        }
+      });
+      const seen = /* @__PURE__ */ new Set();
+      let el = openInputGroup;
+      while (el && !seen.has(el)) {
+        layoutObserver.observe(el, { attributes: true, attributeFilter: ["class", "style"] });
+        seen.add(el);
+        el = el.parentElement;
+      }
+      const textareas = openInputGroup.querySelectorAll("textarea");
+      for (const textarea of textareas) {
+        layoutObserver.observe(textarea, { attributes: true, attributeFilter: ["class", "style"] });
       }
     }
     function closePanel() {
+      stopLayoutObserver();
       closeVariantPopup();
       if (openPanel) openPanel.remove();
       openPanel = null;
       openButton = null;
+      openInputGroup = null;
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", onViewportChange);
@@ -8972,6 +9041,8 @@
       document.body.appendChild(panel);
       openPanel = panel;
       openButton = btn;
+      openInputGroup = inputGroup;
+      startLayoutObserver();
       requestAnimationFrame(() => positionPanel(panel, btn));
       document.addEventListener("pointerdown", onPointerDown, true);
       document.addEventListener("keydown", onKeyDown);
@@ -8982,7 +9053,10 @@
     }
     function removeAll() {
       closePanel();
-      document.querySelectorAll(BUTTON_SELECTOR).forEach((btn) => btn.remove());
+      document.querySelectorAll(BUTTON_SELECTOR).forEach((btn) => {
+        if (btn._inputGroup) delete btn._inputGroup.dataset.scEmojiPickerGroup;
+        btn.remove();
+      });
     }
     function requestScan() {
       if (scanTimer) return;
@@ -8996,11 +9070,13 @@
         removeAll();
         return;
       }
+      updateButtonPositions();
       document.querySelectorAll("textarea").forEach((textarea) => {
         if (!isChatInput(textarea)) return;
         const inputGroup = textarea.closest(".input-group");
         if (inputGroup) ensureButton(inputGroup);
       });
+      updateButtonPositions();
     }
     function start() {
       if (started) return;
@@ -9023,6 +9099,9 @@
       [document.documentElement, document.body].forEach((target) => {
         themeObserver.observe(target, { attributes: true, attributeFilter: ["class", "style"] });
       });
+      buttonPositionTimer = setInterval(updateButtonPositions, 300);
+      window.addEventListener("scroll", updateButtonPositions, true);
+      window.addEventListener("resize", updateButtonPositions);
       window.scChatEmojiPickerRefresh = () => {
         removeAll();
         scan();
@@ -10403,16 +10482,19 @@
     }
     const SaturationDisplay = /* @__PURE__ */ (() => {
       let saturationTableElement = null;
+      const isNarrowViewport = () => window.innerWidth <= 480;
       const createTable = (list) => {
         const d = DM();
+        const isNarrow = isNarrowViewport();
+        const cellPadding = isNarrow ? "4px 5px" : "4px 8px";
         const table = document.createElement("table");
-        table.style.cssText = `border-collapse:collapse;margin:10px 0;background:${d ? "#333" : "#f9f9f9"};color:${d ? "white" : "#333"};font-size:13px;width:100%;`;
+        table.style.cssText = `border-collapse:collapse;margin:10px 0;background:${d ? "#333" : "#f9f9f9"};color:${d ? "white" : "#333"};font-size:${isNarrow ? 12 : 13}px;width:auto;table-layout:auto;white-space:nowrap;`;
         const thead = document.createElement("thead");
         const headerRow = document.createElement("tr");
         ["\u7269\u54C1", "\u8D28\u91CF", "\u9971\u548C\u5EA6"].forEach((text) => {
           const th = document.createElement("th");
           th.textContent = text;
-          th.style.cssText = `border:1px solid ${d ? "#666" : "#ccc"};padding:4px 8px;`;
+          th.style.cssText = `border:1px solid ${d ? "#666" : "#ccc"};padding:${cellPadding};text-align:center;vertical-align:middle;white-space:nowrap;`;
           headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
@@ -10424,7 +10506,7 @@
           [name, item.quality ?? "-", String(item.saturation)].forEach((text) => {
             const td = document.createElement("td");
             td.textContent = text;
-            td.style.cssText = `border:1px solid ${d ? "#666" : "#ccc"};padding:4px 8px;text-align:center;`;
+            td.style.cssText = `border:1px solid ${d ? "#666" : "#ccc"};padding:${cellPadding};text-align:center;vertical-align:middle;white-space:nowrap;`;
             row.appendChild(td);
           });
           tbody.appendChild(row);
@@ -10440,20 +10522,39 @@
             return;
           }
           const d = DM();
+          const isNarrow = isNarrowViewport();
+          const containerPadding = isNarrow ? 8 : 12;
+          const containerMaxHeight = isNarrow ? "320px" : "400px";
+          const titleFont = isNarrow ? 13 : 14;
+          const subFont = isNarrow ? 12 : 13;
           const list = data2.ResourcesRetailInfo;
           const weatherMultiplier = data2.sellingSpeedMultiplier.sellingSpeedMultiplier;
+          const weatherData = data2.sellingSpeedMultiplier || {};
+          const weatherUntilRaw = weatherData.Until || weatherData.until || weatherData.weatherUntil || data2.weatherUntil && (data2.weatherUntil.Until || data2.weatherUntil.until);
+          const weatherUntilDate = weatherUntilRaw ? new Date(weatherUntilRaw) : null;
+          const weatherUntilText = weatherUntilDate && !isNaN(weatherUntilDate.getTime()) ? weatherUntilDate.toLocaleString([], {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          }) : "\u672A\u77E5";
           saturationTableElement = document.createElement("div");
           saturationTableElement.style.cssText = `
-                position:fixed; left:10px; top:50px; z-index:9998;
-                background:${d ? "#2c2c2c" : "#fff"}; color:${d ? "#fff" : "#333"}; padding:12px;
-                border-radius:8px; max-height:400px; overflow:auto;
-                max-width: calc(100vw - 20px);
+                position:fixed; left:10px; top:50px; z-index:9998; box-sizing:border-box;
+                background:${d ? "#2c2c2c" : "#fff"}; color:${d ? "#fff" : "#333"}; padding:${containerPadding}px;
+                border-radius:8px; max-height:${containerMaxHeight}; overflow:auto;
+                width:max-content; max-width: calc(100vw - 20px);
                 box-shadow:0 4px 15px rgba(0,0,0,0.5); font-family:Arial, sans-serif;
             `;
           const headerInfo = document.createElement("div");
+          headerInfo.style.paddingRight = "26px";
+          headerInfo.style.overflowWrap = "anywhere";
           headerInfo.innerHTML = `
-                <div style="margin-bottom:6px; font-size:14px; font-weight:bold; color:${d ? "#f1c40f" : "#b8860b"};">\u5929\u6C14\u901F\u5EA6\u52A0\u6210: ${weatherMultiplier}</div>
-                <div style="margin-bottom:6px; font-size:13px; color:${d ? "#ddd" : "#666"};">\u67E5\u8BE2\u5386\u53F2\u9971\u548C\u5EA6: <a href="https://marketsaturation.22-7.top/" target="_blank" style="color:#3498db; text-decoration:underline;">\u70B9\u51FB\u67E5\u770B</a></div>
+                <div style="margin-bottom:6px; font-size:${titleFont}px; font-weight:bold; color:${d ? "#f1c40f" : "#b8860b"};">\u5929\u6C14\u901F\u5EA6\u52A0\u6210: ${weatherMultiplier}</div>
+                <div style="margin-bottom:6px; font-size:${subFont}px; color:${d ? "#ddd" : "#666"};">\u4E0B\u6B21\u53D8\u66F4\u65F6\u95F4: ${weatherUntilText}</div>
+                <div style="margin-bottom:6px; font-size:${subFont}px; color:${d ? "#ddd" : "#666"};">\u67E5\u8BE2\u5386\u53F2\u9971\u548C\u5EA6: <a href="https://sc.22-7.top/marketsaturation" target="_blank" style="color:#3498db; text-decoration:underline;">\u70B9\u51FB\u67E5\u770B</a></div>
             `;
           const closeBtn = document.createElement("button");
           closeBtn.textContent = "\xD7";
@@ -12847,4 +12948,4 @@
   })();
 })();
 
-// @changelog 新增聊天表情选择器：运行时读取游戏当前前端包，自动展示最近使用、资源、建筑、彩蛋、领域、特殊和 Unicode 其它表情，点击直接插入；面板顶部显示测试提示。修复与旧建筑皮肤脚本同时启用时，更新提示按钮绑定冲突、忽略记录互相影响的问题。
+// @changelog 修复聊天表情选择器按钮与面板遮挡问题；优化饱和度表与天气信息显示；更新历史饱和度链接。
