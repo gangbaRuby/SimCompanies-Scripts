@@ -53,7 +53,7 @@ export const RegionAutoUpdater = (() => {
         try {
             const data = JSON.parse(dataStr);
             const lastTime = new Date(data.timestamp).getTime();
-            const weatherUntil = new Date(data.sellingSpeedMultiplier.weatherUntil).getTime();
+            const weatherUntil = new Date(data.sellingSpeedMultiplier.Until).getTime();
             const now = Date.now();
 
             const ONE_HOUR = 60 * 60 * 1000;
