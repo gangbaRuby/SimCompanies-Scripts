@@ -388,9 +388,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
                     const execMatch = url.match(EXEC_API_REGEX);
                     const currentSlot = getCurrentExecSlot();
                     const detailPosition = d?.currentWorkHistory?.position;
-                    const detailSlot = detailPosition != null ? SLOT_MAP[detailPosition] : null;
                     const matchesSlot = currentSlot != null && (
-                        detailSlot === currentSlot ||
+                        detailPosition === currentSlot ||
                         (current && execMatch && Number(execMatch[1]) === Number(current.id))
                     );
                     if (execMatch && matchesSlot && getCurrentExecPanelContainer()) {
