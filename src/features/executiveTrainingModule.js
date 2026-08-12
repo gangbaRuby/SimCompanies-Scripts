@@ -4,6 +4,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
         const ExecutiveTrainingModule = (function () {
         let panelRelocateTimer = null;
+        let currentPanelRenderTimer = null;
 
         const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
         const NOTIFICATIONS_KEYWORD = "/game-notifications/";
@@ -64,6 +65,74 @@ import { registerExportInfo } from '../core/exportInfo.js';
         const getCurrentExecPanelContainer = () =>
             document.querySelector('#page .row > .col-lg-6') || null;
 
+        const getReactFiber = (el) => {
+            const key = Object.keys(el).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+            return key ? el[key] : null;
+        };
+
+        const getHostNodeFromFiber = (fiber) => {
+            const queue = [fiber];
+            while (queue.length) {
+                const node = queue.pop();
+                if (!node) continue;
+                if (node.stateNode instanceof Element) return node.stateNode;
+                if (node.sibling) queue.push(node.sibling);
+                if (node.child) queue.push(node.child);
+            }
+            return null;
+        };
+
+        // 定位培训课程进度汇总块，不依赖 CSS 类名和游戏文案。
+        const getCurrentExecTrainingSummaryNode = (execId) => {
+            const page = document.getElementById('page');
+            if (!page || execId == null) return null;
+
+            const findKeyedTop = (rootFiber) => {
+                const queue = [rootFiber];
+                while (queue.length) {
+                    const node = queue.pop();
+                    if (!node) continue;
+                    if (node.key === 'top') {
+                        const host = getHostNodeFromFiber(node);
+                        const hasProgress = !!(host && host.querySelector('[role="progressbar"]'));
+                        if (hasProgress) {
+                            return host;
+                        }
+                    }
+                    if (node.sibling) queue.push(node.sibling);
+                    if (node.child) queue.push(node.child);
+                }
+                return null;
+            };
+
+            for (const el of page.querySelectorAll('div')) {
+                const fiber = getReactFiber(el);
+                if (!fiber) continue;
+
+                let node = fiber;
+                while (node) {
+                    const props = node.memoizedProps;
+                    if (props && props.executive && String(props.executive.id) === String(execId)) {
+                        const found = findKeyedTop(node);
+                        if (found) return found;
+                        break;
+                    }
+                    node = node.return;
+                }
+            }
+
+            const pageFound = findKeyedTop(getReactFiber(page));
+            return pageFound;
+        };
+
+        const clearCurrentPanelRenderTimer = () => {
+            if (currentPanelRenderTimer) {
+                clearInterval(currentPanelRenderTimer);
+                currentPanelRenderTimer = null;
+            }
+        };
+        window.addEventListener('pagehide', clearCurrentPanelRenderTimer, { once: true });
+
         const ensureAgencyPanelRelocated = () => {
             const panel = document.getElementById('sc-plugin-panel');
             if (!panel) {
@@ -88,6 +157,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
                     clearInterval(panelRelocateTimer);
                     panelRelocateTimer = null;
                 }
+                clearCurrentPanelRenderTimer();
             }, { once: true });
         };
 
@@ -124,10 +194,12 @@ import { registerExportInfo } from '../core/exportInfo.js';
         function renderSkillPanel(data, isError = false, mode = 'agency') {
             const targetContainer = mode === 'current' ? getCurrentExecPanelContainer() : getValidTargetContainer();
             const panelId = mode === 'current' ? 'sc-current-exec-panel' : 'sc-plugin-panel';
-            if (!targetContainer || document.getElementById(panelId)) return;
+            const existingPanel = document.getElementById(panelId);
+            if (!targetContainer || (mode !== 'current' && existingPanel)) return;
+            if (mode === 'current') clearCurrentPanelRenderTimer();
 
             const d14 = DM();
-            const panel = document.createElement('div');
+            const panel = existingPanel || document.createElement('div');
             panel.id = panelId;
             const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14 ? '#2c2c2c' : '#f2f2f2'}; border: 1px solid ${d14 ? '#555' : '#d1d1d1'}; color: ${d14 ? '#efefef' : '#333'};${mode === 'current' ? ' width:100%; box-sizing:border-box;' : ''}`;
 
@@ -273,7 +345,24 @@ import { registerExportInfo } from '../core/exportInfo.js';
             panel.style = baseStyle;
             panel.innerHTML = contentHtml;
             if (mode === 'current') {
-                targetContainer.appendChild(panel);
+                panel.dataset.scExecId = data?.id != null ? String(data.id) : '';
+                const anchor = getCurrentExecTrainingSummaryNode(data?.id);
+                if (anchor) {
+                    anchor.after(panel);
+                } else {
+                    const startedAt = Date.now();
+                    clearCurrentPanelRenderTimer();
+                    currentPanelRenderTimer = setInterval(() => {
+                        const retryAnchor = getCurrentExecTrainingSummaryNode(data?.id);
+                        if (retryAnchor) {
+                            clearCurrentPanelRenderTimer();
+                            retryAnchor.after(panel);
+                        } else if (Date.now() - startedAt > 5000) {
+                            clearCurrentPanelRenderTimer();
+                            if (targetContainer) targetContainer.appendChild(panel);
+                        }
+                    }, 200);
+                }
             } else {
                 targetContainer.after(panel);
                 startAgencyPanelRelocateWatch();
@@ -297,7 +386,13 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 } else {
                     const current = getCurrentExecRecord();
                     const execMatch = url.match(EXEC_API_REGEX);
-                    if (current && execMatch && Number(execMatch[1]) === current.id && getCurrentExecPanelContainer()) {
+                    const currentSlot = getCurrentExecSlot();
+                    const detailPosition = d?.currentWorkHistory?.position;
+                    const matchesSlot = currentSlot != null && (
+                        detailPosition === currentSlot ||
+                        (current && execMatch && Number(execMatch[1]) === Number(current.id))
+                    );
+                    if (execMatch && matchesSlot && getCurrentExecPanelContainer()) {
                         if (isExecutiveHistoryEnabled()) renderSkillPanel(d, false, 'current');
                     }
                 }
