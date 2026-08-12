@@ -60,6 +60,7 @@ npm run release -- "<changelog>"
 - 每次源码改动都运行 `npm run check`；准备合并时确认 GitHub Actions 的 CI 已通过。
 - 用户可见行为发生变化时，同步更新 `CHANGELOG.md` 的 `未发布` 区域；正式构建会自动写入版本记录。
 - 提交 Bug 或功能建议时使用 `.github/ISSUE_TEMPLATE/` 模板；Pull Request 必须写明调用链、影响范围、验证结果和剩余风险。
+- 通过 GitHub API/CLI 自动创建或更新 PR 时，标题和正文中的中文不要依赖命令行本地编码直接传参；推荐在 JSON 中使用 `\uXXXX` 转义或确保 UTF-8，创建后到 GitHub 页面核对中文显示。
 - 不提交 `dist/`、依赖目录、环境变量、日志、Cookie、令牌或其他敏感信息。
 
 <!--
