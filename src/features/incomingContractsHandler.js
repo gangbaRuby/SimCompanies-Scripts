@@ -716,6 +716,8 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     insertWarningNotice();
                     processAllCards([...contractCards]);
                     startMutationObserver();
+                } else {
+                    insertWarningNotice();
                 }
             }, 500);
         }
@@ -1212,10 +1214,138 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             injectHourlyProfitLegacy(card, profitValue, mpPercent, mpValue, mpNotes);
         }
 
+        function getReactFiberFromElement(el) {
+            const key = Object.keys(el).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+            return key ? el[key] : null;
+        }
+
+        function getHostNodeFromFiber(fiber) {
+            const queue = [fiber];
+            while (queue.length) {
+                const node = queue.pop();
+                if (!node) continue;
+                if (node.stateNode instanceof Element) return node.stateNode;
+                if (node.sibling) queue.push(node.sibling);
+                if (node.child) queue.push(node.child);
+            }
+            return null;
+        }
+
+        function getIncomingContractsRoot() {
+            const page = document.getElementById('page');
+            if (!page) return null;
+
+            for (const el of page.querySelectorAll('div')) {
+                const fiber = getReactFiberFromElement(el);
+                if (!fiber) continue;
+
+                let node = fiber;
+                while (node) {
+                    const props = node.memoizedProps;
+                    if (props && props.incoming === true && Object.prototype.hasOwnProperty.call(props, 'currentContracts')) {
+                        return getHostNodeFromFiber(node);
+                    }
+                    node = node.return;
+                }
+            }
+            return null;
+        }
+
+        function createWarningNotice() {
+            const isNarrow8 = window.innerWidth <= 576;
+            const d8 = DM();
+            const tip = document.createElement('div');
+            tip.style.cssText = `
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: ${isNarrow8 ? '6px 8px' : '8px'};
+                color: ${d8 ? '#aaa' : '#777'};
+                font-size: ${isNarrow8 ? '11px' : '13px'};
+                width: 100%;
+            `;
+            tip.dataset.warningText = 'true';
+
+            // 1. 插入文本提示
+            const textSpan = document.createElement('span');
+            textSpan.textContent = '自动更新数据有延迟，左下可手动更新';
+            textSpan.style.cssText = `
+                white-space: ${isNarrow8 ? 'normal' : 'nowrap'};
+                flex: ${isNarrow8 ? '1 1 100%' : '0 0 auto'};
+            `;
+            tip.appendChild(textSpan);
+
+            // 2. 按钮组容器
+            const btnGroup = document.createElement('div');
+            btnGroup.style.cssText = `
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: ${isNarrow8 ? '4px 6px' : '6px'};
+                flex: 1 1 auto;
+            `;
+
+            // 2a. 开关按钮
+            const toggle = createGlobalCustomToggle(
+                'executiveCustomToggle',
+                '自定义',
+                { buttonClass: 'btn btn-primary' },
+                (isEnabled) => {
+                    refreshAllContractProfits();
+                }
+            );
+            toggle.wrapper.style.marginLeft = "0";
+            btnGroup.appendChild(toggle.wrapper);
+
+            // 2b. 自定义数据功能按钮
+            const customBtn = document.createElement('button');
+            customBtn.type = 'button';
+            customBtn.textContent = '自定义高管数据';
+            customBtn.style.cssText = `
+                padding: 4px 10px; background: #2196f3;
+                color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                font-weight: bold; white-space: nowrap; flex-shrink: 0;
+            `;
+            customBtn.onclick = () => executiveCustomButton.show();
+            btnGroup.appendChild(customBtn);
+
+            // 2c. 显示更多信息开关按钮
+            const marketToggle = createGlobalCustomToggle(
+                'marketMaxProfitToggle',
+                '显示更多',
+                {},
+                () => {
+                    refreshAllContractProfits();
+                }
+            );
+            marketToggle.wrapper.style.marginLeft = "0";
+            btnGroup.appendChild(marketToggle.wrapper);
+
+            // 2d. 二次确认设置按钮
+            const priceSetBtn = document.createElement('button');
+            priceSetBtn.type = 'button';
+            priceSetBtn.textContent = '二次确认设置';
+            priceSetBtn.style.cssText = `
+                padding: 4px 10px; background: #9c27b0;
+                color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                font-weight: bold; white-space: nowrap; flex-shrink: 0;
+            `;
+            priceSetBtn.onclick = () => showContractPriceModal();
+            btnGroup.appendChild(priceSetBtn);
+
+            tip.appendChild(btnGroup);
+            return tip;
+        }
+
         function insertWarningNotice() {
             if (document.querySelector('[data-warning-text]')) return;
 
             const cards = document.querySelectorAll('div[tabindex="0"]');
+            if (cards.length === 0) {
+                const root = getIncomingContractsRoot();
+                if (root) root.insertBefore(createWarningNotice(), root.firstChild);
+                return;
+            }
 
             cards.forEach(card => {
                 let parent = card.parentElement;
@@ -1227,88 +1357,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 const insertTarget = grandParent.firstElementChild;
                 if (!insertTarget || insertTarget === parent) return;
 
-                const isNarrow8 = window.innerWidth <= 576;
-                const d8 = DM();
-                const tip = document.createElement('div');
-                tip.style.cssText = `
-                    display: flex;
-                    flex-wrap: wrap;
-                    align-items: center;
-                    gap: ${isNarrow8 ? '6px 8px' : '8px'};
-                    color: ${d8 ? '#aaa' : '#777'};
-                    font-size: ${isNarrow8 ? '11px' : '13px'};
-                    width: 100%;
-                `;
-                tip.dataset.warningText = 'true';
-
-                // 1. 插入文本提示
-                const textSpan = document.createElement('span');
-                textSpan.textContent = '自动更新数据有延迟，左下可手动更新';
-                textSpan.style.cssText = `
-                    white-space: ${isNarrow8 ? 'normal' : 'nowrap'};
-                    flex: ${isNarrow8 ? '1 1 100%' : '0 0 auto'};
-                `;
-                tip.appendChild(textSpan);
-
-                // 2. 按钮组容器
-                const btnGroup = document.createElement('div');
-                btnGroup.style.cssText = `
-                    display: flex;
-                    flex-wrap: wrap;
-                    align-items: center;
-                    gap: ${isNarrow8 ? '4px 6px' : '6px'};
-                    flex: 1 1 auto;
-                `;
-
-                // 2a. 开关按钮
-                const toggle = createGlobalCustomToggle(
-                    'executiveCustomToggle',
-                    '自定义',
-                    { buttonClass: 'btn btn-primary' },
-                    (isEnabled) => {
-                        refreshAllContractProfits();
-                    }
-                );
-                toggle.wrapper.style.marginLeft = "0";
-                btnGroup.appendChild(toggle.wrapper);
-
-                // 2b. 自定义数据功能按钮
-                const customBtn = document.createElement('button');
-                customBtn.type = 'button';
-                customBtn.textContent = '自定义高管数据';
-                customBtn.style.cssText = `
-                    padding: 4px 10px; background: #2196f3;
-                    color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
-                    font-weight: bold; white-space: nowrap; flex-shrink: 0;
-                `;
-                customBtn.onclick = () => executiveCustomButton.show();
-                btnGroup.appendChild(customBtn);
-
-                // 2c. 显示更多信息开关按钮
-                const marketToggle = createGlobalCustomToggle(
-                    'marketMaxProfitToggle',
-                    '显示更多',
-                    {},
-                    () => {
-                        refreshAllContractProfits();
-                    }
-                );
-                marketToggle.wrapper.style.marginLeft = "0";
-                btnGroup.appendChild(marketToggle.wrapper);
-
-                // 2d. 预期价格设置按钮
-                const priceSetBtn = document.createElement('button');
-                priceSetBtn.type = 'button';
-                priceSetBtn.textContent = '预期价格';
-                priceSetBtn.style.cssText = `
-                    padding: 4px 10px; background: #9c27b0;
-                    color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
-                    font-weight: bold; white-space: nowrap; flex-shrink: 0;
-                `;
-                priceSetBtn.onclick = () => showContractPriceModal();
-                btnGroup.appendChild(priceSetBtn);
-
-                tip.appendChild(btnGroup);
+                const tip = createWarningNotice();
 
                 insertTarget.appendChild(tip);
             });
@@ -1325,7 +1374,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
         const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
 
         function getParsedRules() {
-            const settings = JSON.parse(localStorage.getItem('SC_Contract_HighPrice_Settings') || '{"global":"","individual":""}');
+            const settings = JSON.parse(localStorage.getItem('SC_Contract_HighPrice_Settings') || '{"global":"-0","individual":""}');
             const parsed = {
                 global: null,
                 individual: new Map()
@@ -1541,7 +1590,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
 
             wrapper.innerHTML = `
                 <div style="padding: 12px 20px; background: #9c27b0; color: white; display: flex; justify-content: space-between; align-items: center; user-select: none; font-weight: bold; font-size: 15px;">
-                    <span>合同预期价格设置</span>
+                    <span>合同二次确认设置</span>
                     <span id="sc-contract-price-close" style="cursor: pointer; font-size: 20px; font-weight: normal; line-height: 1;">&times;</span>
                 </div>
                 <div style="padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;">
@@ -1641,7 +1690,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             }
 
             // 初始化规则列表
-            const settings = JSON.parse(localStorage.getItem('SC_Contract_HighPrice_Settings') || '{"global":"","individual":""}');
+            const settings = JSON.parse(localStorage.getItem('SC_Contract_HighPrice_Settings') || '{"global":"-0","individual":""}');
             document.getElementById('sc-contract-global-val').value = settings.global || '';
 
             const lines = (settings.individual || '').split('\n');
