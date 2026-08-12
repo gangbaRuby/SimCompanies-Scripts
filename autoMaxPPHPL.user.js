@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.2
+// @version      1.33.3
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -2241,6 +2241,7 @@
   // src/features/executiveTrainingModule.js
   var ExecutiveTrainingModule2 = (function() {
     let panelRelocateTimer = null;
+    let currentPanelRenderTimer = null;
     const OFFERS_URL = "/api/v2/companies/executives/my-offers/";
     const NOTIFICATIONS_KEYWORD = "/game-notifications/";
     const EXEC_API_REGEX = /\/api\/v4\/executives\/(\d+)\/$/;
@@ -2316,6 +2317,65 @@
       return load(CURRENT_EXECS_STORAGE_KEY).find((e) => e.position === slot) || null;
     };
     const getCurrentExecPanelContainer = () => document.querySelector("#page .row > .col-lg-6") || null;
+    const getReactFiber = (el) => {
+      const key = Object.keys(el).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+      return key ? el[key] : null;
+    };
+    const getHostNodeFromFiber = (fiber) => {
+      const queue = [fiber];
+      while (queue.length) {
+        const node = queue.pop();
+        if (!node) continue;
+        if (node.stateNode instanceof Element) return node.stateNode;
+        if (node.sibling) queue.push(node.sibling);
+        if (node.child) queue.push(node.child);
+      }
+      return null;
+    };
+    const getCurrentExecTrainingSummaryNode = (execId) => {
+      const page = document.getElementById("page");
+      if (!page || execId == null) return null;
+      const findKeyedTop = (rootFiber) => {
+        const queue = [rootFiber];
+        while (queue.length) {
+          const node = queue.pop();
+          if (!node) continue;
+          if (node.key === "top") {
+            const host = getHostNodeFromFiber(node);
+            const hasProgress = !!(host && host.querySelector('[role="progressbar"]'));
+            if (hasProgress) {
+              return host;
+            }
+          }
+          if (node.sibling) queue.push(node.sibling);
+          if (node.child) queue.push(node.child);
+        }
+        return null;
+      };
+      for (const el of page.querySelectorAll("div")) {
+        const fiber = getReactFiber(el);
+        if (!fiber) continue;
+        let node = fiber;
+        while (node) {
+          const props = node.memoizedProps;
+          if (props && props.executive && String(props.executive.id) === String(execId)) {
+            const found = findKeyedTop(node);
+            if (found) return found;
+            break;
+          }
+          node = node.return;
+        }
+      }
+      const pageFound = findKeyedTop(getReactFiber(page));
+      return pageFound;
+    };
+    const clearCurrentPanelRenderTimer = () => {
+      if (currentPanelRenderTimer) {
+        clearInterval(currentPanelRenderTimer);
+        currentPanelRenderTimer = null;
+      }
+    };
+    window.addEventListener("pagehide", clearCurrentPanelRenderTimer, { once: true });
     const ensureAgencyPanelRelocated = () => {
       const panel = document.getElementById("sc-plugin-panel");
       if (!panel) {
@@ -2339,6 +2399,7 @@
           clearInterval(panelRelocateTimer);
           panelRelocateTimer = null;
         }
+        clearCurrentPanelRenderTimer();
       }, { once: true });
     };
     const isExecutiveHistoryEnabled = () => typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled("executiveHistory") : true;
@@ -2364,9 +2425,11 @@
     function renderSkillPanel(data2, isError = false, mode = "agency") {
       const targetContainer = mode === "current" ? getCurrentExecPanelContainer() : getValidTargetContainer();
       const panelId = mode === "current" ? "sc-current-exec-panel" : "sc-plugin-panel";
-      if (!targetContainer || document.getElementById(panelId)) return;
+      const existingPanel = document.getElementById(panelId);
+      if (!targetContainer || mode !== "current" && existingPanel) return;
+      if (mode === "current") clearCurrentPanelRenderTimer();
       const d14 = DM();
-      const panel = document.createElement("div");
+      const panel = existingPanel || document.createElement("div");
       panel.id = panelId;
       const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14 ? "#2c2c2c" : "#f2f2f2"}; border: 1px solid ${d14 ? "#555" : "#d1d1d1"}; color: ${d14 ? "#efefef" : "#333"};${mode === "current" ? " width:100%; box-sizing:border-box;" : ""}`;
       let contentHtml = "";
@@ -2501,7 +2564,24 @@
       panel.style = baseStyle;
       panel.innerHTML = contentHtml;
       if (mode === "current") {
-        targetContainer.appendChild(panel);
+        panel.dataset.scExecId = data2?.id != null ? String(data2.id) : "";
+        const anchor = getCurrentExecTrainingSummaryNode(data2?.id);
+        if (anchor) {
+          anchor.after(panel);
+        } else {
+          const startedAt = Date.now();
+          clearCurrentPanelRenderTimer();
+          currentPanelRenderTimer = setInterval(() => {
+            const retryAnchor = getCurrentExecTrainingSummaryNode(data2?.id);
+            if (retryAnchor) {
+              clearCurrentPanelRenderTimer();
+              retryAnchor.after(panel);
+            } else if (Date.now() - startedAt > 5e3) {
+              clearCurrentPanelRenderTimer();
+              if (targetContainer) targetContainer.appendChild(panel);
+            }
+          }, 200);
+        }
       } else {
         targetContainer.after(panel);
         startAgencyPanelRelocateWatch();
@@ -2519,7 +2599,10 @@
         } else {
           const current = getCurrentExecRecord();
           const execMatch = url.match(EXEC_API_REGEX);
-          if (current && execMatch && Number(execMatch[1]) === current.id && getCurrentExecPanelContainer()) {
+          const currentSlot = getCurrentExecSlot();
+          const detailPosition = d?.currentWorkHistory?.position;
+          const matchesSlot = currentSlot != null && (detailPosition === currentSlot || current && execMatch && Number(execMatch[1]) === Number(current.id));
+          if (execMatch && matchesSlot && getCurrentExecPanelContainer()) {
             if (isExecutiveHistoryEnabled()) renderSkillPanel(d, false, "current");
           }
         }
@@ -3626,7 +3709,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.2",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.3",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -6499,6 +6582,8 @@
           insertWarningNotice();
           processAllCards([...contractCards]);
           startMutationObserver();
+        } else {
+          insertWarningNotice();
         }
       }, 500);
     }
@@ -6891,9 +6976,118 @@
       const mpNotes = card.__mpNotes || null;
       injectHourlyProfitLegacy(card, profitValue, mpPercent, mpValue, mpNotes);
     }
+    function getReactFiberFromElement(el) {
+      const key = Object.keys(el).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+      return key ? el[key] : null;
+    }
+    function getHostNodeFromFiber(fiber) {
+      const queue = [fiber];
+      while (queue.length) {
+        const node = queue.pop();
+        if (!node) continue;
+        if (node.stateNode instanceof Element) return node.stateNode;
+        if (node.sibling) queue.push(node.sibling);
+        if (node.child) queue.push(node.child);
+      }
+      return null;
+    }
+    function getIncomingContractsRoot() {
+      const page = document.getElementById("page");
+      if (!page) return null;
+      for (const el of page.querySelectorAll("div")) {
+        const fiber = getReactFiberFromElement(el);
+        if (!fiber) continue;
+        let node = fiber;
+        while (node) {
+          const props = node.memoizedProps;
+          if (props && props.incoming === true && Object.prototype.hasOwnProperty.call(props, "currentContracts")) {
+            return getHostNodeFromFiber(node);
+          }
+          node = node.return;
+        }
+      }
+      return null;
+    }
+    function createWarningNotice() {
+      const isNarrow8 = window.innerWidth <= 576;
+      const d8 = DM();
+      const tip = document.createElement("div");
+      tip.style.cssText = `
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: ${isNarrow8 ? "6px 8px" : "8px"};
+                color: ${d8 ? "#aaa" : "#777"};
+                font-size: ${isNarrow8 ? "11px" : "13px"};
+                width: 100%;
+            `;
+      tip.dataset.warningText = "true";
+      const textSpan = document.createElement("span");
+      textSpan.textContent = "\u81EA\u52A8\u66F4\u65B0\u6570\u636E\u6709\u5EF6\u8FDF\uFF0C\u5DE6\u4E0B\u53EF\u624B\u52A8\u66F4\u65B0";
+      textSpan.style.cssText = `
+                white-space: ${isNarrow8 ? "normal" : "nowrap"};
+                flex: ${isNarrow8 ? "1 1 100%" : "0 0 auto"};
+            `;
+      tip.appendChild(textSpan);
+      const btnGroup = document.createElement("div");
+      btnGroup.style.cssText = `
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: ${isNarrow8 ? "4px 6px" : "6px"};
+                flex: 1 1 auto;
+            `;
+      const toggle = createGlobalCustomToggle(
+        "executiveCustomToggle",
+        "\u81EA\u5B9A\u4E49",
+        { buttonClass: "btn btn-primary" },
+        (isEnabled) => {
+          refreshAllContractProfits();
+        }
+      );
+      toggle.wrapper.style.marginLeft = "0";
+      btnGroup.appendChild(toggle.wrapper);
+      const customBtn = document.createElement("button");
+      customBtn.type = "button";
+      customBtn.textContent = "\u81EA\u5B9A\u4E49\u9AD8\u7BA1\u6570\u636E";
+      customBtn.style.cssText = `
+                padding: 4px 10px; background: #2196f3;
+                color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                font-weight: bold; white-space: nowrap; flex-shrink: 0;
+            `;
+      customBtn.onclick = () => executiveCustomButton.show();
+      btnGroup.appendChild(customBtn);
+      const marketToggle = createGlobalCustomToggle(
+        "marketMaxProfitToggle",
+        "\u663E\u793A\u66F4\u591A",
+        {},
+        () => {
+          refreshAllContractProfits();
+        }
+      );
+      marketToggle.wrapper.style.marginLeft = "0";
+      btnGroup.appendChild(marketToggle.wrapper);
+      const priceSetBtn = document.createElement("button");
+      priceSetBtn.type = "button";
+      priceSetBtn.textContent = "\u4E8C\u6B21\u786E\u8BA4\u8BBE\u7F6E";
+      priceSetBtn.style.cssText = `
+                padding: 4px 10px; background: #9c27b0;
+                color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                font-weight: bold; white-space: nowrap; flex-shrink: 0;
+            `;
+      priceSetBtn.onclick = () => showContractPriceModal();
+      btnGroup.appendChild(priceSetBtn);
+      tip.appendChild(btnGroup);
+      return tip;
+    }
     function insertWarningNotice() {
       if (document.querySelector("[data-warning-text]")) return;
       const cards = document.querySelectorAll('div[tabindex="0"]');
+      if (cards.length === 0) {
+        const root = getIncomingContractsRoot();
+        if (root) root.insertBefore(createWarningNotice(), root.firstChild);
+        return;
+      }
       cards.forEach((card) => {
         let parent = card.parentElement;
         if (!parent) return;
@@ -6901,75 +7095,7 @@
         if (!grandParent || grandParent.querySelector("[data-warning-text]")) return;
         const insertTarget = grandParent.firstElementChild;
         if (!insertTarget || insertTarget === parent) return;
-        const isNarrow8 = window.innerWidth <= 576;
-        const d8 = DM();
-        const tip = document.createElement("div");
-        tip.style.cssText = `
-                    display: flex;
-                    flex-wrap: wrap;
-                    align-items: center;
-                    gap: ${isNarrow8 ? "6px 8px" : "8px"};
-                    color: ${d8 ? "#aaa" : "#777"};
-                    font-size: ${isNarrow8 ? "11px" : "13px"};
-                    width: 100%;
-                `;
-        tip.dataset.warningText = "true";
-        const textSpan = document.createElement("span");
-        textSpan.textContent = "\u81EA\u52A8\u66F4\u65B0\u6570\u636E\u6709\u5EF6\u8FDF\uFF0C\u5DE6\u4E0B\u53EF\u624B\u52A8\u66F4\u65B0";
-        textSpan.style.cssText = `
-                    white-space: ${isNarrow8 ? "normal" : "nowrap"};
-                    flex: ${isNarrow8 ? "1 1 100%" : "0 0 auto"};
-                `;
-        tip.appendChild(textSpan);
-        const btnGroup = document.createElement("div");
-        btnGroup.style.cssText = `
-                    display: flex;
-                    flex-wrap: wrap;
-                    align-items: center;
-                    gap: ${isNarrow8 ? "4px 6px" : "6px"};
-                    flex: 1 1 auto;
-                `;
-        const toggle = createGlobalCustomToggle(
-          "executiveCustomToggle",
-          "\u81EA\u5B9A\u4E49",
-          { buttonClass: "btn btn-primary" },
-          (isEnabled) => {
-            refreshAllContractProfits();
-          }
-        );
-        toggle.wrapper.style.marginLeft = "0";
-        btnGroup.appendChild(toggle.wrapper);
-        const customBtn = document.createElement("button");
-        customBtn.type = "button";
-        customBtn.textContent = "\u81EA\u5B9A\u4E49\u9AD8\u7BA1\u6570\u636E";
-        customBtn.style.cssText = `
-                    padding: 4px 10px; background: #2196f3;
-                    color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
-                    font-weight: bold; white-space: nowrap; flex-shrink: 0;
-                `;
-        customBtn.onclick = () => executiveCustomButton.show();
-        btnGroup.appendChild(customBtn);
-        const marketToggle = createGlobalCustomToggle(
-          "marketMaxProfitToggle",
-          "\u663E\u793A\u66F4\u591A",
-          {},
-          () => {
-            refreshAllContractProfits();
-          }
-        );
-        marketToggle.wrapper.style.marginLeft = "0";
-        btnGroup.appendChild(marketToggle.wrapper);
-        const priceSetBtn = document.createElement("button");
-        priceSetBtn.type = "button";
-        priceSetBtn.textContent = "\u9884\u671F\u4EF7\u683C";
-        priceSetBtn.style.cssText = `
-                    padding: 4px 10px; background: #9c27b0;
-                    color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
-                    font-weight: bold; white-space: nowrap; flex-shrink: 0;
-                `;
-        priceSetBtn.onclick = () => showContractPriceModal();
-        btnGroup.appendChild(priceSetBtn);
-        tip.appendChild(btnGroup);
+        const tip = createWarningNotice();
         insertTarget.appendChild(tip);
       });
     }
@@ -6979,7 +7105,7 @@
     }
     const EXCLUDED_IDS = [91, 94, 95, 96, 97, 99];
     function getParsedRules() {
-      const settings = JSON.parse(localStorage.getItem("SC_Contract_HighPrice_Settings") || '{"global":"","individual":""}');
+      const settings = JSON.parse(localStorage.getItem("SC_Contract_HighPrice_Settings") || '{"global":"-0","individual":""}');
       const parsed = {
         global: null,
         individual: /* @__PURE__ */ new Map()
@@ -7157,7 +7283,7 @@
             `;
       wrapper.innerHTML = `
                 <div style="padding: 12px 20px; background: #9c27b0; color: white; display: flex; justify-content: space-between; align-items: center; user-select: none; font-weight: bold; font-size: 15px;">
-                    <span>\u5408\u540C\u9884\u671F\u4EF7\u683C\u8BBE\u7F6E</span>
+                    <span>\u5408\u540C\u4E8C\u6B21\u786E\u8BA4\u8BBE\u7F6E</span>
                     <span id="sc-contract-price-close" style="cursor: pointer; font-size: 20px; font-weight: normal; line-height: 1;">&times;</span>
                 </div>
                 <div style="padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;">
@@ -7240,7 +7366,7 @@
         };
         rulesListContainer.appendChild(row);
       }
-      const settings = JSON.parse(localStorage.getItem("SC_Contract_HighPrice_Settings") || '{"global":"","individual":""}');
+      const settings = JSON.parse(localStorage.getItem("SC_Contract_HighPrice_Settings") || '{"global":"-0","individual":""}');
       document.getElementById("sc-contract-global-val").value = settings.global || "";
       const lines = (settings.individual || "").split("\n");
       let hasRows = false;
@@ -9154,7 +9280,7 @@
       try {
         const data2 = JSON.parse(dataStr);
         const lastTime = new Date(data2.timestamp).getTime();
-        const weatherUntil = new Date(data2.sellingSpeedMultiplier.weatherUntil).getTime();
+        const weatherUntil = new Date(data2.sellingSpeedMultiplier.Until).getTime();
         const now = Date.now();
         const ONE_HOUR2 = 60 * 60 * 1e3;
         if (now - lastTime > ONE_HOUR2) return true;
@@ -12948,4 +13074,4 @@
   })();
 })();
 
-// @changelog 修复聊天表情选择器按钮与面板遮挡问题；优化饱和度表与天气信息显示；更新历史饱和度链接。
+// @changelog 修复领域数据天气过期判定；合同二次确认设置默认 -0，入库页面无合同也显示按钮；现任高管详情面板支持切换更新与稳定插入定位。
