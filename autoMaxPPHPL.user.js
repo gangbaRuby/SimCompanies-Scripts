@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.3
+// @version      1.33.4
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -245,15 +245,7 @@
         } catch (e) {
           console.warn("\u26A0\uFE0F \u8BFB\u53D6 localStorage \u65F6\u89E3\u6790\u5931\u8D25\uFF0C\u521D\u59CB\u5316\u4E3A\u7A7A\u5BF9\u8C61", e);
         }
-        const TARGET_POSITIONS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "B0", "B1", "B2", "B3"];
-        const buildings = data2.filter((b) => TARGET_POSITIONS.includes(b.position)).map((b) => ({
-          id: b.id,
-          kind: b.kind,
-          size: b.size,
-          position: b.position,
-          robotsSpecialization: b.robotsSpecialization
-        }));
-        stored.buildings = buildings;
+        stored.buildings = data2;
         const oldAcademyActive = stored.academyActive ?? 0;
         const newAcademyActive = result.active;
         stored.academyActive = newAcademyActive;
@@ -303,7 +295,7 @@
     };
   })();
   (function() {
-    const resources_URL = "/api/v3/resources/";
+    const resources_URL_PATTERN = /\/api\/v3\/resources\/\d+\//;
     function handleData(data2) {
       if (!Array.isArray(data2) || data2.length === 0) return;
       const realmId = getRealmIdFromLink();
@@ -322,7 +314,7 @@
     window.fetch = async (...args) => {
       const response = await originalFetch(...args);
       try {
-        if (typeof args[0] === "string" && args[0].includes(resources_URL)) {
+        if (typeof args[0] === "string" && resources_URL_PATTERN.test(args[0])) {
           response.clone().json().then(handleData).catch((err) => console.error("\u274C \u4ED3\u5E93 JSON \u89E3\u6790\u5931\u8D25:", err));
         }
       } catch (e) {
@@ -333,7 +325,7 @@
     const originalXHR = window.XMLHttpRequest.prototype.open;
     window.XMLHttpRequest.prototype.open = function(method, url, async) {
       this.addEventListener("load", function() {
-        if (url && url.includes(resources_URL) && this.responseText) {
+        if (url && resources_URL_PATTERN.test(url) && this.responseText) {
           try {
             handleData(JSON.parse(this.responseText));
           } catch (e) {
@@ -1450,48 +1442,47 @@
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.LandscapeIdleBuildingHighlight = LandscapeIdleBuildingHighlight2;
 
+  // src/constants/resourceMap.js
+  var resourceIdNameMap = { 1: "\u7535\u529B", 2: "\u6C34", 3: "\u82F9\u679C", 4: "\u6A58\u5B50", 5: "\u8461\u8404", 6: "\u8C37\u7269", 7: "\u725B\u6392", 8: "\u9999\u80A0", 9: "\u9E21\u86CB", 10: "\u539F\u6CB9", 11: "\u6C7D\u6CB9", 12: "\u67F4\u6CB9", 13: "\u8FD0\u8F93\u5355\u4F4D", 14: "\u77FF\u7269", 15: "\u94DD\u571F\u77FF", 16: "\u7845\u6750", 17: "\u5316\u5408\u7269", 18: "\u94DD\u6750", 19: "\u5851\u6599", 20: "\u5904\u7406\u5668", 21: "\u7535\u5B50\u5143\u4EF6", 22: "\u7535\u6C60", 23: "\u663E\u793A\u5C4F", 24: "\u667A\u80FD\u624B\u673A", 25: "\u5E73\u677F\u7535\u8111", 26: "\u7B14\u8BB0\u672C\u7535\u8111", 27: "\u663E\u793A\u5668", 28: "\u7535\u89C6\u673A", 29: "\u4F5C\u7269\u7814\u7A76", 30: "\u80FD\u6E90\u7814\u7A76", 31: "\u91C7\u77FF\u7814\u7A76", 32: "\u7535\u5668\u7814\u7A76", 33: "\u755C\u7267\u7814\u7A76", 34: "\u5316\u5B66\u7814\u7A76", 35: "\u8F6F\u4EF6", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "\u68C9\u82B1", 41: "\u68C9\u5E03", 42: "\u94C1\u77FF\u77F3", 43: "\u94A2\u6750", 44: "\u6C99\u5B50", 45: "\u73BB\u7483", 46: "\u76AE\u9769", 47: "\u8F66\u8F7D\u7535\u8111", 48: "\u7535\u52A8\u9A6C\u8FBE", 49: "\u8C6A\u534E\u8F66\u5185\u9970", 50: "\u57FA\u672C\u5185\u9970", 51: "\u8F66\u8EAB", 52: "\u5185\u71C3\u673A", 53: "\u7ECF\u6D4E\u7535\u52A8\u8F66", 54: "\u8C6A\u534E\u7535\u52A8\u8F66", 55: "\u7ECF\u6D4E\u71C3\u6CB9\u8F66", 56: "\u8C6A\u534E\u71C3\u6CB9\u8F66", 57: "\u5361\u8F66", 58: "\u6C7D\u8F66\u7814\u7A76", 59: "\u65F6\u88C5\u7814\u7A76", 60: "\u5185\u8863", 61: "\u624B\u5957", 62: "\u88D9\u5B50", 63: "\u9AD8\u8DDF\u978B", 64: "\u624B\u888B", 65: "\u8FD0\u52A8\u978B", 66: "\u79CD\u5B50", 67: "\u5723\u8BDE\u7206\u7AF9", 68: "\u91D1\u77FF\u77F3", 69: "\u91D1\u6761", 70: "\u540D\u724C\u624B\u8868", 71: "\u9879\u94FE", 72: "\u7518\u8517", 73: "\u4E59\u9187", 74: "\u7532\u70F7", 75: "\u78B3\u7EA4\u7EF4", 76: "\u78B3\u7EA4\u590D\u5408\u6750", 77: "\u673A\u8EAB", 78: "\u673A\u7FFC", 79: "\u7CBE\u5BC6\u7535\u5B50\u5143\u4EF6", 80: "\u98DE\u884C\u8BA1\u7B97\u673A", 81: "\u5EA7\u8231", 82: "\u59FF\u6001\u63A7\u5236\u5668", 83: "\u706B\u7BAD\u71C3\u6599", 84: "\u71C3\u6599\u50A8\u7F50", 85: "\u56FA\u4F53\u71C3\u6599\u52A9\u63A8\u5668", 86: "\u706B\u7BAD\u53D1\u52A8\u673A", 87: "\u9694\u70ED\u677F", 88: "\u79BB\u5B50\u63A8\u8FDB\u5668", 89: "\u55B7\u6C14\u53D1\u52A8\u673A", 90: "\u4E9A\u8F68\u9053\u4E8C\u7EA7\u706B\u7BAD", 91: "\u4E9A\u8F68\u9053\u706B\u7BAD", 92: "\u8F68\u9053\u52A9\u63A8\u5668", 93: "\u661F\u9645\u98DE\u8239", 94: "BFR", 95: "\u55B7\u6C14\u5BA2\u673A", 96: "\u8C6A\u534E\u98DE\u673A", 97: "\u5355\u5F15\u64CE\u98DE\u673A", 98: "\u65E0\u4EBA\u673A", 99: "\u4EBA\u9020\u536B\u661F", 100: "\u822A\u7A7A\u822A\u5929\u7814\u7A76", 101: "\u94A2\u7B4B\u6DF7\u51DD\u571F", 102: "\u7816\u5757", 103: "\u6C34\u6CE5", 104: "\u9ECF\u571F", 105: "\u77F3\u7070\u77F3", 106: "\u6728\u6750", 107: "\u94A2\u7B4B", 108: "\u6728\u677F", 109: "\u7A97\u6237", 110: "\u5DE5\u5177", 111: "\u5EFA\u7B51\u9884\u6784\u4EF6", 112: "\u63A8\u571F\u673A", 113: "\u6750\u6599\u7814\u7A76", 114: "\u673A\u5668\u4EBA", 115: "\u725B", 116: "\u732A", 117: "\u725B\u5976", 118: "\u5496\u5561\u8C46", 119: "\u5496\u5561\u7C89", 120: "\u852C\u83DC", 121: "\u9762\u5305", 122: "\u829D\u58EB", 123: "\u82F9\u679C\u6D3E", 124: "\u6A59\u6C41", 125: "\u82F9\u679C\u6C41", 126: "\u59DC\u6C41\u6C7D\u6C34", 127: "\u62AB\u8428", 128: "\u9762\u6761", 129: "\u6C49\u5821\u5305", 130: "\u5343\u5C42\u9762", 131: "\u8089\u4E38", 132: "\u6DF7\u5408\u679C\u6C41", 133: "\u9762\u7C89", 134: "\u9EC4\u6CB9", 135: "\u7CD6", 136: "\u53EF\u53EF", 137: "\u9762\u56E2", 138: "\u9171\u6C41", 139: "\u52A8\u7269\u9972\u6599", 140: "\u5DE7\u514B\u529B", 141: "\u690D\u7269\u6CB9", 142: "\u6C99\u62C9", 143: "\u5496\u55B1\u89D2", 144: "\u5723\u8BDE\u88C5\u9970\u54C1", 145: "\u98DF\u8C31", 146: "\u5357\u74DC", 147: "\u6770\u514B\u706F\u7B3C", 148: "\u5973\u5DEB\u670D", 149: "\u5357\u74DC\u6C64", 150: "\u6811", 151: "\u590D\u6D3B\u8282\u5154\u5154", 152: "\u658B\u6708\u7CD6\u679C", 153: "\u5DE7\u514B\u529B\u51B0\u6DC7\u6DCB", 154: "\u82F9\u679C\u51B0\u6DC7\u6DCB", 155: "\u5976\u6CB9\u9E21\u86CB" };
+
   // src/features/restaurantStockReminder.js
-  var RestaurantStockReminder2 = (function() {
-    const STORAGE_KEY = "script_restaurant_stock_restaurant_count";
-    registerExportInfo({
-      name: "\u9910\u9986\u5907\u8D27\u63D0\u9192\u8BBE\u7F6E",
-      scope: "global",
-      keys: [STORAGE_KEY]
-    });
-    const state2 = {
-      menuObserver: null,
-      watchTimer: null,
-      panelNode: null,
-      panelContentNode: null,
-      tableBodyNode: null,
-      menuContainer: null,
-      observedMenuContainer: null,
-      panelPositionInitialized: false,
-      panelMovedByUser: false,
-      panelCollapsed: true,
-      dragMoved: false,
-      dragStartX: 0,
-      dragStartY: 0,
-      dragOriginLeft: 0,
-      dragOriginTop: 0,
-      handleDragMove: null,
-      handleDragEnd: null,
-      currentUrl: ""
+  var RestaurantStockReminder2 = /* @__PURE__ */ (function() {
+    const MENU_LABELS = ["\u83DC\u5355", "Menu", "Restaurant menu", "\u83DC\u55AE"];
+    const BLOCK_ATTR = "data-sc-restaurant-menu";
+    const STORAGE_REGION_KEY = (realmId) => `SimcompaniesRetailCalculation_${realmId}`;
+    const CYCLES_PER_DAY = 2;
+    const WARN_DAYS = 2;
+    const DISH_COEFF = {
+      saladBar: { 117: 288, 121: 24.89, 134: 92.6, 122: 38.196, 119: 96.312, 123: 16.667 },
+      mains: { 129: 3.608, 130: 4.073, 131: 3.505, 142: 9.402, 143: 10.093, 149: 9.2 },
+      drinks: { 132: 4.04, 124: 144, 125: 128.955, 126: 113.984 }
     };
-    let restaurantCount = loadRestaurantCount();
+    const PARTITION_MULTIPLIER = { 1: 2.1, 2: 1, 3: 0.9, 4: 0.8, 5: 0.8, 6: 0.8 };
+    const DEFAULT_MULTIPLIER = 0.8;
+    const PARTITIONS = [
+      { key: "saladBar", title: "\u6C99\u62C9\u5427" },
+      { key: "mains", title: "\u4E3B\u83DC" },
+      { key: "drinks", title: "\u996E\u6599" }
+    ];
+    const state2 = {
+      watchTimer: null,
+      blockNode: null,
+      containerNode: null,
+      lastMenuJson: "",
+      lastBuildingId: "",
+      viewAll: false,
+      restaurant: null,
+      allRestaurants: []
+    };
     function isEnabled() {
       return typeof window.isPageModuleEnabled !== "function" || window.isPageModuleEnabled("restaurantStock");
     }
     function init2() {
-      if (!isEnabled()) {
-        cleanupAll();
-        return;
-      }
       startWatch();
     }
     function startWatch() {
       if (state2.watchTimer) return;
-      state2.watchTimer = setInterval(() => mainFunc(), 1200);
+      state2.watchTimer = setInterval(mainFunc, 1200);
       mainFunc();
     }
     function stopWatch() {
@@ -1500,323 +1491,311 @@
         state2.watchTimer = null;
       }
     }
-    function cleanupAll() {
-      stopWatch();
-      disconnectMenuObserver();
-      destroyPanel();
-      state2.menuContainer = null;
-      state2.currentUrl = "";
+    function getBuildingIdFromUrl() {
+      const match2 = location.href.match(/\/b\/(\d+)(?:\/|$)/);
+      return match2 ? match2[1] : null;
     }
-    function getRestaurantDetailAnchor() {
-      const labels = Array.from(document.querySelectorAll("label"));
-      const openTexts = ["Restaurant is open", "\u9910\u9986\u8425\u4E1A\u4E2D", "\u9910\u5EF3\u71DF\u696D\u4E2D"];
-      return labels.find((label) => openTexts.includes(label.textContent?.trim())) || null;
-    }
-    function isRestaurantPage() {
-      return Boolean(getRestaurantDetailAnchor());
-    }
-    function getTargetMenuContainer() {
-      const containers = Array.from(document.querySelectorAll("div.css-12ocart"));
-      if (containers.length >= 3) {
-        return containers[2];
-      }
-      return containers.find((container) => {
-        return Boolean(container.querySelector("label") && container.querySelector(".css-1v345k9, .css-1k48byk"));
-      }) || containers.find((container) => Boolean(container.querySelector("label"))) || null;
-    }
-    function mainFunc() {
-      if (!isEnabled() || !/\/b\/\d+\/?$/.test(location.href)) {
-        cleanupAll();
-        return;
-      }
-      if (!isRestaurantPage()) {
-        destroyPanel();
-        disconnectMenuObserver();
-        state2.menuContainer = null;
-        return;
-      }
-      const menuContainer = getTargetMenuContainer();
-      if (!menuContainer) return;
-      if (state2.currentUrl !== location.href) {
-        state2.currentUrl = location.href;
-        disconnectMenuObserver();
-        state2.panelPositionInitialized = false;
-        state2.panelMovedByUser = false;
-      }
-      state2.menuContainer = menuContainer;
-      ensurePanel(menuContainer);
-      observeMenu(menuContainer);
-      refreshPanel();
-    }
-    function loadRestaurantCount() {
+    function loadRegionData() {
+      const realmId = getRealmIdFromLink();
+      if (realmId === null) return null;
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        const value = parseInt(raw || "1", 10);
-        return value > 0 ? value : 1;
-      } catch (error) {
-        return 1;
+        const raw = localStorage.getItem(STORAGE_REGION_KEY(realmId));
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
       }
     }
-    function saveRestaurantCount(value) {
-      try {
-        localStorage.setItem(STORAGE_KEY, String(value));
-      } catch (error) {
-        console.error("[\u9910\u9986\u5907\u8D27\u63D0\u9192] \u5B58\u50A8\u9910\u9986\u6570\u91CF\u5931\u8D25", error);
-      }
+    function findRestaurant(buildings, buildingId) {
+      if (!Array.isArray(buildings)) return null;
+      return buildings.find((b) => b && b.kind === "r" && String(b.id) === String(buildingId)) || null;
     }
-    function getRestaurantCount() {
-      const input = document.querySelector("#script_restaurant_count");
-      const inputValue = parseInt(input?.value || String(restaurantCount), 10);
-      const count = Number.isFinite(inputValue) && inputValue > 0 ? inputValue : 1;
-      restaurantCount = count;
+    function findMenuContainer() {
+      const labels = document.querySelectorAll("label");
+      for (const label of labels) {
+        const text = label.textContent ? label.textContent.trim() : "";
+        if (MENU_LABELS.includes(text)) {
+          const container = label.parentElement;
+          if (container && container !== document.body) return container;
+        }
+      }
+      return null;
+    }
+    function dishName(kind) {
+      return resourceIdNameMap[kind] || `#${kind}`;
+    }
+    function perCycleConsume(level, kind, partitionCount, isLuxury, coeff) {
+      const multiplier = PARTITION_MULTIPLIER[partitionCount] ?? DEFAULT_MULTIPLIER;
+      const luxuryFactor = isLuxury ? 0.5 : 1;
+      return Math.ceil((level || 1) * coeff * multiplier * luxuryFactor);
+    }
+    function stockList(resources) {
+      if (!resources) return null;
+      if (Array.isArray(resources)) return resources;
+      if (Array.isArray(resources.resources)) return resources.resources;
+      if (Array.isArray(resources.items)) return resources.items;
+      return null;
+    }
+    function buildStockMap(resources) {
+      const list = stockList(resources);
+      if (!list) return null;
+      const map = /* @__PURE__ */ new Map();
+      for (const entry of list) {
+        if (entry.blocked === true) continue;
+        const entryKind = entry.kind ?? entry.resource ?? entry.resourceId ?? entry.id;
+        if (entryKind === null || entryKind === void 0) continue;
+        const amount = entry.amount ?? entry.quantity ?? 0;
+        if (typeof amount !== "number" || !Number.isFinite(amount)) continue;
+        const key = String(entryKind);
+        map.set(key, (map.get(key) || 0) + amount);
+      }
+      return map;
+    }
+    function stockForKind(stockMap, kind) {
+      if (!stockMap) return null;
+      const key = String(kind);
+      return stockMap.has(key) ? stockMap.get(key) : 0;
+    }
+    function otherRestaurantCountForDish(allRestaurants, currentId, kind) {
+      let count = 0;
+      for (const r of allRestaurants) {
+        if (String(r.id) === String(currentId)) continue;
+        const props = r.restaurantProperties || {};
+        let has = false;
+        for (const p of PARTITIONS) {
+          const items = Array.isArray(props[p.key]) ? props[p.key] : [];
+          if (items.some((item) => String(item.kind) === String(kind))) {
+            has = true;
+            break;
+          }
+        }
+        if (has) count++;
+      }
       return count;
     }
-    function parseNumber(text) {
-      if (!text) return 0;
-      const clean = String(text).replace(/,/g, "").replace(/[^\d-]/g, "");
-      const value = parseInt(clean, 10);
-      return Number.isFinite(value) ? value : 0;
-    }
-    function parseConsumeNumber(text) {
-      if (!text) return 0;
-      const cleanText = String(text).replace(/,/g, "");
-      const match2 = cleanText.match(/-\s*(\d+(?:\.\d+)?)/) || cleanText.match(/(\d+(?:\.\d+)?)/);
-      if (!match2) return 0;
-      const value = parseFloat(match2[1]);
-      return Number.isFinite(value) ? value : 0;
-    }
-    function ensurePanel(menuContainer) {
-      if (!state2.panelNode || !state2.panelNode.isConnected) {
-        const panel = createPanelDOM();
-        document.body.appendChild(panel);
-        state2.panelNode = panel;
-        state2.panelContentNode = panel.querySelector("#script_restaurant_stock_content");
-        state2.tableBodyNode = panel.querySelector("#script_restaurant_stock_tbody");
-        bindPanelInteractions();
-        bindRestaurantCountInput(panel);
-      }
-      if (!state2.panelMovedByUser && !state2.panelPositionInitialized) {
-        alignPanelToMenu(menuContainer);
-        state2.panelPositionInitialized = true;
-      }
-    }
-    function createPanelDOM() {
-      const panel = document.createElement("div");
-      panel.id = "script_restaurant_stock_panel";
-      panel.style.cssText = [
-        "position:fixed",
-        "z-index:999",
-        "width:360px",
-        "left:30px",
-        "top:70px",
-        "max-height:75vh",
-        "overflow:auto",
-        "background:rgba(17,24,39,0.95)",
-        "color:#e5e7eb",
-        "border:1px solid rgba(255,255,255,0.12)",
-        "border-radius:8px",
-        "padding:10px",
-        "box-shadow:0 8px 20px rgba(0,0,0,0.35)",
-        "font-size:12px",
-        "line-height:1.4"
-      ].join(";");
-      panel.innerHTML = `
-            <div id="script_restaurant_stock_header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;cursor:move;user-select:none;">
-                <strong style="font-size:13px;">\u9910\u9986\u5907\u8D27\u63D0\u9192</strong>
-                <button id="script_restaurant_stock_collapse" type="button" style="height:22px;padding:0 8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;border-radius:4px;cursor:pointer;">\u6536\u8D77</button>
-            </div>
-            <div id="script_restaurant_stock_content">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                    <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
-                        \u9910\u9986\uFF1A<input id="script_restaurant_count" type="number" min="1" step="1" style="width:52px;height:22px;padding:0 4px;border-radius:4px;border:1px solid rgba(255,255,255,0.4);background:rgba(0,0,0,0.35);color:#fff;font-size:12px;">
-                    </span>
-                    <span id="script_restaurant_stock_meta" style="opacity:0.85;">\u52A0\u8F7D\u4E2D...</span>
-                </div>
-                <table style="width:100%;border-collapse:collapse;">
-                    <thead>
-                        <tr style="text-align:left;border-bottom:1px solid rgba(255,255,255,0.15);">
-                            <th style="padding:4px 2px;">\u83DC\u54C1</th>
-                            <th style="padding:4px 2px;">\u5E93\u5B58</th>
-                            <th style="padding:4px 2px;">\u6BCF\u65E5\u6D88\u8017\u91CF</th>
-                            <th style="padding:4px 2px;">\u5269\u4F59\u5929\u6570</th>
-                        </tr>
-                    </thead>
-                    <tbody id="script_restaurant_stock_tbody"></tbody>
-                </table>
-            </div>
-        `;
-      return panel;
-    }
-    function alignPanelToMenu(menuContainer) {
-      const panel = state2.panelNode;
-      if (!menuContainer || !panel || !panel.isConnected) return;
-      const panelWidth = panel.offsetWidth || 360;
-      const panelHeight = panel.offsetHeight || 260;
-      const left = 30;
-      const top = 70;
-      const maxLeft = Math.max(8, window.innerWidth - panelWidth - 8);
-      const maxTop = Math.max(8, window.innerHeight - panelHeight - 8);
-      const safeLeft = Math.min(Math.max(8, left), maxLeft);
-      const safeTop = Math.min(Math.max(8, top), maxTop);
-      panel.style.left = `${safeLeft}px`;
-      panel.style.top = `${safeTop}px`;
-    }
-    function bindPanelInteractions() {
-      const panel = state2.panelNode;
-      if (!panel) return;
-      const header = panel.querySelector("#script_restaurant_stock_header");
-      const collapseBtn = panel.querySelector("#script_restaurant_stock_collapse");
-      const content = state2.panelContentNode;
-      if (!header || !collapseBtn || !content) return;
-      collapseBtn.addEventListener("click", () => {
-        state2.panelCollapsed = !state2.panelCollapsed;
-        content.style.display = state2.panelCollapsed ? "none" : "block";
-        collapseBtn.textContent = state2.panelCollapsed ? "\u5C55\u5F00" : "\u6536\u8D77";
-      });
-      state2.handleDragMove = (event) => {
-        if (!state2.dragMoved && (Math.abs(event.clientX - state2.dragStartX) > 2 || Math.abs(event.clientY - state2.dragStartY) > 2)) {
-          state2.dragMoved = true;
+    function getMenuRows(restaurant) {
+      const props = restaurant.restaurantProperties || {};
+      const isLuxury = props.isLuxury === true;
+      const level = restaurant.size ?? 1;
+      const counts = {};
+      const dishes = [];
+      for (const p of PARTITIONS) {
+        const items = Array.isArray(props[p.key]) ? props[p.key] : [];
+        counts[p.key] = items.length;
+        for (const item of items) {
+          dishes.push({ partition: p.key, kind: item.kind });
         }
-        const nextLeft = state2.dragOriginLeft + (event.clientX - state2.dragStartX);
-        const nextTop = state2.dragOriginTop + (event.clientY - state2.dragStartY);
-        const maxLeft = Math.max(8, window.innerWidth - panel.offsetWidth - 8);
-        const maxTop = Math.max(8, window.innerHeight - 40);
-        panel.style.left = `${Math.min(Math.max(8, nextLeft), maxLeft)}px`;
-        panel.style.top = `${Math.min(Math.max(8, nextTop), maxTop)}px`;
-      };
-      state2.handleDragEnd = () => {
-        if (state2.dragMoved) {
-          state2.panelMovedByUser = true;
-        }
-        document.removeEventListener("mousemove", state2.handleDragMove);
-        document.removeEventListener("mouseup", state2.handleDragEnd);
-      };
-      header.addEventListener("mousedown", (event) => {
-        if (event.button !== 0 || event.target === collapseBtn) return;
-        event.preventDefault();
-        state2.dragMoved = false;
-        state2.dragStartX = event.clientX;
-        state2.dragStartY = event.clientY;
-        state2.dragOriginLeft = parseFloat(panel.style.left || "8") || 8;
-        state2.dragOriginTop = parseFloat(panel.style.top || "8") || 8;
-        document.addEventListener("mousemove", state2.handleDragMove);
-        document.addEventListener("mouseup", state2.handleDragEnd);
-      });
-    }
-    function bindRestaurantCountInput(panel) {
-      const input = panel.querySelector("#script_restaurant_count");
-      if (!input) return;
-      input.value = String(restaurantCount || 1);
-      const handleChange = () => {
-        const value = parseInt(input.value, 10);
-        const fixedValue = Number.isFinite(value) && value > 0 ? value : 1;
-        input.value = String(fixedValue);
-        restaurantCount = fixedValue;
-        saveRestaurantCount(fixedValue);
-        refreshPanel();
-      };
-      input.addEventListener("change", handleChange);
-      input.addEventListener("input", () => {
-        const value = parseInt(input.value, 10);
-        if (!Number.isFinite(value) || value <= 0) return;
-        restaurantCount = value;
-        saveRestaurantCount(value);
-        refreshPanel();
-      });
-    }
-    function extractMenuRows() {
-      const menuContainer = state2.menuContainer;
-      const count = getRestaurantCount();
-      if (!menuContainer) return [];
-      const cards = menuContainer.querySelectorAll(".css-1v345k9, .css-1k48byk");
-      const rows = [];
-      cards.forEach((card) => {
-        if (card.classList.contains("css-1k48byk")) return;
-        const name = card.querySelector("b")?.textContent?.trim() || "\u672A\u77E5\u83DC\u54C1";
-        const valueWrap = card.querySelector(".css-aqbich");
-        if (!valueWrap) return;
-        const stock = parseNumber(valueWrap.querySelector("div:nth-child(1)")?.textContent);
-        const periodConsume = Math.abs(parseConsumeNumber(valueWrap.querySelector("div:nth-child(2)")?.textContent));
-        if (!periodConsume) return;
-        const dailyConsume = periodConsume * 2 * count;
-        const remainDays = stock / dailyConsume;
-        rows.push({
-          name,
-          stock,
-          dailyConsume,
-          remainDays,
-          isWarning: remainDays < 2
-        });
-      });
-      return rows;
-    }
-    function formatNumber(num) {
-      return Number.isFinite(num) ? num.toLocaleString() : "0";
-    }
-    function renderRows(rows) {
-      const tbody = state2.tableBodyNode;
-      const panel = state2.panelNode;
-      if (!tbody || !panel) return;
-      const metaNode = panel.querySelector("#script_restaurant_stock_meta");
-      const warningCount = rows.filter((row) => row.isWarning).length;
-      if (metaNode) {
-        metaNode.textContent = `\u83DC\u54C1:${rows.length} | \u9884\u8B66:${warningCount}`;
       }
+      return dishes.map((d) => {
+        const coeff = DISH_COEFF[d.partition] && DISH_COEFF[d.partition][d.kind];
+        const perCycle = coeff ? perCycleConsume(level, d.kind, counts[d.partition], isLuxury, coeff) : null;
+        return { kind: d.kind, name: dishName(d.kind), perCycle };
+      });
+    }
+    function buildCurrentTable(restaurant, allRestaurants) {
+      const rows = getMenuRows(restaurant);
       if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="padding:10px 2px;opacity:0.8;">\u672A\u68C0\u6D4B\u5230\u53EF\u8BA1\u7B97\u83DC\u54C1\uFF0C\u7B49\u5F85\u9875\u9762\u6570\u636E\u52A0\u8F7D...</td></tr>';
+        return '<div style="opacity:.75;padding:4px 2px;">\u8BE5\u9910\u9986\u672A\u9009\u62E9\u4EFB\u4F55\u83DC\u54C1</div>';
+      }
+      const rowHtml = rows.map((r) => {
+        const otherCount = otherRestaurantCountForDish(allRestaurants, restaurant.id, r.kind);
+        const otherHint = otherCount > 0 ? `<span style="opacity:.6;margin-left:4px;">\uFF08\u8FD8\u6709${otherCount}\u5BB6\u9910\u9986\u5728\u6D88\u8017\uFF09</span>` : "";
+        return `
+            <tr data-sc-kind="${r.kind}" style="border-bottom:1px solid rgba(128,128,128,.15);">
+                <td style="padding:3px 6px;">${r.name}${otherHint}</td>
+                <td data-sc-stock style="padding:3px 6px;text-align:right;">\u2014</td>
+                <td data-sc-daily style="padding:3px 6px;text-align:right;">${r.perCycle === null ? "\u2014" : (r.perCycle * CYCLES_PER_DAY).toLocaleString()}</td>
+                <td data-sc-days style="padding:3px 6px;text-align:right;">\u2014</td>
+            </tr>`;
+      }).join("");
+      return `
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="text-align:left;border-bottom:1px solid rgba(128,128,128,.35);">
+                        <th style="padding:3px 6px;">\u83DC\u54C1</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5E93\u5B58</th>
+                        <th style="padding:3px 6px;text-align:right;">\u6BCF\u65E5\u6D88\u8017</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5269\u4F59\u5929\u6570</th>
+                    </tr>
+                </thead>
+                <tbody>${rowHtml}</tbody>
+            </table>`;
+    }
+    function buildAllTable(allRestaurants) {
+      const agg = /* @__PURE__ */ new Map();
+      for (const r of allRestaurants) {
+        const props = r.restaurantProperties || {};
+        if (!props) continue;
+        const isLuxury = props.isLuxury === true;
+        const level = r.size ?? 1;
+        for (const p of PARTITIONS) {
+          const items = Array.isArray(props[p.key]) ? props[p.key] : [];
+          const count = items.length;
+          for (const item of items) {
+            const coeff = DISH_COEFF[p.key] && DISH_COEFF[p.key][item.kind];
+            if (!coeff) continue;
+            const perCycle = perCycleConsume(level, item.kind, count, isLuxury, coeff);
+            const key = String(item.kind);
+            const entry = agg.get(key) || { dailyTotal: 0, restCount: 0 };
+            entry.dailyTotal += perCycle * CYCLES_PER_DAY;
+            entry.restCount += 1;
+            agg.set(key, entry);
+          }
+        }
+      }
+      const stockMap = buildStockMap(loadRegionData()?.warehouseResources ?? null);
+      const rows = [...agg.entries()].map(([kind, e]) => {
+        const stock = stockForKind(stockMap, kind);
+        const days = stock !== null && e.dailyTotal > 0 ? stock / e.dailyTotal : null;
+        return { kind, name: dishName(kind), dailyTotal: e.dailyTotal, restCount: e.restCount, days };
+      });
+      rows.sort((a, b) => {
+        if (a.days === null && b.days === null) return 0;
+        if (a.days === null) return 1;
+        if (b.days === null) return -1;
+        return a.days - b.days;
+      });
+      if (rows.length === 0) {
+        return '<div style="opacity:.75;padding:4px 2px;">\u672A\u68C0\u6D4B\u5230\u53EF\u8BA1\u7B97\u83DC\u54C1\uFF08\u6216\u6CA1\u6709\u9910\u9986\uFF09</div>';
+      }
+      const rowHtml = rows.map((r) => {
+        const warn = r.days !== null && r.days < WARN_DAYS;
+        const daysText = r.days === null ? "\u2014" : warn ? `\u26A0\uFE0F ${r.days.toFixed(2)}` : r.days.toFixed(2);
+        return `
+            <tr data-sc-kind="${r.kind}" style="border-bottom:1px solid rgba(128,128,128,.15);${warn ? "background:rgba(220,38,38,.15);" : ""}">
+                <td style="padding:3px 6px;">${r.name}</td>
+                <td data-sc-restcount style="padding:3px 6px;text-align:right;">${r.restCount}</td>
+                <td data-sc-daily style="padding:3px 6px;text-align:right;">${r.dailyTotal.toLocaleString()}</td>
+                <td data-sc-stock style="padding:3px 6px;text-align:right;">\u2014</td>
+                <td data-sc-days style="padding:3px 6px;text-align:right;">${daysText}</td>
+            </tr>`;
+      }).join("");
+      return `
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="text-align:left;border-bottom:1px solid rgba(128,128,128,.35);">
+                        <th style="padding:3px 6px;">\u83DC\u54C1</th>
+                        <th style="padding:3px 6px;text-align:right;">\u6D89\u53CA\u9910\u9986</th>
+                        <th style="padding:3px 6px;text-align:right;">\u6BCF\u65E5\u6D88\u8017</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5E93\u5B58</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5269\u4F59\u5929\u6570</th>
+                    </tr>
+                </thead>
+                <tbody>${rowHtml}</tbody>
+            </table>`;
+    }
+    function renderIntoBlock(block, restaurant, allRestaurants) {
+      const viewAll = state2.viewAll;
+      const buttonText = viewAll ? "\u663E\u793A\u5F53\u524D\u9910\u9986" : "\u663E\u793A\u5168\u90E8\u9910\u9986";
+      const body = viewAll ? buildAllTable(allRestaurants) : buildCurrentTable(restaurant, allRestaurants);
+      block.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <div style="font-weight:bold;">\u9910\u9986\u5907\u8D27\u63D0\u9192<span style="font-weight:normal;opacity:.75;margin-left:4px;">\uFF08${viewAll ? "\u5168\u90E8\u9910\u9986" : "\u5F53\u524D\u9910\u9986"}\uFF09</span></div>
+                <button data-sc-view-toggle type="button" style="font-size:11px;line-height:1.4;padding:1px 8px;border:1px solid rgba(128,128,128,.4);border-radius:4px;background:transparent;cursor:pointer;">${buttonText}</button>
+            </div>
+            ${body}
+            <div style="opacity:.55;margin-top:4px;font-size:11px;">* \u9875\u9762\u5185\u4FEE\u6539\u83DC\u5355\u540E\uFF0C\u672C\u63D0\u9192\u9700\u91CD\u65B0\u8FDB\u5165\u9910\u9986\u9875\u624D\u4F1A\u66F4\u65B0</div>`;
+    }
+    function refreshStocks() {
+      const block = state2.blockNode;
+      if (!block || !block.isConnected) return;
+      const region = loadRegionData();
+      const stockMap = buildStockMap(region ? region.warehouseResources : null);
+      const rows = block.querySelectorAll("tr[data-sc-kind]");
+      rows.forEach((row) => {
+        const kind = row.getAttribute("data-sc-kind");
+        const stock = stockForKind(stockMap, kind);
+        const dailyCell = row.querySelector("[data-sc-daily]");
+        const daily = dailyCell ? parseInt(String(dailyCell.textContent || "").replace(/[^\d]/g, ""), 10) : 0;
+        const stockCell = row.querySelector("[data-sc-stock]");
+        if (stockCell) {
+          const stockText = stock === null ? "\u2014" : stock.toLocaleString();
+          if (stockCell.textContent !== stockText) stockCell.textContent = stockText;
+        }
+        const daysCell = row.querySelector("[data-sc-days]");
+        if (daysCell) {
+          const days = stock !== null && daily > 0 ? stock / daily : null;
+          const warn = days !== null && days < WARN_DAYS;
+          const daysText = days === null ? "\u2014" : warn ? `\u26A0\uFE0F ${days.toFixed(2)}` : days.toFixed(2);
+          if (daysCell.textContent !== daysText) daysCell.textContent = daysText;
+          row.style.background = warn ? "rgba(220,38,38,.15)" : "";
+        }
+      });
+    }
+    function removeBlock() {
+      if (state2.blockNode && state2.blockNode.isConnected) {
+        state2.blockNode.remove();
+      }
+      state2.blockNode = null;
+      state2.containerNode = null;
+      state2.lastMenuJson = "";
+      state2.lastBuildingId = "";
+      state2.restaurant = null;
+      state2.allRestaurants = [];
+    }
+    function currentMenuJson(restaurant, allRestaurants) {
+      return state2.viewAll ? JSON.stringify((allRestaurants || []).map((r) => r.restaurantProperties || {})) : JSON.stringify(restaurant.restaurantProperties || {});
+    }
+    function ensureBlock(container, restaurant, allRestaurants, buildingId) {
+      const menuJson = currentMenuJson(restaurant, allRestaurants);
+      if (state2.blockNode && state2.blockNode.isConnected && state2.containerNode === container && state2.lastBuildingId === buildingId && state2.lastMenuJson === menuJson) {
         return;
       }
-      tbody.innerHTML = rows.map((row) => {
-        const warnStyle = row.isWarning ? "background:rgba(220,38,38,0.2);color:#fecaca;font-weight:600;" : "";
-        return `
-                <tr style="border-bottom:1px solid rgba(255,255,255,0.08);${warnStyle}">
-                    <td style="padding:5px 2px;">${row.name}</td>
-                    <td style="padding:5px 2px;">${formatNumber(row.stock)}</td>
-                    <td style="padding:5px 2px;">${formatNumber(row.dailyConsume)}</td>
-                    <td style="padding:5px 2px;">${row.remainDays.toFixed(2)}</td>
-                </tr>
-            `;
-      }).join("");
-    }
-    function refreshPanel() {
-      const rows = extractMenuRows();
-      renderRows(rows);
-    }
-    function observeMenu(menuContainer) {
-      if (state2.menuObserver && state2.observedMenuContainer === menuContainer) return;
-      disconnectMenuObserver();
-      state2.menuObserver = new MutationObserver(() => refreshPanel());
-      state2.menuObserver.observe(menuContainer, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
-      state2.observedMenuContainer = menuContainer;
-    }
-    function disconnectMenuObserver() {
-      if (state2.menuObserver) {
-        state2.menuObserver.disconnect();
-        state2.menuObserver = null;
+      const block = state2.blockNode && state2.blockNode.isConnected ? state2.blockNode : document.createElement("div");
+      if (!block.isConnected) {
+        block.setAttribute(BLOCK_ATTR, String(restaurant.id));
+        block.style.cssText = [
+          "margin-top:10px",
+          "padding:8px 10px",
+          "border-top:1px dashed rgba(128,128,128,.5)",
+          "border-bottom:1px dashed rgba(128,128,128,.5)",
+          "font-size:12px",
+          "line-height:1.6"
+        ].join(";");
+        block.addEventListener("click", (e) => {
+          if (!e.target.closest("[data-sc-view-toggle]")) return;
+          state2.viewAll = !state2.viewAll;
+          renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
+          state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+          refreshStocks();
+        });
+        container.appendChild(block);
       }
-      state2.observedMenuContainer = null;
+      state2.blockNode = block;
+      state2.containerNode = container;
+      state2.restaurant = restaurant;
+      state2.allRestaurants = allRestaurants || [];
+      state2.lastBuildingId = buildingId;
+      state2.lastMenuJson = menuJson;
+      renderIntoBlock(block, restaurant, state2.allRestaurants);
     }
-    function destroyPanel() {
-      if (state2.handleDragMove) {
-        document.removeEventListener("mousemove", state2.handleDragMove);
+    function mainFunc() {
+      if (!isEnabled()) {
+        removeBlock();
+        return;
       }
-      if (state2.handleDragEnd) {
-        document.removeEventListener("mouseup", state2.handleDragEnd);
+      const buildingId = getBuildingIdFromUrl();
+      if (!buildingId) {
+        removeBlock();
+        return;
       }
-      if (state2.panelNode && state2.panelNode.isConnected) {
-        state2.panelNode.remove();
+      if (state2.lastBuildingId && state2.lastBuildingId !== buildingId) {
+        state2.viewAll = false;
       }
-      state2.panelNode = null;
-      state2.panelContentNode = null;
-      state2.tableBodyNode = null;
-      state2.panelPositionInitialized = false;
-      state2.panelMovedByUser = false;
-      state2.handleDragMove = null;
-      state2.handleDragEnd = null;
+      const region = loadRegionData();
+      const buildings = region ? region.buildings : null;
+      const restaurant = findRestaurant(buildings, buildingId);
+      if (!restaurant) {
+        removeBlock();
+        return;
+      }
+      const allRestaurants = Array.isArray(buildings) ? buildings.filter((b) => b && b.kind === "r") : [];
+      const container = findMenuContainer();
+      if (!container) {
+        removeBlock();
+        return;
+      }
+      ensureBlock(container, restaurant, allRestaurants, buildingId);
+      refreshStocks();
     }
     return { init: init2 };
   })();
@@ -3709,7 +3688,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.3",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.4",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -5966,9 +5945,6 @@
     };
   })();
 
-  // src/constants/resourceMap.js
-  var resourceIdNameMap = { 1: "\u7535\u529B", 2: "\u6C34", 3: "\u82F9\u679C", 4: "\u6A58\u5B50", 5: "\u8461\u8404", 6: "\u8C37\u7269", 7: "\u725B\u6392", 8: "\u9999\u80A0", 9: "\u9E21\u86CB", 10: "\u539F\u6CB9", 11: "\u6C7D\u6CB9", 12: "\u67F4\u6CB9", 13: "\u8FD0\u8F93\u5355\u4F4D", 14: "\u77FF\u7269", 15: "\u94DD\u571F\u77FF", 16: "\u7845\u6750", 17: "\u5316\u5408\u7269", 18: "\u94DD\u6750", 19: "\u5851\u6599", 20: "\u5904\u7406\u5668", 21: "\u7535\u5B50\u5143\u4EF6", 22: "\u7535\u6C60", 23: "\u663E\u793A\u5C4F", 24: "\u667A\u80FD\u624B\u673A", 25: "\u5E73\u677F\u7535\u8111", 26: "\u7B14\u8BB0\u672C\u7535\u8111", 27: "\u663E\u793A\u5668", 28: "\u7535\u89C6\u673A", 29: "\u4F5C\u7269\u7814\u7A76", 30: "\u80FD\u6E90\u7814\u7A76", 31: "\u91C7\u77FF\u7814\u7A76", 32: "\u7535\u5668\u7814\u7A76", 33: "\u755C\u7267\u7814\u7A76", 34: "\u5316\u5B66\u7814\u7A76", 35: "\u8F6F\u4EF6", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "\u68C9\u82B1", 41: "\u68C9\u5E03", 42: "\u94C1\u77FF\u77F3", 43: "\u94A2\u6750", 44: "\u6C99\u5B50", 45: "\u73BB\u7483", 46: "\u76AE\u9769", 47: "\u8F66\u8F7D\u7535\u8111", 48: "\u7535\u52A8\u9A6C\u8FBE", 49: "\u8C6A\u534E\u8F66\u5185\u9970", 50: "\u57FA\u672C\u5185\u9970", 51: "\u8F66\u8EAB", 52: "\u5185\u71C3\u673A", 53: "\u7ECF\u6D4E\u7535\u52A8\u8F66", 54: "\u8C6A\u534E\u7535\u52A8\u8F66", 55: "\u7ECF\u6D4E\u71C3\u6CB9\u8F66", 56: "\u8C6A\u534E\u71C3\u6CB9\u8F66", 57: "\u5361\u8F66", 58: "\u6C7D\u8F66\u7814\u7A76", 59: "\u65F6\u88C5\u7814\u7A76", 60: "\u5185\u8863", 61: "\u624B\u5957", 62: "\u88D9\u5B50", 63: "\u9AD8\u8DDF\u978B", 64: "\u624B\u888B", 65: "\u8FD0\u52A8\u978B", 66: "\u79CD\u5B50", 67: "\u5723\u8BDE\u7206\u7AF9", 68: "\u91D1\u77FF\u77F3", 69: "\u91D1\u6761", 70: "\u540D\u724C\u624B\u8868", 71: "\u9879\u94FE", 72: "\u7518\u8517", 73: "\u4E59\u9187", 74: "\u7532\u70F7", 75: "\u78B3\u7EA4\u7EF4", 76: "\u78B3\u7EA4\u590D\u5408\u6750", 77: "\u673A\u8EAB", 78: "\u673A\u7FFC", 79: "\u7CBE\u5BC6\u7535\u5B50\u5143\u4EF6", 80: "\u98DE\u884C\u8BA1\u7B97\u673A", 81: "\u5EA7\u8231", 82: "\u59FF\u6001\u63A7\u5236\u5668", 83: "\u706B\u7BAD\u71C3\u6599", 84: "\u71C3\u6599\u50A8\u7F50", 85: "\u56FA\u4F53\u71C3\u6599\u52A9\u63A8\u5668", 86: "\u706B\u7BAD\u53D1\u52A8\u673A", 87: "\u9694\u70ED\u677F", 88: "\u79BB\u5B50\u63A8\u8FDB\u5668", 89: "\u55B7\u6C14\u53D1\u52A8\u673A", 90: "\u4E9A\u8F68\u9053\u4E8C\u7EA7\u706B\u7BAD", 91: "\u4E9A\u8F68\u9053\u706B\u7BAD", 92: "\u8F68\u9053\u52A9\u63A8\u5668", 93: "\u661F\u9645\u98DE\u8239", 94: "BFR", 95: "\u55B7\u6C14\u5BA2\u673A", 96: "\u8C6A\u534E\u98DE\u673A", 97: "\u5355\u5F15\u64CE\u98DE\u673A", 98: "\u65E0\u4EBA\u673A", 99: "\u4EBA\u9020\u536B\u661F", 100: "\u822A\u7A7A\u822A\u5929\u7814\u7A76", 101: "\u94A2\u7B4B\u6DF7\u51DD\u571F", 102: "\u7816\u5757", 103: "\u6C34\u6CE5", 104: "\u9ECF\u571F", 105: "\u77F3\u7070\u77F3", 106: "\u6728\u6750", 107: "\u94A2\u7B4B", 108: "\u6728\u677F", 109: "\u7A97\u6237", 110: "\u5DE5\u5177", 111: "\u5EFA\u7B51\u9884\u6784\u4EF6", 112: "\u63A8\u571F\u673A", 113: "\u6750\u6599\u7814\u7A76", 114: "\u673A\u5668\u4EBA", 115: "\u725B", 116: "\u732A", 117: "\u725B\u5976", 118: "\u5496\u5561\u8C46", 119: "\u5496\u5561\u7C89", 120: "\u852C\u83DC", 121: "\u9762\u5305", 122: "\u829D\u58EB", 123: "\u82F9\u679C\u6D3E", 124: "\u6A59\u6C41", 125: "\u82F9\u679C\u6C41", 126: "\u59DC\u6C41\u6C7D\u6C34", 127: "\u62AB\u8428", 128: "\u9762\u6761", 129: "\u6C49\u5821\u5305", 130: "\u5343\u5C42\u9762", 131: "\u8089\u4E38", 132: "\u6DF7\u5408\u679C\u6C41", 133: "\u9762\u7C89", 134: "\u9EC4\u6CB9", 135: "\u7CD6", 136: "\u53EF\u53EF", 137: "\u9762\u56E2", 138: "\u9171\u6C41", 139: "\u52A8\u7269\u9972\u6599", 140: "\u5DE7\u514B\u529B", 141: "\u690D\u7269\u6CB9", 142: "\u6C99\u62C9", 143: "\u5496\u55B1\u89D2", 144: "\u5723\u8BDE\u88C5\u9970\u54C1", 145: "\u98DF\u8C31", 146: "\u5357\u74DC", 147: "\u6770\u514B\u706F\u7B3C", 148: "\u5973\u5DEB\u670D", 149: "\u5357\u74DC\u6C64", 150: "\u6811", 151: "\u590D\u6D3B\u8282\u5154\u5154", 152: "\u658B\u6708\u7CD6\u679C", 153: "\u5DE7\u514B\u529B\u51B0\u6DC7\u6DCB", 154: "\u82F9\u679C\u51B0\u6DC7\u6DCB", 155: "\u5976\u6CB9\u9E21\u86CB" };
-
   // src/features/incomingContractsHandler.js
   registerExportInfo({
     name: "\u5408\u540C\u9AD8\u4EF7\u63D0\u9192\u8BBE\u7F6E",
@@ -7994,6 +7970,28 @@
         if (typeof executiveCustomButton !== "undefined") executiveCustomButton.show();
       };
       toggleContainer.appendChild(customBtn);
+      const economySpan = document.createElement("span");
+      economySpan.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin-left:4px;";
+      const economyLabel = document.createElement("span");
+      economyLabel.textContent = "\u5468\u671F:";
+      economyLabel.style.cssText = "font-size:12px;color:#666;";
+      const economySelect = document.createElement("select");
+      economySelect.id = "sc-warehouse-economy-select";
+      economySelect.style.cssText = "font-size:12px;color:#333;background:#fff;border:1px solid #bbb;border-radius:4px;padding:3px 4px;";
+      economySelect.innerHTML = `
+                <option value="">\u5F53\u524D</option>
+                <option value="0">\u8427\u6761</option>
+                <option value="1">\u5E73\u7F13</option>
+                <option value="2">\u666F\u6C14</option>
+            `;
+      economySelect.addEventListener("change", () => {
+        document.querySelectorAll(".sc-warehouse-profit").forEach((e) => e.remove());
+        pendingItems.clear();
+        calculateAndDisplay();
+      });
+      economySpan.appendChild(economyLabel);
+      economySpan.appendChild(economySelect);
+      toggleContainer.appendChild(economySpan);
       parent.parentNode.insertBefore(toggleContainer, parent);
     }
     function calculateAndDisplay() {
@@ -8042,7 +8040,7 @@
       const buildingKind = Object.entries(zn.SALES).find(([, ids]) => ids.includes(resourceId))?.[0];
       const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
       const wages = (zn.AVERAGE_SALARY || 0) * (salaryModifier || 1);
-      const economySelectEl = document.getElementById("sc-economy-select");
+      const economySelectEl = document.getElementById("sc-warehouse-economy-select");
       const economyState = economySelectEl && economySelectEl.value !== "" ? parseInt(economySelectEl.value) : SRC.economyState;
       const v = salesModifierWithRecreationBonus + skillCMO;
       const b = (() => {
@@ -12242,6 +12240,7 @@
         if (adminOverhead <= 1) return 0;
         let total = 0;
         for (const b of buildings) {
+          if (String(b.position) === "P") continue;
           const baseWage = BASE_WAGES[b.kind];
           if (baseWage === void 0 || baseWage === 0) continue;
           const robotMultiplier = typeof b.robotsSpecialization === "number" ? 0.97 : 1;
@@ -13074,4 +13073,4 @@
   })();
 })();
 
-// @changelog 修复领域数据天气过期判定；合同二次确认设置默认 -0，入库页面无合同也显示按钮；现任高管详情面板支持切换更新与稳定插入定位。
+// @changelog 餐馆备货提醒重构并支持查看全部餐馆；仓库时利润支持经济周期；修复管理费计算。
