@@ -263,6 +263,30 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             };
             toggleContainer.appendChild(customBtn);
 
+            // 经济周期覆盖控件
+            const economySpan = document.createElement('span');
+            economySpan.style.cssText = 'display:inline-flex;align-items:center;gap:2px;margin-left:4px;';
+            const economyLabel = document.createElement('span');
+            economyLabel.textContent = '周期:';
+            economyLabel.style.cssText = 'font-size:12px;color:#666;';
+            const economySelect = document.createElement('select');
+            economySelect.id = 'sc-warehouse-economy-select';
+            economySelect.style.cssText = 'font-size:12px;color:#333;background:#fff;border:1px solid #bbb;border-radius:4px;padding:3px 4px;';
+            economySelect.innerHTML = `
+                <option value="">当前</option>
+                <option value="0">萧条</option>
+                <option value="1">平缓</option>
+                <option value="2">景气</option>
+            `;
+            economySelect.addEventListener('change', () => {
+                document.querySelectorAll('.sc-warehouse-profit').forEach(e => e.remove());
+                pendingItems.clear();
+                calculateAndDisplay();
+            });
+            economySpan.appendChild(economyLabel);
+            economySpan.appendChild(economySelect);
+            toggleContainer.appendChild(economySpan);
+
             // 插入到父元素前面
             parent.parentNode.insertBefore(toggleContainer, parent);
         }
@@ -320,7 +344,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             const salaryModifier = SCD.buildingsSalaryModifier?.[buildingKind];
             const wages = (zn.AVERAGE_SALARY || 0) * (salaryModifier || 1);
 
-            const economySelectEl = document.getElementById('sc-economy-select');
+            const economySelectEl = document.getElementById('sc-warehouse-economy-select');
             const economyState = (economySelectEl && economySelectEl.value !== '')
                 ? parseInt(economySelectEl.value) : SRC.economyState;
 
