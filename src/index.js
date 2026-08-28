@@ -1,4 +1,4 @@
-﻿import './core/requestHooks.js';
+import './core/requestHooks.js';
 import './features/autoRefresh.js';
 import './features/paQuestAnswers.js';
 import './features/pageObserver.js';
@@ -3359,6 +3359,8 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
             if (adminOverhead <= 1) return 0;
             let total = 0;
             for (const b of buildings) {
+                // P 位置（如停车场/装饰）不产生管理费，其余位置均计入
+                if (String(b.position) === 'P') continue;
                 const baseWage = BASE_WAGES[b.kind];
                 if (baseWage === undefined || baseWage === 0) continue;
                 // 机器人：robotsSpecialization 为数字则表示安装了机器人，减少3%管理费即 *0.97

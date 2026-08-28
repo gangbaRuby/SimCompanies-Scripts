@@ -1,52 +1,75 @@
-import { registerExportInfo } from '../core/exportInfo.js';
+import { resourceIdNameMap } from '../constants/resourceMap.js';
+import { getRealmIdFromLink } from '../core/storage.js';
 
+// ======================
+// 餐馆备货提醒（插入式表格展示 + 全部餐馆合计切换）
+// ----------------------
+// 识别方式：从 URL 提取 /b/<id>，在捕获的 buildings 数据（requestHooks 存储的
+// SimcompaniesRetailCalculation_<realm>.buildings）中查找 kind === "r" 的建筑。
+// 定位方式：找到 <label>菜单/Menu/Restaurant menu/菜單</label>，插入到其父元素末尾
+// （不依赖任何 CSS 类名）。
+// 数据：
+//   - 菜品列表：restaurantProperties.saladBar/mains/drinks（自带物品 kind id）
+//   - 消耗量（每 12 小时）= ceil( 等级 × 菜品系数 × 分区倍率 × LUXURY 因子 )，每日 ×2
+//   - 库存：warehouseResources（requestHooks 已截取的 /api/v3/resources/<id>/ 数据），
+//     按物品 kind 合并不同品质，排除 blocked: true
+// 视图：
+//   - 当前餐馆：当前建筑的菜品明细（菜品/库存/每日消耗/剩余天数），
+//     菜品旁提示"还有 N 家餐馆在消耗"（共享库存口径提醒）
+//   - 全部餐馆（标题旁按钮切换）：菜品视角合计，共享库存 ÷ 全体餐馆对该菜的日消耗合计
+// 已知限制（模块失效时优先检查）：
+//   - 容器定位依赖 <label> 文案全等匹配；游戏若改文案，优先检查 MENU_LABELS。
+//   - 菜单数据来自 buildings 接口快照：页面内修改菜单后不会实时反映，
+//     需重新进入餐馆页（buildings 重新捕获）才更新。
+//   - 库存为 warehouseResources 接口快照，游戏切换页面重新请求时会自动刷新，并非实时递减。
+// ======================
 const RestaurantStockReminder = (function () {
-    const STORAGE_KEY = 'script_restaurant_stock_restaurant_count';
+    const MENU_LABELS = ['菜单', 'Menu', 'Restaurant menu', '菜單'];
+    const BLOCK_ATTR = 'data-sc-restaurant-menu';
+    const STORAGE_REGION_KEY = (realmId) => `SimcompaniesRetailCalculation_${realmId}`;
+    const CYCLES_PER_DAY = 2; // 12 小时一轮 → 每天 2 轮
+    const WARN_DAYS = 2; // 剩余天数不足 2 天 → ⚠️ 且高亮
 
-    registerExportInfo({
-        name: '餐馆备货提醒设置',
-        scope: 'global',
-        keys: [STORAGE_KEY]
-    });
+    // 分区 → 菜品系数表（每 12 小时单份基础消耗）
+    const DISH_COEFF = {
+        saladBar: { 117: 288, 121: 24.89, 134: 92.6, 122: 38.196, 119: 96.312, 123: 16.667 },
+        mains: { 129: 3.608, 130: 4.073, 131: 3.505, 142: 9.402, 143: 10.093, 149: 9.2 },
+        drinks: { 132: 4.04, 124: 144, 125: 128.955, 126: 113.984 }
+    };
+    // 分区内已选菜品数 → 倍率（分区独立计数）
+    const PARTITION_MULTIPLIER = { 1: 2.1, 2: 1.0, 3: 0.9, 4: 0.8, 5: 0.8, 6: 0.8 };
+    const DEFAULT_MULTIPLIER = 0.8;
+
+    const PARTITIONS = [
+        { key: 'saladBar', title: '沙拉吧' },
+        { key: 'mains', title: '主菜' },
+        { key: 'drinks', title: '饮料' }
+    ];
 
     const state = {
-        menuObserver: null,
         watchTimer: null,
-        panelNode: null,
-        panelContentNode: null,
-        tableBodyNode: null,
-        menuContainer: null,
-        observedMenuContainer: null,
-        panelPositionInitialized: false,
-        panelMovedByUser: false,
-        panelCollapsed: true,
-        dragMoved: false,
-        dragStartX: 0,
-        dragStartY: 0,
-        dragOriginLeft: 0,
-        dragOriginTop: 0,
-        handleDragMove: null,
-        handleDragEnd: null,
-        currentUrl: ''
+        blockNode: null,
+        containerNode: null,
+        lastMenuJson: '',
+        lastBuildingId: '',
+        viewAll: false,
+        restaurant: null,
+        allRestaurants: []
     };
-
-    let restaurantCount = loadRestaurantCount();
 
     function isEnabled() {
         return typeof window.isPageModuleEnabled !== 'function' || window.isPageModuleEnabled('restaurantStock');
     }
 
+    // 定时器常驻：开关状态只影响是否渲染，不影响轮询，
+    // 保证在同一页面关闭再打开开关后功能自动恢复（无需重新进入建筑页）
     function init() {
-        if (!isEnabled()) {
-            cleanupAll();
-            return;
-        }
         startWatch();
     }
 
     function startWatch() {
         if (state.watchTimer) return;
-        state.watchTimer = setInterval(() => mainFunc(), 1200);
+        state.watchTimer = setInterval(mainFunc, 1200);
         mainFunc();
     }
 
@@ -57,377 +80,374 @@ const RestaurantStockReminder = (function () {
         }
     }
 
-    function cleanupAll() {
-        stopWatch();
-        disconnectMenuObserver();
-        destroyPanel();
-        state.menuContainer = null;
-        state.currentUrl = '';
+    // 从 URL 提取建筑 id（兼容 /b/123、/zh-cn/b/123/ 及带后缀的形态）
+    function getBuildingIdFromUrl() {
+        const match = location.href.match(/\/b\/(\d+)(?:\/|$)/);
+        return match ? match[1] : null;
     }
 
-    function getRestaurantDetailAnchor() {
-        const labels = Array.from(document.querySelectorAll('label'));
-        const openTexts = ['Restaurant is open', '餐馆营业中', '餐廳營業中'];
-        return labels.find(label => openTexts.includes(label.textContent?.trim())) || null;
-    }
-
-    function isRestaurantPage() {
-        return Boolean(getRestaurantDetailAnchor());
-    }
-
-    function getTargetMenuContainer() {
-        const containers = Array.from(document.querySelectorAll('div.css-12ocart'));
-        if (containers.length >= 3) {
-            return containers[2];
-        }
-        return containers.find(container => {
-            return Boolean(container.querySelector('label') && container.querySelector('.css-1v345k9, .css-1k48byk'));
-        }) || containers.find(container => Boolean(container.querySelector('label'))) || null;
-    }
-
-    function mainFunc() {
-        if (!isEnabled() || !/\/b\/\d+\/?$/.test(location.href)) {
-            cleanupAll();
-            return;
-        }
-
-        if (!isRestaurantPage()) {
-            destroyPanel();
-            disconnectMenuObserver();
-            state.menuContainer = null;
-            return;
-        }
-
-        const menuContainer = getTargetMenuContainer();
-        if (!menuContainer) return;
-
-        if (state.currentUrl !== location.href) {
-            state.currentUrl = location.href;
-            disconnectMenuObserver();
-            state.panelPositionInitialized = false;
-            state.panelMovedByUser = false;
-        }
-
-        state.menuContainer = menuContainer;
-        ensurePanel(menuContainer);
-        observeMenu(menuContainer);
-        refreshPanel();
-    }
-
-    function loadRestaurantCount() {
+    function loadRegionData() {
+        const realmId = getRealmIdFromLink();
+        if (realmId === null) return null;
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            const value = parseInt(raw || '1', 10);
-            return value > 0 ? value : 1;
-        } catch (error) {
-            return 1;
+            const raw = localStorage.getItem(STORAGE_REGION_KEY(realmId));
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            return null;
         }
     }
 
-    function saveRestaurantCount(value) {
-        try {
-            localStorage.setItem(STORAGE_KEY, String(value));
-        } catch (error) {
-            console.error('[餐馆备货提醒] 存储餐馆数量失败', error);
-        }
+    function findRestaurant(buildings, buildingId) {
+        if (!Array.isArray(buildings)) return null;
+        return buildings.find(b => b && b.kind === 'r' && String(b.id) === String(buildingId)) || null;
     }
 
-    function getRestaurantCount() {
-        const input = document.querySelector('#script_restaurant_count');
-        const inputValue = parseInt(input?.value || String(restaurantCount), 10);
-        const count = Number.isFinite(inputValue) && inputValue > 0 ? inputValue : 1;
-        restaurantCount = count;
+    // 找到 <label>菜单</label>，返回其父元素（不依赖 CSS 类名）
+    function findMenuContainer() {
+        const labels = document.querySelectorAll('label');
+        for (const label of labels) {
+            const text = label.textContent ? label.textContent.trim() : '';
+            if (MENU_LABELS.includes(text)) {
+                const container = label.parentElement;
+                if (container && container !== document.body) return container;
+            }
+        }
+        return null;
+    }
+
+    function dishName(kind) {
+        return resourceIdNameMap[kind] || `#${kind}`;
+    }
+
+    // 每 12 小时周期消耗 = ceil( 等级 × 系数 × 分区倍率 × LUXURY 因子 )
+    function perCycleConsume(level, kind, partitionCount, isLuxury, coeff) {
+        const multiplier = PARTITION_MULTIPLIER[partitionCount] ?? DEFAULT_MULTIPLIER;
+        const luxuryFactor = isLuxury ? 0.5 : 1;
+        return Math.ceil((level || 1) * coeff * multiplier * luxuryFactor);
+    }
+
+    // 从 warehouseResources 中提取条目数组（兼容数组/对象包裹形态）
+    function stockList(resources) {
+        if (!resources) return null;
+        if (Array.isArray(resources)) return resources;
+        if (Array.isArray(resources.resources)) return resources.resources;
+        if (Array.isArray(resources.items)) return resources.items;
+        return null;
+    }
+
+    // 一次扫描生成 kind → 合计库存 映射（排除 blocked: true，不同品质合并）
+    function buildStockMap(resources) {
+        const list = stockList(resources);
+        if (!list) return null;
+        const map = new Map();
+        for (const entry of list) {
+            if (entry.blocked === true) continue;
+            const entryKind = entry.kind ?? entry.resource ?? entry.resourceId ?? entry.id;
+            if (entryKind === null || entryKind === undefined) continue;
+            const amount = entry.amount ?? entry.quantity ?? 0;
+            if (typeof amount !== 'number' || !Number.isFinite(amount)) continue;
+            const key = String(entryKind);
+            map.set(key, (map.get(key) || 0) + amount);
+        }
+        return map;
+    }
+
+    function stockForKind(stockMap, kind) {
+        if (!stockMap) return null;
+        const key = String(kind);
+        return stockMap.has(key) ? stockMap.get(key) : 0;
+    }
+
+    // 其它（非当前）餐馆中也在菜单里提供该菜品的数量（共享库存口径提醒）
+    function otherRestaurantCountForDish(allRestaurants, currentId, kind) {
+        let count = 0;
+        for (const r of allRestaurants) {
+            if (String(r.id) === String(currentId)) continue;
+            const props = r.restaurantProperties || {};
+            let has = false;
+            for (const p of PARTITIONS) {
+                const items = Array.isArray(props[p.key]) ? props[p.key] : [];
+                if (items.some(item => String(item.kind) === String(kind))) {
+                    has = true;
+                    break;
+                }
+            }
+            if (has) count++;
+        }
         return count;
     }
 
-    function parseNumber(text) {
-        if (!text) return 0;
-        const clean = String(text).replace(/,/g, '').replace(/[^\d-]/g, '');
-        const value = parseInt(clean, 10);
-        return Number.isFinite(value) ? value : 0;
-    }
+    function getMenuRows(restaurant) {
+        const props = restaurant.restaurantProperties || {};
+        const isLuxury = props.isLuxury === true;
+        const level = restaurant.size ?? 1;
 
-    function parseConsumeNumber(text) {
-        if (!text) return 0;
-        const cleanText = String(text).replace(/,/g, '');
-        const match = cleanText.match(/-\s*(\d+(?:\.\d+)?)/) || cleanText.match(/(\d+(?:\.\d+)?)/);
-        if (!match) return 0;
-        const value = parseFloat(match[1]);
-        return Number.isFinite(value) ? value : 0;
-    }
-
-    function ensurePanel(menuContainer) {
-        if (!state.panelNode || !state.panelNode.isConnected) {
-            const panel = createPanelDOM();
-            document.body.appendChild(panel);
-
-            state.panelNode = panel;
-            state.panelContentNode = panel.querySelector('#script_restaurant_stock_content');
-            state.tableBodyNode = panel.querySelector('#script_restaurant_stock_tbody');
-
-            bindPanelInteractions();
-            bindRestaurantCountInput(panel);
-        }
-
-        if (!state.panelMovedByUser && !state.panelPositionInitialized) {
-            alignPanelToMenu(menuContainer);
-            state.panelPositionInitialized = true;
-        }
-    }
-
-    function createPanelDOM() {
-        const panel = document.createElement('div');
-        panel.id = 'script_restaurant_stock_panel';
-        panel.style.cssText = [
-            'position:fixed',
-            'z-index:999',
-            'width:360px',
-            'left:30px',
-            'top:70px',
-            'max-height:75vh',
-            'overflow:auto',
-            'background:rgba(17,24,39,0.95)',
-            'color:#e5e7eb',
-            'border:1px solid rgba(255,255,255,0.12)',
-            'border-radius:8px',
-            'padding:10px',
-            'box-shadow:0 8px 20px rgba(0,0,0,0.35)',
-            'font-size:12px',
-            'line-height:1.4'
-        ].join(';');
-
-        panel.innerHTML = `
-            <div id="script_restaurant_stock_header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;cursor:move;user-select:none;">
-                <strong style="font-size:13px;">餐馆备货提醒</strong>
-                <button id="script_restaurant_stock_collapse" type="button" style="height:22px;padding:0 8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;border-radius:4px;cursor:pointer;">收起</button>
-            </div>
-            <div id="script_restaurant_stock_content">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                    <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
-                        餐馆：<input id="script_restaurant_count" type="number" min="1" step="1" style="width:52px;height:22px;padding:0 4px;border-radius:4px;border:1px solid rgba(255,255,255,0.4);background:rgba(0,0,0,0.35);color:#fff;font-size:12px;">
-                    </span>
-                    <span id="script_restaurant_stock_meta" style="opacity:0.85;">加载中...</span>
-                </div>
-                <table style="width:100%;border-collapse:collapse;">
-                    <thead>
-                        <tr style="text-align:left;border-bottom:1px solid rgba(255,255,255,0.15);">
-                            <th style="padding:4px 2px;">菜品</th>
-                            <th style="padding:4px 2px;">库存</th>
-                            <th style="padding:4px 2px;">每日消耗量</th>
-                            <th style="padding:4px 2px;">剩余天数</th>
-                        </tr>
-                    </thead>
-                    <tbody id="script_restaurant_stock_tbody"></tbody>
-                </table>
-            </div>
-        `;
-
-        return panel;
-    }
-
-    function alignPanelToMenu(menuContainer) {
-        const panel = state.panelNode;
-        if (!menuContainer || !panel || !panel.isConnected) return;
-
-        const panelWidth = panel.offsetWidth || 360;
-        const panelHeight = panel.offsetHeight || 260;
-        const left = 30;
-        const top = 70;
-        const maxLeft = Math.max(8, window.innerWidth - panelWidth - 8);
-        const maxTop = Math.max(8, window.innerHeight - panelHeight - 8);
-        const safeLeft = Math.min(Math.max(8, left), maxLeft);
-        const safeTop = Math.min(Math.max(8, top), maxTop);
-
-        panel.style.left = `${safeLeft}px`;
-        panel.style.top = `${safeTop}px`;
-    }
-
-    function bindPanelInteractions() {
-        const panel = state.panelNode;
-        if (!panel) return;
-
-        const header = panel.querySelector('#script_restaurant_stock_header');
-        const collapseBtn = panel.querySelector('#script_restaurant_stock_collapse');
-        const content = state.panelContentNode;
-        if (!header || !collapseBtn || !content) return;
-
-        collapseBtn.addEventListener('click', () => {
-            state.panelCollapsed = !state.panelCollapsed;
-            content.style.display = state.panelCollapsed ? 'none' : 'block';
-            collapseBtn.textContent = state.panelCollapsed ? '展开' : '收起';
-        });
-
-        state.handleDragMove = (event) => {
-            if (!state.dragMoved && (Math.abs(event.clientX - state.dragStartX) > 2 || Math.abs(event.clientY - state.dragStartY) > 2)) {
-                state.dragMoved = true;
+        const counts = {};
+        const dishes = [];
+        for (const p of PARTITIONS) {
+            const items = Array.isArray(props[p.key]) ? props[p.key] : [];
+            counts[p.key] = items.length;
+            for (const item of items) {
+                dishes.push({ partition: p.key, kind: item.kind });
             }
-            const nextLeft = state.dragOriginLeft + (event.clientX - state.dragStartX);
-            const nextTop = state.dragOriginTop + (event.clientY - state.dragStartY);
-            const maxLeft = Math.max(8, window.innerWidth - panel.offsetWidth - 8);
-            const maxTop = Math.max(8, window.innerHeight - 40);
-            panel.style.left = `${Math.min(Math.max(8, nextLeft), maxLeft)}px`;
-            panel.style.top = `${Math.min(Math.max(8, nextTop), maxTop)}px`;
-        };
-
-        state.handleDragEnd = () => {
-            if (state.dragMoved) {
-                state.panelMovedByUser = true;
-            }
-            document.removeEventListener('mousemove', state.handleDragMove);
-            document.removeEventListener('mouseup', state.handleDragEnd);
-        };
-
-        header.addEventListener('mousedown', (event) => {
-            if (event.button !== 0 || event.target === collapseBtn) return;
-            event.preventDefault();
-            state.dragMoved = false;
-            state.dragStartX = event.clientX;
-            state.dragStartY = event.clientY;
-            state.dragOriginLeft = parseFloat(panel.style.left || '8') || 8;
-            state.dragOriginTop = parseFloat(panel.style.top || '8') || 8;
-            document.addEventListener('mousemove', state.handleDragMove);
-            document.addEventListener('mouseup', state.handleDragEnd);
-        });
-    }
-
-    function bindRestaurantCountInput(panel) {
-        const input = panel.querySelector('#script_restaurant_count');
-        if (!input) return;
-
-        input.value = String(restaurantCount || 1);
-
-        const handleChange = () => {
-            const value = parseInt(input.value, 10);
-            const fixedValue = Number.isFinite(value) && value > 0 ? value : 1;
-            input.value = String(fixedValue);
-            restaurantCount = fixedValue;
-            saveRestaurantCount(fixedValue);
-            refreshPanel();
-        };
-
-        input.addEventListener('change', handleChange);
-
-        input.addEventListener('input', () => {
-            const value = parseInt(input.value, 10);
-            if (!Number.isFinite(value) || value <= 0) return;
-            restaurantCount = value;
-            saveRestaurantCount(value);
-            refreshPanel();
-        });
-    }
-
-    function extractMenuRows() {
-        const menuContainer = state.menuContainer;
-        const count = getRestaurantCount();
-        if (!menuContainer) return [];
-
-        const cards = menuContainer.querySelectorAll('.css-1v345k9, .css-1k48byk');
-        const rows = [];
-
-        cards.forEach(card => {
-            if (card.classList.contains('css-1k48byk')) return;
-
-            const name = card.querySelector('b')?.textContent?.trim() || '未知菜品';
-            const valueWrap = card.querySelector('.css-aqbich');
-            if (!valueWrap) return;
-
-            const stock = parseNumber(valueWrap.querySelector('div:nth-child(1)')?.textContent);
-            const periodConsume = Math.abs(parseConsumeNumber(valueWrap.querySelector('div:nth-child(2)')?.textContent));
-            if (!periodConsume) return;
-
-            const dailyConsume = periodConsume * 2 * count;
-            const remainDays = stock / dailyConsume;
-
-            rows.push({
-                name,
-                stock,
-                dailyConsume,
-                remainDays,
-                isWarning: remainDays < 2
-            });
-        });
-
-        return rows;
-    }
-
-    function formatNumber(num) {
-        return Number.isFinite(num) ? num.toLocaleString() : '0';
-    }
-
-    function renderRows(rows) {
-        const tbody = state.tableBodyNode;
-        const panel = state.panelNode;
-        if (!tbody || !panel) return;
-
-        const metaNode = panel.querySelector('#script_restaurant_stock_meta');
-        const warningCount = rows.filter(row => row.isWarning).length;
-        if (metaNode) {
-            metaNode.textContent = `菜品:${rows.length} | 预警:${warningCount}`;
         }
+
+        return dishes.map(d => {
+            const coeff = DISH_COEFF[d.partition] && DISH_COEFF[d.partition][d.kind];
+            const perCycle = coeff ? perCycleConsume(level, d.kind, counts[d.partition], isLuxury, coeff) : null;
+            return { kind: d.kind, name: dishName(d.kind), perCycle };
+        });
+    }
+
+    // 当前餐馆视图表格（菜品/库存/每日消耗/剩余天数）
+    function buildCurrentTable(restaurant, allRestaurants) {
+        const rows = getMenuRows(restaurant);
+        if (rows.length === 0) {
+            return '<div style="opacity:.75;padding:4px 2px;">该餐馆未选择任何菜品</div>';
+        }
+        const rowHtml = rows.map(r => {
+            const otherCount = otherRestaurantCountForDish(allRestaurants, restaurant.id, r.kind);
+            const otherHint = otherCount > 0
+                ? `<span style="opacity:.6;margin-left:4px;">（还有${otherCount}家餐馆在消耗）</span>`
+                : '';
+            return `
+            <tr data-sc-kind="${r.kind}" style="border-bottom:1px solid rgba(128,128,128,.15);">
+                <td style="padding:3px 6px;">${r.name}${otherHint}</td>
+                <td data-sc-stock style="padding:3px 6px;text-align:right;">—</td>
+                <td data-sc-daily style="padding:3px 6px;text-align:right;">${r.perCycle === null ? '—' : (r.perCycle * CYCLES_PER_DAY).toLocaleString()}</td>
+                <td data-sc-days style="padding:3px 6px;text-align:right;">—</td>
+            </tr>`;
+        }).join('');
+        return `
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="text-align:left;border-bottom:1px solid rgba(128,128,128,.35);">
+                        <th style="padding:3px 6px;">菜品</th>
+                        <th style="padding:3px 6px;text-align:right;">库存</th>
+                        <th style="padding:3px 6px;text-align:right;">每日消耗</th>
+                        <th style="padding:3px 6px;text-align:right;">剩余天数</th>
+                    </tr>
+                </thead>
+                <tbody>${rowHtml}</tbody>
+            </table>`;
+    }
+
+    // 全部餐馆视图（菜品视角）：共享库存 ÷ 全体餐馆对该菜的日消耗合计
+    function buildAllTable(allRestaurants) {
+        const agg = new Map();
+        for (const r of allRestaurants) {
+            const props = r.restaurantProperties || {};
+            if (!props) continue;
+            const isLuxury = props.isLuxury === true;
+            const level = r.size ?? 1;
+            for (const p of PARTITIONS) {
+                const items = Array.isArray(props[p.key]) ? props[p.key] : [];
+                const count = items.length;
+                for (const item of items) {
+                    const coeff = DISH_COEFF[p.key] && DISH_COEFF[p.key][item.kind];
+                    if (!coeff) continue; // 未知系数菜品不计入合计
+                    const perCycle = perCycleConsume(level, item.kind, count, isLuxury, coeff);
+                    const key = String(item.kind);
+                    const entry = agg.get(key) || { dailyTotal: 0, restCount: 0 };
+                    entry.dailyTotal += perCycle * CYCLES_PER_DAY;
+                    entry.restCount += 1;
+                    agg.set(key, entry);
+                }
+            }
+        }
+
+        const stockMap = buildStockMap(loadRegionData()?.warehouseResources ?? null);
+        const rows = [...agg.entries()].map(([kind, e]) => {
+            const stock = stockForKind(stockMap, kind);
+            const days = (stock !== null && e.dailyTotal > 0) ? stock / e.dailyTotal : null;
+            return { kind, name: dishName(kind), dailyTotal: e.dailyTotal, restCount: e.restCount, days };
+        });
+        // 按剩余天数升序（无库存数据排最后）
+        rows.sort((a, b) => {
+            if (a.days === null && b.days === null) return 0;
+            if (a.days === null) return 1;
+            if (b.days === null) return -1;
+            return a.days - b.days;
+        });
 
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="padding:10px 2px;opacity:0.8;">未检测到可计算菜品，等待页面数据加载...</td></tr>';
+            return '<div style="opacity:.75;padding:4px 2px;">未检测到可计算菜品（或没有餐馆）</div>';
+        }
+        const rowHtml = rows.map(r => {
+            const warn = r.days !== null && r.days < WARN_DAYS;
+            const daysText = r.days === null
+                ? '—'
+                : (warn ? `⚠️ ${r.days.toFixed(2)}` : r.days.toFixed(2));
+            return `
+            <tr data-sc-kind="${r.kind}" style="border-bottom:1px solid rgba(128,128,128,.15);${warn ? 'background:rgba(220,38,38,.15);' : ''}">
+                <td style="padding:3px 6px;">${r.name}</td>
+                <td data-sc-restcount style="padding:3px 6px;text-align:right;">${r.restCount}</td>
+                <td data-sc-daily style="padding:3px 6px;text-align:right;">${r.dailyTotal.toLocaleString()}</td>
+                <td data-sc-stock style="padding:3px 6px;text-align:right;">—</td>
+                <td data-sc-days style="padding:3px 6px;text-align:right;">${daysText}</td>
+            </tr>`;
+        }).join('');
+        return `
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="text-align:left;border-bottom:1px solid rgba(128,128,128,.35);">
+                        <th style="padding:3px 6px;">菜品</th>
+                        <th style="padding:3px 6px;text-align:right;">涉及餐馆</th>
+                        <th style="padding:3px 6px;text-align:right;">每日消耗</th>
+                        <th style="padding:3px 6px;text-align:right;">库存</th>
+                        <th style="padding:3px 6px;text-align:right;">剩余天数</th>
+                    </tr>
+                </thead>
+                <tbody>${rowHtml}</tbody>
+            </table>`;
+    }
+
+    function renderIntoBlock(block, restaurant, allRestaurants) {
+        const viewAll = state.viewAll;
+        const buttonText = viewAll ? '显示当前餐馆' : '显示全部餐馆';
+        const body = viewAll
+            ? buildAllTable(allRestaurants)
+            : buildCurrentTable(restaurant, allRestaurants);
+        block.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <div style="font-weight:bold;">餐馆备货提醒<span style="font-weight:normal;opacity:.75;margin-left:4px;">（${viewAll ? '全部餐馆' : '当前餐馆'}）</span></div>
+                <button data-sc-view-toggle type="button" style="font-size:11px;line-height:1.4;padding:1px 8px;border:1px solid rgba(128,128,128,.4);border-radius:4px;background:transparent;cursor:pointer;">${buttonText}</button>
+            </div>
+            ${body}
+            <div style="opacity:.55;margin-top:4px;font-size:11px;">* 页面内修改菜单后，本提醒需重新进入餐馆页才会更新</div>`;
+    }
+
+    // 就地刷新库存/剩余天数（数据变化时只更新数值，避免整块重建闪烁）
+    function refreshStocks() {
+        const block = state.blockNode;
+        if (!block || !block.isConnected) return;
+
+        const region = loadRegionData();
+        const stockMap = buildStockMap(region ? region.warehouseResources : null);
+        const rows = block.querySelectorAll('tr[data-sc-kind]');
+        rows.forEach(row => {
+            const kind = row.getAttribute('data-sc-kind');
+            const stock = stockForKind(stockMap, kind);
+
+            const dailyCell = row.querySelector('[data-sc-daily]');
+            const daily = dailyCell ? parseInt(String(dailyCell.textContent || '').replace(/[^\d]/g, ''), 10) : 0;
+
+            const stockCell = row.querySelector('[data-sc-stock]');
+            if (stockCell) {
+                const stockText = stock === null ? '—' : stock.toLocaleString();
+                if (stockCell.textContent !== stockText) stockCell.textContent = stockText;
+            }
+
+            const daysCell = row.querySelector('[data-sc-days]');
+            if (daysCell) {
+                const days = (stock !== null && daily > 0) ? stock / daily : null;
+                const warn = days !== null && days < WARN_DAYS;
+                const daysText = days === null
+                    ? '—'
+                    : (warn ? `⚠️ ${days.toFixed(2)}` : days.toFixed(2));
+                if (daysCell.textContent !== daysText) daysCell.textContent = daysText;
+                row.style.background = warn ? 'rgba(220,38,38,.15)' : '';
+            }
+        });
+    }
+
+    function removeBlock() {
+        if (state.blockNode && state.blockNode.isConnected) {
+            state.blockNode.remove();
+        }
+        state.blockNode = null;
+        state.containerNode = null;
+        state.lastMenuJson = '';
+        state.lastBuildingId = '';
+        state.restaurant = null;
+        state.allRestaurants = [];
+    }
+
+    function currentMenuJson(restaurant, allRestaurants) {
+        return state.viewAll
+            ? JSON.stringify((allRestaurants || []).map(r => r.restaurantProperties || {}))
+            : JSON.stringify(restaurant.restaurantProperties || {});
+    }
+
+    function ensureBlock(container, restaurant, allRestaurants, buildingId) {
+        const menuJson = currentMenuJson(restaurant, allRestaurants);
+        if (
+            state.blockNode && state.blockNode.isConnected &&
+            state.containerNode === container &&
+            state.lastBuildingId === buildingId &&
+            state.lastMenuJson === menuJson
+        ) {
             return;
         }
 
-        tbody.innerHTML = rows.map(row => {
-            const warnStyle = row.isWarning
-                ? 'background:rgba(220,38,38,0.2);color:#fecaca;font-weight:600;'
-                : '';
-            return `
-                <tr style="border-bottom:1px solid rgba(255,255,255,0.08);${warnStyle}">
-                    <td style="padding:5px 2px;">${row.name}</td>
-                    <td style="padding:5px 2px;">${formatNumber(row.stock)}</td>
-                    <td style="padding:5px 2px;">${formatNumber(row.dailyConsume)}</td>
-                    <td style="padding:5px 2px;">${row.remainDays.toFixed(2)}</td>
-                </tr>
-            `;
-        }).join('');
+        const block = state.blockNode && state.blockNode.isConnected
+            ? state.blockNode
+            : document.createElement('div');
+
+        if (!block.isConnected) {
+            block.setAttribute(BLOCK_ATTR, String(restaurant.id));
+            block.style.cssText = [
+                'margin-top:10px',
+                'padding:8px 10px',
+                'border-top:1px dashed rgba(128,128,128,.5)',
+                'border-bottom:1px dashed rgba(128,128,128,.5)',
+                'font-size:12px',
+                'line-height:1.6'
+            ].join(';');
+            block.addEventListener('click', (e) => {
+                if (!e.target.closest('[data-sc-view-toggle]')) return;
+                state.viewAll = !state.viewAll;
+                renderIntoBlock(block, state.restaurant, state.allRestaurants);
+                state.lastMenuJson = currentMenuJson(state.restaurant, state.allRestaurants);
+                refreshStocks();
+            });
+            container.appendChild(block);
+        }
+
+        state.blockNode = block;
+        state.containerNode = container;
+        state.restaurant = restaurant;
+        state.allRestaurants = allRestaurants || [];
+        state.lastBuildingId = buildingId;
+        state.lastMenuJson = menuJson;
+        renderIntoBlock(block, restaurant, state.allRestaurants);
     }
 
-    function refreshPanel() {
-        const rows = extractMenuRows();
-        renderRows(rows);
-    }
-
-    function observeMenu(menuContainer) {
-        if (state.menuObserver && state.observedMenuContainer === menuContainer) return;
-
-        disconnectMenuObserver();
-        state.menuObserver = new MutationObserver(() => refreshPanel());
-        state.menuObserver.observe(menuContainer, {
-            childList: true,
-            subtree: true,
-            characterData: true
-        });
-        state.observedMenuContainer = menuContainer;
-    }
-
-    function disconnectMenuObserver() {
-        if (state.menuObserver) {
-            state.menuObserver.disconnect();
-            state.menuObserver = null;
+    function mainFunc() {
+        if (!isEnabled()) {
+            // 开关关闭只隐藏块，保留定时器：同页重新打开开关后下个 tick 自动恢复
+            removeBlock();
+            return;
         }
-        state.observedMenuContainer = null;
-    }
 
-    function destroyPanel() {
-        if (state.handleDragMove) {
-            document.removeEventListener('mousemove', state.handleDragMove);
+        const buildingId = getBuildingIdFromUrl();
+        if (!buildingId) {
+            removeBlock();
+            return;
         }
-        if (state.handleDragEnd) {
-            document.removeEventListener('mouseup', state.handleDragEnd);
+
+        // 换楼时重置回"当前餐馆"视图
+        if (state.lastBuildingId && state.lastBuildingId !== buildingId) {
+            state.viewAll = false;
         }
-        if (state.panelNode && state.panelNode.isConnected) {
-            state.panelNode.remove();
+
+        const region = loadRegionData();
+        const buildings = region ? region.buildings : null;
+        const restaurant = findRestaurant(buildings, buildingId);
+        if (!restaurant) {
+            removeBlock();
+            return;
         }
-        state.panelNode = null;
-        state.panelContentNode = null;
-        state.tableBodyNode = null;
-        state.panelPositionInitialized = false;
-        state.panelMovedByUser = false;
-        state.handleDragMove = null;
-        state.handleDragEnd = null;
+
+        const allRestaurants = Array.isArray(buildings) ? buildings.filter(b => b && b.kind === 'r') : [];
+        const container = findMenuContainer();
+        if (!container) {
+            removeBlock();
+            return;
+        }
+
+        ensureBlock(container, restaurant, allRestaurants, buildingId);
+        refreshStocks();
     }
 
     return { init };
