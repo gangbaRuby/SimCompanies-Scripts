@@ -59,7 +59,7 @@ npm run release -- "<changelog>"
 - **发布前核对 CHANGELOG**：将工作区改动逐项与 `CHANGELOG.md` 未发布区条目一一对应，防止功能改动漏记。
 - **提交前确认分支**：不要直接提交 `main`；功能走 `feat/`、发布走 `release/` 分支 + PR。收到"提交当前分支"类指示时若正处于 `main`，先确认是否应新建分支。
 - **未发布区混用**：多个 WIP 功能共用未发布区时，提交/发布前确认本次发布范围，避免条目与代码归属错位。
-- **分支保护**：`main` 有必需状态检查时，CI 未绿会拒绝合并；用 `gh pr merge --auto` 等待 CI 通过后自动合并。
+- **分支保护**：`main` 有必需状态检查时，CI 未绿会拒绝合并；本仓库**未启用 auto-merge**（`gh pr merge --auto` 会报 `enablePullRequestAutoMerge` 错误），正确做法是等 CI 变绿（轮询 `gh pr checks`）后再执行 `gh pr merge`。
 - **release 后检查 CHANGELOG 格式**：新版本条目与下一节之间应保留空行（条目通常为"更新说明 + 原未发布明细"）。
 - **中文 PR 载荷**：`gh pr create` 没有 `--title-file`（只有 `--body-file`）；标题与正文统一用 UTF-8 JSON 文件 + `gh api ... --input` 提交，创建后到 GitHub 核对中文（配合第 6 节编码规则）。
 
