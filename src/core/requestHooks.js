@@ -64,18 +64,8 @@ import { RegionData } from '../features/regionData.js';
                 console.warn("⚠️ 读取 localStorage 时解析失败，初始化为空对象", e);
             }
 
-            // --- 新增：保存指定position的建筑信息（id, kind, size, position, robotsSpecialization）供模块17等使用 ---
-            const TARGET_POSITIONS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'B0', 'B1', 'B2', 'B3'];
-            const buildings = data
-                .filter(b => TARGET_POSITIONS.includes(b.position))
-                .map(b => ({
-                    id: b.id,
-                    kind: b.kind,
-                    size: b.size,
-                    position: b.position,
-                    robotsSpecialization: b.robotsSpecialization
-                }));
-            stored.buildings = buildings;
+            // --- 保存完整建筑数据（含 restaurantProperties 等），供备货提醒、管理费计算等模块使用 ---
+            stored.buildings = data;
 
             const oldAcademyActive = stored.academyActive ?? 0; // 使用 nullish 合并更安全
             const newAcademyActive = result.active;             // 新计算值
@@ -139,7 +129,9 @@ import { RegionData } from '../features/regionData.js';
 // 模块2-2：领域仓库数据
 // ======================
 (function () {
-    const resources_URL = "/api/v3/resources/";
+    // 只捕获公司级资源数据（URL 含数字 companyId），
+    // 避免被定义列表 /api/v3/resources/（无 id）的响应覆盖 warehouseResources
+    const resources_URL_PATTERN = /\/api\/v3\/resources\/\d+\//;
 
     function handleData(data) {
         if (!Array.isArray(data) || data.length === 0) return;
@@ -161,7 +153,7 @@ import { RegionData } from '../features/regionData.js';
     window.fetch = async (...args) => {
         const response = await originalFetch(...args);
         try {
-            if (typeof args[0] === "string" && args[0].includes(resources_URL)) {
+            if (typeof args[0] === "string" && resources_URL_PATTERN.test(args[0])) {
                 response.clone().json().then(handleData).catch(err => console.error("❌ 仓库 JSON 解析失败:", err));
             }
         } catch (e) { console.error(e); }
@@ -172,7 +164,7 @@ import { RegionData } from '../features/regionData.js';
     const originalXHR = window.XMLHttpRequest.prototype.open;
     window.XMLHttpRequest.prototype.open = function (method, url, async) {
         this.addEventListener("load", function () {
-            if (url && url.includes(resources_URL) && this.responseText) {
+            if (url && resources_URL_PATTERN.test(url) && this.responseText) {
                 try { handleData(JSON.parse(this.responseText)); }
                 catch (e) { console.error("❌ 仓库 XHR JSON 解析失败:", e); }
             }
