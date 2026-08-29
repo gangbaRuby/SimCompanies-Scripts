@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.4
+// @version      1.33.5
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1446,12 +1446,21 @@
   var resourceIdNameMap = { 1: "\u7535\u529B", 2: "\u6C34", 3: "\u82F9\u679C", 4: "\u6A58\u5B50", 5: "\u8461\u8404", 6: "\u8C37\u7269", 7: "\u725B\u6392", 8: "\u9999\u80A0", 9: "\u9E21\u86CB", 10: "\u539F\u6CB9", 11: "\u6C7D\u6CB9", 12: "\u67F4\u6CB9", 13: "\u8FD0\u8F93\u5355\u4F4D", 14: "\u77FF\u7269", 15: "\u94DD\u571F\u77FF", 16: "\u7845\u6750", 17: "\u5316\u5408\u7269", 18: "\u94DD\u6750", 19: "\u5851\u6599", 20: "\u5904\u7406\u5668", 21: "\u7535\u5B50\u5143\u4EF6", 22: "\u7535\u6C60", 23: "\u663E\u793A\u5C4F", 24: "\u667A\u80FD\u624B\u673A", 25: "\u5E73\u677F\u7535\u8111", 26: "\u7B14\u8BB0\u672C\u7535\u8111", 27: "\u663E\u793A\u5668", 28: "\u7535\u89C6\u673A", 29: "\u4F5C\u7269\u7814\u7A76", 30: "\u80FD\u6E90\u7814\u7A76", 31: "\u91C7\u77FF\u7814\u7A76", 32: "\u7535\u5668\u7814\u7A76", 33: "\u755C\u7267\u7814\u7A76", 34: "\u5316\u5B66\u7814\u7A76", 35: "\u8F6F\u4EF6", 36: "undefined", 37: "undefined", 38: "undefined", 39: "undefined", 40: "\u68C9\u82B1", 41: "\u68C9\u5E03", 42: "\u94C1\u77FF\u77F3", 43: "\u94A2\u6750", 44: "\u6C99\u5B50", 45: "\u73BB\u7483", 46: "\u76AE\u9769", 47: "\u8F66\u8F7D\u7535\u8111", 48: "\u7535\u52A8\u9A6C\u8FBE", 49: "\u8C6A\u534E\u8F66\u5185\u9970", 50: "\u57FA\u672C\u5185\u9970", 51: "\u8F66\u8EAB", 52: "\u5185\u71C3\u673A", 53: "\u7ECF\u6D4E\u7535\u52A8\u8F66", 54: "\u8C6A\u534E\u7535\u52A8\u8F66", 55: "\u7ECF\u6D4E\u71C3\u6CB9\u8F66", 56: "\u8C6A\u534E\u71C3\u6CB9\u8F66", 57: "\u5361\u8F66", 58: "\u6C7D\u8F66\u7814\u7A76", 59: "\u65F6\u88C5\u7814\u7A76", 60: "\u5185\u8863", 61: "\u624B\u5957", 62: "\u88D9\u5B50", 63: "\u9AD8\u8DDF\u978B", 64: "\u624B\u888B", 65: "\u8FD0\u52A8\u978B", 66: "\u79CD\u5B50", 67: "\u5723\u8BDE\u7206\u7AF9", 68: "\u91D1\u77FF\u77F3", 69: "\u91D1\u6761", 70: "\u540D\u724C\u624B\u8868", 71: "\u9879\u94FE", 72: "\u7518\u8517", 73: "\u4E59\u9187", 74: "\u7532\u70F7", 75: "\u78B3\u7EA4\u7EF4", 76: "\u78B3\u7EA4\u590D\u5408\u6750", 77: "\u673A\u8EAB", 78: "\u673A\u7FFC", 79: "\u7CBE\u5BC6\u7535\u5B50\u5143\u4EF6", 80: "\u98DE\u884C\u8BA1\u7B97\u673A", 81: "\u5EA7\u8231", 82: "\u59FF\u6001\u63A7\u5236\u5668", 83: "\u706B\u7BAD\u71C3\u6599", 84: "\u71C3\u6599\u50A8\u7F50", 85: "\u56FA\u4F53\u71C3\u6599\u52A9\u63A8\u5668", 86: "\u706B\u7BAD\u53D1\u52A8\u673A", 87: "\u9694\u70ED\u677F", 88: "\u79BB\u5B50\u63A8\u8FDB\u5668", 89: "\u55B7\u6C14\u53D1\u52A8\u673A", 90: "\u4E9A\u8F68\u9053\u4E8C\u7EA7\u706B\u7BAD", 91: "\u4E9A\u8F68\u9053\u706B\u7BAD", 92: "\u8F68\u9053\u52A9\u63A8\u5668", 93: "\u661F\u9645\u98DE\u8239", 94: "BFR", 95: "\u55B7\u6C14\u5BA2\u673A", 96: "\u8C6A\u534E\u98DE\u673A", 97: "\u5355\u5F15\u64CE\u98DE\u673A", 98: "\u65E0\u4EBA\u673A", 99: "\u4EBA\u9020\u536B\u661F", 100: "\u822A\u7A7A\u822A\u5929\u7814\u7A76", 101: "\u94A2\u7B4B\u6DF7\u51DD\u571F", 102: "\u7816\u5757", 103: "\u6C34\u6CE5", 104: "\u9ECF\u571F", 105: "\u77F3\u7070\u77F3", 106: "\u6728\u6750", 107: "\u94A2\u7B4B", 108: "\u6728\u677F", 109: "\u7A97\u6237", 110: "\u5DE5\u5177", 111: "\u5EFA\u7B51\u9884\u6784\u4EF6", 112: "\u63A8\u571F\u673A", 113: "\u6750\u6599\u7814\u7A76", 114: "\u673A\u5668\u4EBA", 115: "\u725B", 116: "\u732A", 117: "\u725B\u5976", 118: "\u5496\u5561\u8C46", 119: "\u5496\u5561\u7C89", 120: "\u852C\u83DC", 121: "\u9762\u5305", 122: "\u829D\u58EB", 123: "\u82F9\u679C\u6D3E", 124: "\u6A59\u6C41", 125: "\u82F9\u679C\u6C41", 126: "\u59DC\u6C41\u6C7D\u6C34", 127: "\u62AB\u8428", 128: "\u9762\u6761", 129: "\u6C49\u5821\u5305", 130: "\u5343\u5C42\u9762", 131: "\u8089\u4E38", 132: "\u6DF7\u5408\u679C\u6C41", 133: "\u9762\u7C89", 134: "\u9EC4\u6CB9", 135: "\u7CD6", 136: "\u53EF\u53EF", 137: "\u9762\u56E2", 138: "\u9171\u6C41", 139: "\u52A8\u7269\u9972\u6599", 140: "\u5DE7\u514B\u529B", 141: "\u690D\u7269\u6CB9", 142: "\u6C99\u62C9", 143: "\u5496\u55B1\u89D2", 144: "\u5723\u8BDE\u88C5\u9970\u54C1", 145: "\u98DF\u8C31", 146: "\u5357\u74DC", 147: "\u6770\u514B\u706F\u7B3C", 148: "\u5973\u5DEB\u670D", 149: "\u5357\u74DC\u6C64", 150: "\u6811", 151: "\u590D\u6D3B\u8282\u5154\u5154", 152: "\u658B\u6708\u7CD6\u679C", 153: "\u5DE7\u514B\u529B\u51B0\u6DC7\u6DCB", 154: "\u82F9\u679C\u51B0\u6DC7\u6DCB", 155: "\u5976\u6CB9\u9E21\u86CB" };
 
   // src/features/restaurantStockReminder.js
-  var RestaurantStockReminder2 = /* @__PURE__ */ (function() {
+  var RestaurantStockReminder2 = (function() {
     const MENU_LABELS = ["\u83DC\u5355", "Menu", "Restaurant menu", "\u83DC\u55AE"];
     const BLOCK_ATTR = "data-sc-restaurant-menu";
     const STORAGE_REGION_KEY = (realmId) => `SimcompaniesRetailCalculation_${realmId}`;
+    const SETTINGS_KEY_BASE = "SC-RestaurantStock_Settings";
+    const LEGACY_SETTINGS_KEY = "SC_RestaurantStock_Settings";
     const CYCLES_PER_DAY = 2;
-    const WARN_DAYS = 2;
+    const DEFAULT_WARN_DAYS = 2;
+    const DEFAULT_TARGET_DAYS = 2;
+    const QUALITY_VALUES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+    registerExportInfo({
+      name: "\u9910\u9986\u5907\u8D27\u63D0\u9192\u8BBE\u7F6E",
+      scope: "realm",
+      keys: (realmId) => [getScopedKey(SETTINGS_KEY_BASE)]
+    });
     const DISH_COEFF = {
       saladBar: { 117: 288, 121: 24.89, 134: 92.6, 122: 38.196, 119: 96.312, 123: 16.667 },
       mains: { 129: 3.608, 130: 4.073, 131: 3.505, 142: 9.402, 143: 10.093, 149: 9.2 },
@@ -1470,10 +1479,102 @@
       containerNode: null,
       lastMenuJson: "",
       lastBuildingId: "",
-      viewAll: false,
+      view: "current",
+      // 'current' | 'all' | 'quality'
+      showSettings: false,
       restaurant: null,
       allRestaurants: []
     };
+    function loadSettings() {
+      const realmId = getRealmIdFromLink();
+      if (realmId === null) return { warnDays: DEFAULT_WARN_DAYS, targetDays: DEFAULT_TARGET_DAYS, qualities: {} };
+      let raw = localStorage.getItem(getScopedKey(SETTINGS_KEY_BASE));
+      if (raw === null) {
+        const legacy = localStorage.getItem(LEGACY_SETTINGS_KEY);
+        if (legacy !== null) {
+          try {
+            localStorage.setItem(getScopedKey(SETTINGS_KEY_BASE), legacy);
+          } catch (e) {
+          }
+          raw = legacy;
+        }
+      }
+      try {
+        const parsed = JSON.parse(raw || "{}");
+        const warnDays = Number.isFinite(Number(parsed.warnDays)) && Number(parsed.warnDays) >= 1 ? Number(parsed.warnDays) : DEFAULT_WARN_DAYS;
+        const targetDays = Number.isFinite(Number(parsed.targetDays)) && Number(parsed.targetDays) >= 1 ? Number(parsed.targetDays) : DEFAULT_TARGET_DAYS;
+        return {
+          warnDays,
+          targetDays,
+          qualities: normalizeQualities(parsed.qualities)
+        };
+      } catch (e) {
+        return { warnDays: DEFAULT_WARN_DAYS, targetDays: DEFAULT_TARGET_DAYS, qualities: {} };
+      }
+    }
+    function normalizeQualities(qs) {
+      const out = {};
+      if (!qs || typeof qs !== "object") return out;
+      for (const rid of Object.keys(qs)) {
+        const per = qs[rid];
+        if (!per || typeof per !== "object") continue;
+        out[rid] = {};
+        for (const kind of Object.keys(per)) {
+          out[rid][kind] = normalizeQualityValue(per[kind]);
+        }
+      }
+      return out;
+    }
+    function normalizeQualityValue(v) {
+      let r;
+      if (v && typeof v === "object" && v.min !== void 0 && v.max !== void 0) {
+        r = { min: v.min ?? "auto", max: v.max ?? "auto" };
+      } else if (v === void 0 || v === null || v === "" || v === "auto") {
+        r = { min: "auto", max: "auto" };
+      } else {
+        r = { min: String(v), max: String(v) };
+      }
+      if (r.min !== "auto" && r.max !== "auto" && Number(r.min) > Number(r.max)) {
+        const t = r.min;
+        r.min = r.max;
+        r.max = t;
+      }
+      return r;
+    }
+    function saveSettings(settings) {
+      const realmId = getRealmIdFromLink();
+      if (realmId === null) return;
+      try {
+        localStorage.setItem(getScopedKey(SETTINGS_KEY_BASE), JSON.stringify(settings));
+      } catch (e) {
+      }
+    }
+    function qualityRangeFor(settings, restaurantId, kind) {
+      const v = settings.qualities && settings.qualities[restaurantId] && settings.qualities[restaurantId][kind];
+      return v && typeof v === "object" ? { min: v.min ?? "auto", max: v.max ?? "auto" } : { min: "auto", max: "auto" };
+    }
+    function isFullRange(range) {
+      return (range.min === "auto" || range.min === void 0) && (range.max === "auto" || range.max === void 0);
+    }
+    function rangeCovers(range, q) {
+      if (isFullRange(range)) return true;
+      const qn = Number(q);
+      const min = range.min === "auto" ? 0 : Number(range.min);
+      const max = range.max === "auto" ? 12 : Number(range.max);
+      return qn >= min && qn <= max;
+    }
+    function rangeBucket(range) {
+      return isFullRange(range) ? "auto" : `${range.min === "auto" ? "auto" : range.min}|${range.max === "auto" ? "auto" : range.max}`;
+    }
+    function qualityTagText(range) {
+      if (isFullRange(range)) return "";
+      const min = range.min === "auto" ? null : Number(range.min);
+      const max = range.max === "auto" ? null : Number(range.max);
+      if (min !== null && max !== null && min === max) return `(Q${min})`;
+      if (min !== null && max !== null) return `(Q${min}-Q${max})`;
+      if (min !== null) return `(Q${min}+)`;
+      return `(\u2264Q${max})`;
+    }
     function isEnabled() {
       return typeof window.isPageModuleEnabled !== "function" || window.isPageModuleEnabled("restaurantStock");
     }
@@ -1535,12 +1636,19 @@
       if (Array.isArray(resources.items)) return resources.items;
       return null;
     }
-    function buildStockMap(resources) {
+    function buildStockMap(resources, range) {
       const list = stockList(resources);
       if (!list) return null;
+      const full = isFullRange(range);
+      const min = full ? null : range.min === "auto" ? 0 : Number(range.min);
+      const max = full ? null : range.max === "auto" ? 12 : Number(range.max);
       const map = /* @__PURE__ */ new Map();
       for (const entry of list) {
         if (entry.blocked === true) continue;
+        if (!full) {
+          const q = Number(entry.quality);
+          if (!Number.isFinite(q) || q < min || q > max) continue;
+        }
         const entryKind = entry.kind ?? entry.resource ?? entry.resourceId ?? entry.id;
         if (entryKind === null || entryKind === void 0) continue;
         const amount = entry.amount ?? entry.quantity ?? 0;
@@ -1572,7 +1680,7 @@
       }
       return count;
     }
-    function getMenuRows(restaurant) {
+    function getMenuRows(restaurant, settings) {
       const props = restaurant.restaurantProperties || {};
       const isLuxury = props.isLuxury === true;
       const level = restaurant.size ?? 1;
@@ -1588,23 +1696,27 @@
       return dishes.map((d) => {
         const coeff = DISH_COEFF[d.partition] && DISH_COEFF[d.partition][d.kind];
         const perCycle = coeff ? perCycleConsume(level, d.kind, counts[d.partition], isLuxury, coeff) : null;
-        return { kind: d.kind, name: dishName(d.kind), perCycle };
+        const range = qualityRangeFor(settings, restaurant.id, d.kind);
+        return { kind: d.kind, name: dishName(d.kind), perCycle, range };
       });
     }
-    function buildCurrentTable(restaurant, allRestaurants) {
-      const rows = getMenuRows(restaurant);
+    function buildCurrentTable(restaurant, allRestaurants, settings) {
+      const rows = getMenuRows(restaurant, settings);
       if (rows.length === 0) {
         return '<div style="opacity:.75;padding:4px 2px;">\u8BE5\u9910\u9986\u672A\u9009\u62E9\u4EFB\u4F55\u83DC\u54C1</div>';
       }
       const rowHtml = rows.map((r) => {
         const otherCount = otherRestaurantCountForDish(allRestaurants, restaurant.id, r.kind);
         const otherHint = otherCount > 0 ? `<span style="opacity:.6;margin-left:4px;">\uFF08\u8FD8\u6709${otherCount}\u5BB6\u9910\u9986\u5728\u6D88\u8017\uFF09</span>` : "";
+        const qualityTag = qualityTagText(r.range);
+        const dailyText = r.perCycle === null ? "\u2014" : (r.perCycle * CYCLES_PER_DAY).toLocaleString();
         return `
-            <tr data-sc-kind="${r.kind}" style="border-bottom:1px solid rgba(128,128,128,.15);">
-                <td style="padding:3px 6px;">${r.name}${otherHint}</td>
+            <tr data-sc-kind="${r.kind}" data-sc-quality="${rangeBucket(r.range)}" style="border-bottom:1px solid rgba(128,128,128,.15);">
+                <td style="padding:3px 6px;">${r.name}${qualityTag ? ` <span style="opacity:.7;">${qualityTag}</span>` : ""}${otherHint}</td>
                 <td data-sc-stock style="padding:3px 6px;text-align:right;">\u2014</td>
-                <td data-sc-daily style="padding:3px 6px;text-align:right;">${r.perCycle === null ? "\u2014" : (r.perCycle * CYCLES_PER_DAY).toLocaleString()}</td>
+                <td data-sc-daily style="padding:3px 6px;text-align:right;">${dailyText}</td>
                 <td data-sc-days style="padding:3px 6px;text-align:right;">\u2014</td>
+                <td data-sc-shortfall data-sc-shortfall-raw="" style="padding:3px 6px;text-align:right;cursor:pointer;" title="\u70B9\u51FB\u590D\u5236\u5DEE\u91CF">\u2014</td>
             </tr>`;
       }).join("");
       return `
@@ -1615,13 +1727,14 @@
                         <th style="padding:3px 6px;text-align:right;">\u5E93\u5B58</th>
                         <th style="padding:3px 6px;text-align:right;">\u6BCF\u65E5\u6D88\u8017</th>
                         <th style="padding:3px 6px;text-align:right;">\u5269\u4F59\u5929\u6570</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5DEE\u91CF</th>
                     </tr>
                 </thead>
                 <tbody>${rowHtml}</tbody>
             </table>`;
     }
-    function buildAllTable(allRestaurants) {
-      const agg = /* @__PURE__ */ new Map();
+    function buildAllTable(allRestaurants, settings) {
+      const buckets = /* @__PURE__ */ new Map();
       for (const r of allRestaurants) {
         const props = r.restaurantProperties || {};
         if (!props) continue;
@@ -1634,19 +1747,23 @@
             const coeff = DISH_COEFF[p.key] && DISH_COEFF[p.key][item.kind];
             if (!coeff) continue;
             const perCycle = perCycleConsume(level, item.kind, count, isLuxury, coeff);
-            const key = String(item.kind);
-            const entry = agg.get(key) || { dailyTotal: 0, restCount: 0 };
+            const range = qualityRangeFor(settings, r.id, item.kind);
+            const bucket = rangeBucket(range);
+            const key = `${item.kind}|${bucket}`;
+            const entry = buckets.get(key) || { kind: String(item.kind), bucket, range, dailyTotal: 0, restCount: 0 };
             entry.dailyTotal += perCycle * CYCLES_PER_DAY;
             entry.restCount += 1;
-            agg.set(key, entry);
+            buckets.set(key, entry);
           }
         }
       }
-      const stockMap = buildStockMap(loadRegionData()?.warehouseResources ?? null);
-      const rows = [...agg.entries()].map(([kind, e]) => {
-        const stock = stockForKind(stockMap, kind);
-        const days = stock !== null && e.dailyTotal > 0 ? stock / e.dailyTotal : null;
-        return { kind, name: dishName(kind), dailyTotal: e.dailyTotal, restCount: e.restCount, days };
+      const resources = loadRegionData()?.warehouseResources ?? null;
+      const rows = [...buckets.values()].map((b) => {
+        const stockMap = buildStockMap(resources, b.range);
+        const stock = stockForKind(stockMap, b.kind);
+        const days = stock !== null && b.dailyTotal > 0 ? stock / b.dailyTotal : null;
+        const shortfall = stock !== null && b.dailyTotal > 0 ? Math.max(0, Math.ceil(b.dailyTotal * settings.targetDays) - stock) : null;
+        return { ...b, name: dishName(b.kind), stock, days, shortfall };
       });
       rows.sort((a, b) => {
         if (a.days === null && b.days === null) return 0;
@@ -1658,15 +1775,18 @@
         return '<div style="opacity:.75;padding:4px 2px;">\u672A\u68C0\u6D4B\u5230\u53EF\u8BA1\u7B97\u83DC\u54C1\uFF08\u6216\u6CA1\u6709\u9910\u9986\uFF09</div>';
       }
       const rowHtml = rows.map((r) => {
-        const warn = r.days !== null && r.days < WARN_DAYS;
+        const warn = r.days !== null && r.days < settings.warnDays;
         const daysText = r.days === null ? "\u2014" : warn ? `\u26A0\uFE0F ${r.days.toFixed(2)}` : r.days.toFixed(2);
+        const shortfallText = r.shortfall === null ? "\u2014" : r.shortfall.toLocaleString();
+        const qualityTag = qualityTagText(r.range);
         return `
-            <tr data-sc-kind="${r.kind}" style="border-bottom:1px solid rgba(128,128,128,.15);${warn ? "background:rgba(220,38,38,.15);" : ""}">
-                <td style="padding:3px 6px;">${r.name}</td>
+            <tr data-sc-kind="${r.kind}" data-sc-quality="${r.bucket}" style="border-bottom:1px solid rgba(128,128,128,.15);${warn ? "background:rgba(220,38,38,.15);" : ""}">
+                <td style="padding:3px 6px;">${r.name}${qualityTag ? ` <span style="opacity:.7;">${qualityTag}</span>` : ""}</td>
                 <td data-sc-restcount style="padding:3px 6px;text-align:right;">${r.restCount}</td>
                 <td data-sc-daily style="padding:3px 6px;text-align:right;">${r.dailyTotal.toLocaleString()}</td>
-                <td data-sc-stock style="padding:3px 6px;text-align:right;">\u2014</td>
+                <td data-sc-stock style="padding:3px 6px;text-align:right;">${r.stock === null ? "\u2014" : r.stock.toLocaleString()}</td>
                 <td data-sc-days style="padding:3px 6px;text-align:right;">${daysText}</td>
+                <td data-sc-shortfall data-sc-shortfall-raw="${r.shortfall === null ? "" : r.shortfall}" style="padding:3px 6px;text-align:right;cursor:pointer;" title="\u70B9\u51FB\u590D\u5236\u5DEE\u91CF">${shortfallText}</td>
             </tr>`;
       }).join("");
       return `
@@ -1678,32 +1798,181 @@
                         <th style="padding:3px 6px;text-align:right;">\u6BCF\u65E5\u6D88\u8017</th>
                         <th style="padding:3px 6px;text-align:right;">\u5E93\u5B58</th>
                         <th style="padding:3px 6px;text-align:right;">\u5269\u4F59\u5929\u6570</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5DEE\u91CF</th>
                     </tr>
                 </thead>
                 <tbody>${rowHtml}</tbody>
             </table>`;
     }
+    function buildQualityDetailTable(allRestaurants, settings) {
+      const agg = /* @__PURE__ */ new Map();
+      let hasExplicitRange = false;
+      for (const r of allRestaurants) {
+        const props = r.restaurantProperties || {};
+        if (!props) continue;
+        const isLuxury = props.isLuxury === true;
+        const level = r.size ?? 1;
+        for (const p of PARTITIONS) {
+          const items = Array.isArray(props[p.key]) ? props[p.key] : [];
+          const count = items.length;
+          for (const item of items) {
+            const coeff = DISH_COEFF[p.key] && DISH_COEFF[p.key][item.kind];
+            if (!coeff) continue;
+            const perCycle = perCycleConsume(level, item.kind, count, isLuxury, coeff);
+            const daily = perCycle * CYCLES_PER_DAY;
+            const range = qualityRangeFor(settings, r.id, item.kind);
+            if (!isFullRange(range)) hasExplicitRange = true;
+            const kindKey = String(item.kind);
+            let entry = agg.get(kindKey);
+            if (!entry) {
+              entry = { dailyByQuality: /* @__PURE__ */ new Map(), restByQuality: /* @__PURE__ */ new Map() };
+              agg.set(kindKey, entry);
+            }
+            for (const q of QUALITY_VALUES) {
+              if (!rangeCovers(range, q)) continue;
+              entry.dailyByQuality.set(q, (entry.dailyByQuality.get(q) || 0) + daily);
+              entry.restByQuality.set(q, (entry.restByQuality.get(q) || 0) + 1);
+            }
+          }
+        }
+      }
+      const resources = loadRegionData()?.warehouseResources ?? null;
+      const stockCache = /* @__PURE__ */ new Map();
+      const stockMapForQ = (q) => {
+        if (!stockCache.has(q)) stockCache.set(q, buildStockMap(resources, { min: q, max: q }));
+        return stockCache.get(q);
+      };
+      const rows = [];
+      for (const [kind, entry] of agg.entries()) {
+        for (const q of QUALITY_VALUES) {
+          const daily = entry.dailyByQuality.get(q);
+          const restCount = entry.restByQuality.get(q);
+          if (!daily || !restCount) continue;
+          const stock = stockForKind(stockMapForQ(q), kind);
+          if (!hasExplicitRange && (stock === null || stock === 0)) continue;
+          const days = stock !== null && daily > 0 ? stock / daily : null;
+          const shortfall = stock !== null && daily > 0 ? Math.max(0, Math.ceil(daily * settings.targetDays) - stock) : null;
+          rows.push({ kind, name: dishName(kind), q, restCount, daily, stock, days, shortfall });
+        }
+      }
+      rows.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : Number(a.q) - Number(b.q));
+      if (rows.length === 0) {
+        return '<div style="opacity:.75;padding:4px 2px;">\u672A\u68C0\u6D4B\u5230\u53EF\u8BA1\u7B97\u83DC\u54C1\uFF08\u6216\u6CA1\u6709\u9910\u9986\uFF09</div>';
+      }
+      const rowHtml = rows.map((r) => {
+        const warn = r.days !== null && r.days < settings.warnDays;
+        const daysText = r.days === null ? "\u2014" : warn ? `\u26A0\uFE0F ${r.days.toFixed(2)}` : r.days.toFixed(2);
+        const shortfallText = r.shortfall === null ? "\u2014" : r.shortfall.toLocaleString();
+        return `
+            <tr data-sc-kind="${r.kind}" data-sc-quality="${r.q}|${r.q}" style="border-bottom:1px solid rgba(128,128,128,.15);${warn ? "background:rgba(220,38,38,.15);" : ""}">
+                <td style="padding:3px 6px;">${r.name}</td>
+                <td style="padding:3px 6px;text-align:right;">Q${r.q}</td>
+                <td data-sc-restcount style="padding:3px 6px;text-align:right;">${r.restCount}</td>
+                <td data-sc-daily style="padding:3px 6px;text-align:right;">${r.daily.toLocaleString()}</td>
+                <td data-sc-stock style="padding:3px 6px;text-align:right;">${r.stock === null ? "\u2014" : r.stock.toLocaleString()}</td>
+                <td data-sc-days style="padding:3px 6px;text-align:right;">${daysText}</td>
+                <td data-sc-shortfall data-sc-shortfall-raw="${r.shortfall === null ? "" : r.shortfall}" style="padding:3px 6px;text-align:right;cursor:pointer;" title="\u70B9\u51FB\u590D\u5236\u5DEE\u91CF">${shortfallText}</td>
+            </tr>`;
+      }).join("");
+      return `
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="text-align:left;border-bottom:1px solid rgba(128,128,128,.35);">
+                        <th style="padding:3px 6px;">\u83DC\u54C1</th>
+                        <th style="padding:3px 6px;text-align:right;">\u54C1\u8D28</th>
+                        <th style="padding:3px 6px;text-align:right;">\u8986\u76D6\u9910\u9986</th>
+                        <th style="padding:3px 6px;text-align:right;">\u6BCF\u65E5\u6D88\u8017</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5E93\u5B58</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5269\u4F59\u5929\u6570</th>
+                        <th style="padding:3px 6px;text-align:right;">\u5DEE\u91CF</th>
+                    </tr>
+                </thead>
+                <tbody>${rowHtml}</tbody>
+            </table>`;
+    }
+    function qualityRangeSelectHtml(range, restId, kind) {
+      const cur = { min: range.min ?? "auto", max: range.max ?? "auto" };
+      const options = ['<option value="auto">\u81EA\u52A8</option>'].concat(QUALITY_VALUES.map((q) => `<option value="${q}">Q${q}</option>`)).join("");
+      const mark = (selVal) => {
+        if (selVal === "auto") return options;
+        return options.replace(`<option value="${selVal}">Q${selVal}</option>`, `<option value="${selVal}" selected>Q${selVal}</option>`);
+      };
+      const minSelect = `<select data-sc-quality-min data-rest="${restId}" data-kind="${kind}" style="font-size:11px;padding:0 2px;">${mark(cur.min)}</select>`;
+      const maxSelect = `<select data-sc-quality-max data-rest="${restId}" data-kind="${kind}" style="font-size:11px;padding:0 2px;">${mark(cur.max)}</select>`;
+      return `<span style="white-space:nowrap;">\u4ECE ${minSelect} \u5230 ${maxSelect}</span>`;
+    }
+    function buildSettingsHtml(settings, currentRestaurant) {
+      const restHtml = (currentRestaurant ? [currentRestaurant] : []).map((r) => {
+        const props = r.restaurantProperties || {};
+        const dishSpans = [];
+        for (const p of PARTITIONS) {
+          const items = Array.isArray(props[p.key]) ? props[p.key] : [];
+          for (const item of items) {
+            const range = qualityRangeFor(settings, r.id, item.kind);
+            dishSpans.push(`<span style="margin-right:8px;">${dishName(item.kind)} ${qualityRangeSelectHtml(range, r.id, item.kind)}</span>`);
+          }
+        }
+        return `
+            <div style="margin-top:6px;border-top:1px dashed rgba(128,128,128,.25);padding-top:4px;">
+                <div style="display:flex;flex-wrap:wrap;gap:2px 10px;">${dishSpans.join("") || '<span style="opacity:.6;">\uFF08\u65E0\u5DF2\u9009\u83DC\u54C1\uFF09</span>'}</div>
+            </div>`;
+      }).join("");
+      return `
+            <div style="margin-top:8px;border-top:1px dashed rgba(128,128,128,.35);padding-top:6px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+                    <span style="display:inline-flex;align-items:center;gap:4px;">\u9884\u8B66\u5929\u6570
+                        <input data-sc-warn-days type="number" min="1" value="${settings.warnDays}" style="width:52px;font-size:11px;padding:1px 4px;"></span>
+                    <span style="display:inline-flex;align-items:center;gap:4px;">\u76EE\u6807\u5929\u6570
+                        <input data-sc-target-days type="number" min="1" value="${settings.targetDays}" style="width:52px;font-size:11px;padding:1px 4px;"></span>
+                    <span style="opacity:.65;">\u5DEE\u91CF = \u2308\u6BCF\u65E5\u6D88\u8017 \xD7 \u76EE\u6807\u5929\u6570\u2309 \u2212 \u5E93\u5B58\uFF1B\u5269\u4F59\u5929\u6570\u4F4E\u4E8E\u9884\u8B66\u5929\u6570 \u2192 \u26A0\uFE0F \u9AD8\u4EAE</span>
+                </div>
+                ${restHtml || '<div style="opacity:.65;">\u5F53\u524D\u9875\u9762\u4E0D\u662F\u9910\u9986</div>'}
+            </div>`;
+    }
     function renderIntoBlock(block, restaurant, allRestaurants) {
-      const viewAll = state2.viewAll;
-      const buttonText = viewAll ? "\u663E\u793A\u5F53\u524D\u9910\u9986" : "\u663E\u793A\u5168\u90E8\u9910\u9986";
-      const body = viewAll ? buildAllTable(allRestaurants) : buildCurrentTable(restaurant, allRestaurants);
+      const settings = loadSettings();
+      const view = state2.view;
+      const body = view === "all" ? buildAllTable(allRestaurants, settings) : view === "quality" ? buildQualityDetailTable(allRestaurants, settings) : buildCurrentTable(restaurant, allRestaurants, settings);
+      const settingsArea = state2.showSettings ? buildSettingsHtml(settings, restaurant) : "";
+      const modeText = view === "all" ? "\u5168\u90E8\u9910\u9986" : view === "quality" ? "\u54C1\u8D28\u660E\u7EC6" : "\u5F53\u524D\u9910\u9986";
+      const viewBtnText = view === "all" ? "\u663E\u793A\u5F53\u524D\u9910\u9986" : "\u663E\u793A\u5168\u90E8\u9910\u9986";
+      const detailBtnText = view === "quality" ? "\u5173\u95ED\u660E\u7EC6" : "\u54C1\u8D28\u660E\u7EC6";
       block.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <div style="font-weight:bold;">\u9910\u9986\u5907\u8D27\u63D0\u9192<span style="font-weight:normal;opacity:.75;margin-left:4px;">\uFF08${viewAll ? "\u5168\u90E8\u9910\u9986" : "\u5F53\u524D\u9910\u9986"}\uFF09</span></div>
-                <button data-sc-view-toggle type="button" style="font-size:11px;line-height:1.4;padding:1px 8px;border:1px solid rgba(128,128,128,.4);border-radius:4px;background:transparent;cursor:pointer;">${buttonText}</button>
+                <div style="font-weight:bold;">\u9910\u9986\u5907\u8D27\u63D0\u9192<span style="font-weight:normal;opacity:.75;margin-left:4px;">\uFF08${modeText}\uFF09</span></div>
+                <div style="display:flex;gap:4px;">
+                    <button data-sc-view-toggle type="button" style="font-size:11px;line-height:1.4;padding:1px 8px;border:1px solid rgba(128,128,128,.4);border-radius:4px;background:transparent;cursor:pointer;">${viewBtnText}</button>
+                    <button data-sc-detail-toggle type="button" style="font-size:11px;line-height:1.4;padding:1px 8px;border:1px solid rgba(128,128,128,.4);border-radius:4px;background:transparent;cursor:pointer;">${detailBtnText}</button>
+                    <button data-sc-settings-toggle type="button" style="font-size:11px;line-height:1.4;padding:1px 8px;border:1px solid rgba(128,128,128,.4);border-radius:4px;background:transparent;cursor:pointer;">\u5F53\u524D\u9910\u9986\u8BBE\u7F6E</button>
+                </div>
             </div>
             ${body}
+            ${settingsArea}
             <div style="opacity:.55;margin-top:4px;font-size:11px;">* \u9875\u9762\u5185\u4FEE\u6539\u83DC\u5355\u540E\uFF0C\u672C\u63D0\u9192\u9700\u91CD\u65B0\u8FDB\u5165\u9910\u9986\u9875\u624D\u4F1A\u66F4\u65B0</div>`;
     }
     function refreshStocks() {
       const block = state2.blockNode;
       if (!block || !block.isConnected) return;
       const region = loadRegionData();
-      const stockMap = buildStockMap(region ? region.warehouseResources : null);
+      const resources = region ? region.warehouseResources : null;
+      const settings = loadSettings();
+      const fullRange = { min: "auto", max: "auto" };
+      const mapCache = /* @__PURE__ */ new Map();
+      const mapFor = (bucket) => {
+        if (!mapCache.has(bucket)) {
+          const range = bucket === "auto" ? fullRange : (() => {
+            const [min, max] = bucket.split("|");
+            return { min, max };
+          })();
+          mapCache.set(bucket, buildStockMap(resources, range));
+        }
+        return mapCache.get(bucket);
+      };
       const rows = block.querySelectorAll("tr[data-sc-kind]");
       rows.forEach((row) => {
         const kind = row.getAttribute("data-sc-kind");
-        const stock = stockForKind(stockMap, kind);
+        const bucket = row.getAttribute("data-sc-quality") || "auto";
+        const stock = stockForKind(mapFor(bucket), kind);
         const dailyCell = row.querySelector("[data-sc-daily]");
         const daily = dailyCell ? parseInt(String(dailyCell.textContent || "").replace(/[^\d]/g, ""), 10) : 0;
         const stockCell = row.querySelector("[data-sc-stock]");
@@ -1714,12 +1983,44 @@
         const daysCell = row.querySelector("[data-sc-days]");
         if (daysCell) {
           const days = stock !== null && daily > 0 ? stock / daily : null;
-          const warn = days !== null && days < WARN_DAYS;
+          const warn = days !== null && days < settings.warnDays;
           const daysText = days === null ? "\u2014" : warn ? `\u26A0\uFE0F ${days.toFixed(2)}` : days.toFixed(2);
           if (daysCell.textContent !== daysText) daysCell.textContent = daysText;
           row.style.background = warn ? "rgba(220,38,38,.15)" : "";
         }
+        const shortfallCell = row.querySelector("[data-sc-shortfall]");
+        if (shortfallCell) {
+          const shortfall = stock !== null && daily > 0 ? Math.max(0, Math.ceil(daily * settings.targetDays) - stock) : null;
+          const raw = shortfall === null ? "" : String(shortfall);
+          const shortfallText = shortfall === null ? "\u2014" : shortfall.toLocaleString();
+          if (shortfallCell.getAttribute("data-sc-shortfall-raw") !== raw) {
+            shortfallCell.setAttribute("data-sc-shortfall-raw", raw);
+          }
+          if (shortfallCell.textContent !== shortfallText && !shortfallCell.dataset.scCopied) {
+            shortfallCell.textContent = shortfallText;
+          }
+        }
       });
+    }
+    function fallbackCopy(text) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch (e) {
+      }
+      ta.remove();
+    }
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+      } else {
+        fallbackCopy(text);
+      }
     }
     function removeBlock() {
       if (state2.blockNode && state2.blockNode.isConnected) {
@@ -1733,7 +2034,7 @@
       state2.allRestaurants = [];
     }
     function currentMenuJson(restaurant, allRestaurants) {
-      return state2.viewAll ? JSON.stringify((allRestaurants || []).map((r) => r.restaurantProperties || {})) : JSON.stringify(restaurant.restaurantProperties || {});
+      return state2.view === "all" || state2.view === "quality" ? JSON.stringify((allRestaurants || []).map((r) => r.restaurantProperties || {})) : JSON.stringify(restaurant.restaurantProperties || {});
     }
     function ensureBlock(container, restaurant, allRestaurants, buildingId) {
       const menuJson = currentMenuJson(restaurant, allRestaurants);
@@ -1752,11 +2053,83 @@
           "line-height:1.6"
         ].join(";");
         block.addEventListener("click", (e) => {
-          if (!e.target.closest("[data-sc-view-toggle]")) return;
-          state2.viewAll = !state2.viewAll;
-          renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
-          state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
-          refreshStocks();
+          const toggle = e.target.closest("[data-sc-view-toggle]");
+          if (toggle) {
+            state2.view = state2.view === "all" ? "current" : "all";
+            renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
+            state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+            refreshStocks();
+            return;
+          }
+          const detailBtn = e.target.closest("[data-sc-detail-toggle]");
+          if (detailBtn) {
+            state2.view = state2.view === "quality" ? "current" : "quality";
+            renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
+            state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+            refreshStocks();
+            return;
+          }
+          const settingsBtn = e.target.closest("[data-sc-settings-toggle]");
+          if (settingsBtn) {
+            state2.showSettings = !state2.showSettings;
+            renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
+            refreshStocks();
+            return;
+          }
+          const shortfall = e.target.closest("[data-sc-shortfall]");
+          if (shortfall) {
+            const raw = shortfall.getAttribute("data-sc-shortfall-raw");
+            if (raw !== null && raw !== "") {
+              copyText(raw);
+              shortfall.dataset.scCopied = "1";
+              shortfall.textContent = `\u2713 ${Number(raw).toLocaleString()}`;
+              setTimeout(() => {
+                delete shortfall.dataset.scCopied;
+              }, 1200);
+            }
+            return;
+          }
+        });
+        block.addEventListener("change", (e) => {
+          const settings = loadSettings();
+          const warnInput = e.target.closest("[data-sc-warn-days]");
+          if (warnInput) {
+            const v = Number(warnInput.value);
+            settings.warnDays = Number.isFinite(v) && v >= 1 ? v : DEFAULT_WARN_DAYS;
+            saveSettings(settings);
+            refreshStocks();
+            return;
+          }
+          const targetInput = e.target.closest("[data-sc-target-days]");
+          if (targetInput) {
+            const v = Number(targetInput.value);
+            settings.targetDays = Number.isFinite(v) && v >= 1 ? v : DEFAULT_TARGET_DAYS;
+            saveSettings(settings);
+            refreshStocks();
+            return;
+          }
+          const qualityMin = e.target.closest("[data-sc-quality-min]");
+          const qualityMax = e.target.closest("[data-sc-quality-max]");
+          if (qualityMin || qualityMax) {
+            const restId = (qualityMin || qualityMax).getAttribute("data-rest");
+            const kind = (qualityMin || qualityMax).getAttribute("data-kind");
+            const range = qualityRangeFor(settings, restId, kind);
+            if (qualityMin) range.min = qualityMin.value;
+            if (qualityMax) range.max = qualityMax.value;
+            const minN = range.min === "auto" ? 0 : Number(range.min);
+            const maxN = range.max === "auto" ? 12 : Number(range.max);
+            if (minN > maxN) {
+              if (qualityMin) range.max = range.min;
+              else range.min = range.max;
+            }
+            if (!settings.qualities[restId]) settings.qualities[restId] = {};
+            settings.qualities[restId][kind] = range;
+            saveSettings(settings);
+            renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
+            state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+            refreshStocks();
+            return;
+          }
         });
         container.appendChild(block);
       }
@@ -1779,7 +2152,8 @@
         return;
       }
       if (state2.lastBuildingId && state2.lastBuildingId !== buildingId) {
-        state2.viewAll = false;
+        state2.view = "current";
+        state2.showSettings = false;
       }
       const region = loadRegionData();
       const buildings = region ? region.buildings : null;
@@ -3688,7 +4062,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.4",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.5",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -13073,4 +13447,4 @@
   })();
 })();
 
-// @changelog 餐馆备货提醒重构并支持查看全部餐馆；仓库时利润支持经济周期；修复管理费计算。
+// @changelog 餐馆备货提醒新增详细设置（品质范围、预警天数、目标天数）与品质明细视图，差量一键复制。
