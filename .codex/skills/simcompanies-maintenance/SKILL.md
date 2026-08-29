@@ -40,6 +40,12 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 
 涉及 UI/SPA 时，检查首次进入、离开再返回、React 替换、重复初始化、桌面和手机布局、深色和浅色主题、功能开关、加载/空数据/网络/缓存路径，以及重复 UI、监听、Observer 或计时器。未实际操作浏览器时，不得声称已完成浏览器验证。
 
+### 4.1 代码约定（踩坑沉淀）
+
+- **领域作用域键**：一律经 `core/storage.js` 的 `getScopedKey` 生成（`R<realmId>-<名称>`，如 `R0-SC-Saved-Bonuses`、`R0-SC-AGENCY_FOUND_EXECUTIVE`），不要用 `SC_<名称>_<realmId>` 后缀；新增领域键前先 grep 现有模式确认。
+- **领域隔离**：涉及领域/公司实体的用户配置（品质范围、备注、预设等）必须按领域分开存储，避免跨领域串扰（建筑 id 跨领域可能重复）。
+- **范围类输入约束**：任何"从~到"范围输入必须保证前后关系（如品质从 ≤ 到）：修改时钳制，读取时归一（脏数据自动交换）。
+
 ### 5. 正式发布
 
 将 `src/` 视为唯一源码，将 `.user.js` 视为生成产物。正式构建必须要求用户提供一行更新说明；除非用户明确指定其他版本，否则执行：
