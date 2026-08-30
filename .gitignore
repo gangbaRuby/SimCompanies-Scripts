@@ -2,6 +2,7 @@ node_modules/
 dist/
 AGENTS.local.md
 docs/module-map.md
+docs/module-capabilities.md
 .env
 .env.*
 !.env.example
