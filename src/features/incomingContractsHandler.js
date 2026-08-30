@@ -13,6 +13,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
 registerExportInfo({
     name: '合同高价提醒设置',
     scope: 'global',
+    backup: true,
     keys: ['SC_Contract_HighPrice_Settings']
 });
 

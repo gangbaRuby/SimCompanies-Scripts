@@ -1,4 +1,4 @@
-﻿import { getRealmIdFromLink, getScopedKey } from '../core/storage.js';
+import { getRealmIdFromLink, getScopedKey } from '../core/storage.js';
 import { DM, showToast, theme } from '../utils/ui.js';
 import { Storage } from './dataStorage.js';
 import { Network } from '../core/network.js';
@@ -895,6 +895,7 @@ export const executiveCustomButton = (function () {
 registerExportInfo({
     name: '自定义高管数据',
     scope: 'realm',
+    // backup: true, // 2026-08 临时排除：该模块自带"获取最新数据"按钮，缺数据可手动刷新
     keys: realmId => realmId === null
         ? ['SC-Saved-Boardroom', 'SC-Saved-Bonuses']
         : [`R${realmId}-SC-Saved-Boardroom`, `R${realmId}-SC-Saved-Bonuses`]

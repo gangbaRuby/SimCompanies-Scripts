@@ -5,6 +5,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
 registerExportInfo({
     name: '聊天表情选择器最近使用',
     scope: 'global',
+    // backup: true, // 2026-08 临时排除：最近使用表情，使用人数少且价值低
     keys: ['SC_EmojiPicker_Recent']
 });
 

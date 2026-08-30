@@ -10,6 +10,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         registerExportInfo({
             name: '自定义运行时长设置',
             scope: 'global',
+            backup: true,
             keys: [ENABLED_STORAGE_KEY, CUSTOM_AMOUNTS_STORAGE_KEY]
         });
 
