@@ -40,8 +40,12 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 
 涉及 UI/SPA 时，检查首次进入、离开再返回、React 替换、重复初始化、桌面和手机布局、深色和浅色主题、功能开关、加载/空数据/网络/缓存路径，以及重复 UI、监听、Observer 或计时器。未实际操作浏览器时，不得声称已完成浏览器验证。
 
+**面板显隐**：显示/隐藏一律用 CSS 类切换（如 `show-settings`/`show-backup`），不要给元素设置内联 `display`——内联样式优先级高于样式表，会覆盖 CSS 里的默认隐藏，导致面板内容直接可见。
+
 ### 4.1 代码约定（踩坑沉淀）
 
+- **先查既有实现**：新功能/新调用先 grep 现有模块的同类做法（网络请求用 `window.__SC_Network`、公司页跳转用 `getCompanyLink` 同款 URL（`/company/<realm>/<名称>/`）、领域键用 `getScopedKey`、面板按钮沿用 `createActionButton` 模式），不要另起炉灶。
+- **内嵌第三方代码**：保留原始版权与许可头（如 `src/utils/lzstring.js` 的 WTFPL 声明），并记入模块地图。
 - **领域作用域键**：一律经 `core/storage.js` 的 `getScopedKey` 生成（`R<realmId>-<名称>`，如 `R0-SC-Saved-Bonuses`、`R0-SC-AGENCY_FOUND_EXECUTIVE`），不要用 `SC_<名称>_<realmId>` 后缀；新增领域键前先 grep 现有模式确认。
 - **领域隔离**：涉及领域/公司实体的用户配置（品质范围、备注、预设等）必须按领域分开存储，避免跨领域串扰（建筑 id 跨领域可能重复）。
 - **范围类输入约束**：任何"从~到"范围输入必须保证前后关系（如品质从 ≤ 到）：修改时钳制，读取时归一（脏数据自动交换）。
@@ -72,6 +76,7 @@ npm run release -- "<changelog>"
 ## 6. 公开协作质量
 
 - 面向维护者和贡献者的仓库文档使用中文；代码标识、命令、URL 和第三方名称保持原样。
+- **面向用户的文案（面板说明、更新说明/CHANGELOG）简短直白、只讲功能、不讲实现原理**；实现细节（两领域/缓存/压缩/标记/跳转机制等）放维护文档（模块地图、SKILL）。
 - 每次源码改动都运行 `npm run check`；准备合并时确认 GitHub Actions 的 CI 已通过。
 - 用户可见行为发生变化时，同步更新 `CHANGELOG.md` 的 `未发布` 区域；正式构建会自动写入版本记录。
 - 提交 Bug 或功能建议时使用 `.github/ISSUE_TEMPLATE/` 模板；Pull Request 必须写明调用链、影响范围、验证结果和剩余风险。

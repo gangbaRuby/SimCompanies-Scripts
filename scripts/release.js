@@ -134,7 +134,8 @@ function addChangelogEntry(changelogText, version, changelog) {
   const date = new Date().toISOString().slice(0, 10);
   const entryLines = [`## [${version}] - ${date}`, '', `- ${changelog}`];
   for (const item of unreleasedBullets) entryLines.push(`- ${item}`);
-  const entry = `\n\n${entryLines.join('\n')}`;
+  // 末尾补换行：保证新版本条目与下一个版本标题（slice(sectionEnd) 以 \n## 开头）之间有空行
+  const entry = `\n\n${entryLines.join('\n')}\n`;
   const emptyUnreleased = '## [未发布]\n\n### 已变更\n\n';
 
   return `${changelogText.slice(0, markerIndex)}${emptyUnreleased}${entry}${changelogText.slice(sectionEnd)}`;
