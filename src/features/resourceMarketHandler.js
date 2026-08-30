@@ -1,4 +1,4 @@
-﻿import { DM } from '../utils/ui.js';
+import { DM } from '../utils/ui.js';
 import { state } from '../core/state.js';
 import { executiveCustomButton } from './executiveBoardroom.js';
 import { registerExportInfo } from '../core/exportInfo.js';
@@ -6,6 +6,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
 registerExportInfo({
     name: '交易所计算参数',
     scope: 'global',
+    backup: true,
     keys: ['sc_building_level', 'sc_building_hours']
 });
 

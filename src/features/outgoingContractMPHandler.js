@@ -1,10 +1,11 @@
-﻿import { getRealmIdFromLink } from '../core/storage.js';
+import { getRealmIdFromLink } from '../core/storage.js';
 import { DM } from '../utils/ui.js';
 import { registerExportInfo } from '../core/exportInfo.js';
 
 registerExportInfo({
     name: '出库合同 MP 设置',
     scope: 'global',
+    backup: true,
     keys: ['SC_OutgoingMP_Presets', 'SC_OutgoingMP_UseInput']
 });
 

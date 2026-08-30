@@ -45,7 +45,10 @@ const RestaurantStockReminder = (function () {
     registerExportInfo({
         name: '餐馆备货提醒设置',
         scope: 'realm',
-        keys: (realmId) => [getScopedKey(SETTINGS_KEY_BASE)]
+        backup: true,
+        keys: (realmId) => realmId === null
+            ? [SETTINGS_KEY_BASE]
+            : [realmSettingsKey(realmId)]
     });
 
     // 分区 → 菜品系数表（每 12 小时单份基础消耗）
@@ -235,6 +238,16 @@ const RestaurantStockReminder = (function () {
 
     function dishName(kind) {
         return resourceIdNameMap[kind] || `#${kind}`;
+    }
+
+    // 餐馆标识（复制下拉用）：游戏建筑名或 位置+id
+    function restaurantLabel(r) {
+        return String(r.name || '').trim() || `位置${r.position ?? '?'} #${r.id}`;
+    }
+
+    // 领域设置键（显式指定领域，供跨领域导出/导入使用）
+    function realmSettingsKey(realmId) {
+        return `R${realmId}-SC-RestaurantStock_Settings`;
     }
 
     function perCycleConsume(level, kind, partitionCount, isLuxury, coeff) {
@@ -546,7 +559,11 @@ const RestaurantStockReminder = (function () {
     }
 
     // 设置面板：只显示当前餐馆
-    function buildSettingsHtml(settings, currentRestaurant) {
+    function buildSettingsHtml(settings, currentRestaurant, allRestaurants) {
+        const currentId = currentRestaurant ? String(currentRestaurant.id) : null;
+        const others = (allRestaurants || []).filter(r => String(r.id) !== currentId);
+        const copyOptions = others.map(r =>
+            `<option value="${r.id}">${restaurantLabel(r)}</option>`).join('');
         const restHtml = (currentRestaurant ? [currentRestaurant] : []).map(r => {
             const props = r.restaurantProperties || {};
             const dishSpans = [];
@@ -572,6 +589,12 @@ const RestaurantStockReminder = (function () {
                         <input data-sc-target-days type="number" min="1" value="${settings.targetDays}" style="width:52px;font-size:11px;padding:1px 4px;"></span>
                     <span style="opacity:.65;">差量 = ⌈每日消耗 × 目标天数⌉ − 库存；剩余天数低于预警天数 → ⚠️ 高亮</span>
                 </div>
+                <div style="display:flex;align-items:center;gap:6px;margin:4px 0;flex-wrap:wrap;">
+                    <span>复制设置自</span>
+                    <select data-sc-copy-source style="font-size:11px;padding:0 2px;max-width:190px;">${copyOptions || '<option value="">（无其他餐馆）</option>'}</select>
+                    <button data-sc-copy type="button" style="font-size:11px;line-height:1.4;padding:1px 8px;border:1px solid rgba(128,128,128,.4);border-radius:4px;background:transparent;cursor:pointer;">复制</button>
+                    <span style="opacity:.65;font-size:11px;">把来源餐馆的品质范围套用到当前餐馆</span>
+                </div>
                 ${restHtml || '<div style="opacity:.65;">当前页面不是餐馆</div>'}
             </div>`;
     }
@@ -585,7 +608,7 @@ const RestaurantStockReminder = (function () {
                 ? buildQualityDetailTable(allRestaurants, settings)
                 : buildCurrentTable(restaurant, allRestaurants, settings);
         const settingsArea = state.showSettings
-            ? buildSettingsHtml(settings, restaurant)
+            ? buildSettingsHtml(settings, restaurant, allRestaurants)
             : '';
         const modeText = view === 'all' ? '全部餐馆' : view === 'quality' ? '品质明细' : '当前餐馆';
         const viewBtnText = view === 'all' ? '显示当前餐馆' : '显示全部餐馆';
@@ -755,6 +778,21 @@ const RestaurantStockReminder = (function () {
                     refreshStocks();
                     return;
                 }
+                const copyBtn = e.target.closest('[data-sc-copy]');
+                if (copyBtn) {
+                    const copySettings = loadSettings();
+                    const sourceId = block.querySelector('[data-sc-copy-source]')?.value;
+                    if (sourceId && state.restaurant) {
+                        if (!copySettings.qualities) copySettings.qualities = {};
+                        const src = copySettings.qualities[sourceId];
+                        copySettings.qualities[String(state.restaurant.id)] = src ? JSON.parse(JSON.stringify(src)) : {};
+                        saveSettings(copySettings);
+                        renderIntoBlock(block, state.restaurant, state.allRestaurants);
+                        state.lastMenuJson = currentMenuJson(state.restaurant, state.allRestaurants);
+                        refreshStocks();
+                    }
+                    return;
+                }
                 const shortfall = e.target.closest('[data-sc-shortfall]');
                 if (shortfall) {
                     const raw = shortfall.getAttribute('data-sc-shortfall-raw');
@@ -848,6 +886,19 @@ const RestaurantStockReminder = (function () {
         }
 
         const allRestaurants = Array.isArray(buildings) ? buildings.filter(b => b && b.kind === 'r') : [];
+        // 清理已拆除餐馆的设置残留（仅当建筑快照非空时执行，避免误删）
+        if (allRestaurants.length > 0) {
+            const pruneSettings = loadSettings();
+            const liveIds = new Set(allRestaurants.map(r => String(r.id)));
+            let changed = false;
+            for (const rid of Object.keys(pruneSettings.qualities)) {
+                if (!liveIds.has(String(rid))) {
+                    delete pruneSettings.qualities[rid];
+                    changed = true;
+                }
+            }
+            if (changed) saveSettings(pruneSettings);
+        }
         const container = findMenuContainer();
         if (!container) {
             removeBlock();

@@ -6,6 +6,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
     registerExportInfo({
         name: '页面功能开关设置',
         scope: 'global',
+        backup: true,
         keys: [PAGE_ACTIONS_CONFIG_KEY]
     });
 

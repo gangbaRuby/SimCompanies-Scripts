@@ -25,7 +25,7 @@ import './features/pageModuleConfig.js';
 import { getRealmIdFromLink, getScopedKey } from './core/storage.js';
 import { isDarkMode, DM, theme, showToast } from './utils/ui.js';
 import { createGlobalCustomToggle } from './utils/uiComponents.js';
-import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
+import { registerExportInfo, downloadExportData, downloadSettingsData, parseSettingsFile, applySettingsData, encodeSettingsNoteHigh, decodeSettingsNote } from './core/exportInfo.js';
 (function () {
     'use strict';
     let hasNewVersion = false;
@@ -35,6 +35,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
     registerExportInfo({
         name: '面板与全局设置',
         scope: 'global',
+        backup: true,
         keys: ['SC_PanelPosition', 'mp_inputPercent', 'sc_autoMaxPPHPL_ignored_version']
     });
 
@@ -229,6 +230,25 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
             /* 显示二级菜单 */
             .SimcompaniesRetailCalculation-panel-content.show-settings #secondary-menu-container {
                 display: block;
+            }
+
+            /* 3. 备份设置面板：show-backup 时隐藏主/二级菜单，显示备份面板 */
+            #backup-menu-container {
+                display: none;
+            }
+
+            .SimcompaniesRetailCalculation-panel-content.show-backup #main-menu-container {
+                display: none;
+            }
+
+            .SimcompaniesRetailCalculation-panel-content.show-backup #secondary-menu-container {
+                display: none;
+            }
+
+            .SimcompaniesRetailCalculation-panel-content.show-backup #backup-menu-container {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
             }
         `;
             document.head.appendChild(style);
@@ -608,6 +628,12 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 }
             };
 
+            // 备份插件设置面板切换（show-backup）
+            const switchBackupMenu = (isBackup) => {
+                content.classList.toggle('show-backup', isBackup);
+                if (isBackup) generateCloudText(); // 打开时自动生成备份文本
+            };
+
             // 面板位置自动适配视口（定义已移至 PanelUI 顶层作用域）
             const mainMenu = document.createElement('div');
             mainMenu.id = 'main-menu-container';
@@ -790,7 +816,14 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                     btn.onclick = showSaturationTable;
                     return btn;
                 })(),
-                createActionButton('MP-?%', 'mpShow'),
+                // createActionButton('MP-?%', 'mpShow'), // 2026-08 暂时隐藏：改为"备份插件设置"
+                (() => {
+                    const btn = document.createElement('button');
+                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
+                    btn.textContent = '备份插件设置';
+                    btn.onclick = () => switchBackupMenu(true);
+                    return btn;
+                })(),
                 createActionButton('计算当前冰淇淋剩余量', 'calculateDecay'),
                 (() => {
                     const btn = document.createElement('button');
@@ -944,6 +977,12 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
             info.style.cssText = `margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:#ccc;border-top:1px solid #555;`;
 
             const version = GM_info?.script?.version || '未知版本';
+            // 云端备注备份中继：作者公司在各领域的对应主页与公司 id
+            const CLOUD_RELAY = {
+                0: { id: '3417230', url: 'https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/', name: 'Rabbit-House' },
+                1: { id: '3419562', url: 'https://www.simcompanies.com/zh-cn/company/1/Hettich/', name: 'Hettich' }
+            };
+            const cloudRelayInfo = CLOUD_RELAY[getRealmIdFromLink()] || null;
 
             info.innerHTML = `
                 作者：<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" class="sc-info-link">Rabbit House</a> <span id="sc-feedback-export" style="cursor:pointer;">反馈请说明问题</span><br>
@@ -975,6 +1014,175 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
                 });
             }
 
+            // 备份插件设置面板：本地备份 + 云端备注备份
+            const backupMenu = document.createElement('div');
+            backupMenu.id = 'backup-menu-container';
+            // 注意：不要设内联 display，否则会覆盖 CSS 的 display:none 默认隐藏
+            const backupStatusEl = document.createElement('div');
+            backupStatusEl.id = 'sc-backup-status';
+            backupStatusEl.style.cssText = 'font-size:11px;opacity:.85;min-height:14px;white-space:pre-wrap;';
+            backupMenu.innerHTML = `
+                <button id="sc-backup-back" class="SimcompaniesRetailCalculation-action-btn" style="background:#E91E63;">⬅ 返回</button>
+                <div style="font-weight:bold;border-bottom:1px solid rgba(128,128,128,.3);padding-bottom:2px;">本地备份</div>
+                <div style="font-size:11px;opacity:.8;">把插件设置保存成文件，需要时导入恢复。</div>
+                <div style="display:flex;gap:6px;">
+                    <button id="sc-export-settings" class="SimcompaniesRetailCalculation-action-btn" style="background:#2196F3;">导出设置</button>
+                    <button id="sc-import-settings" class="SimcompaniesRetailCalculation-action-btn" style="background:#4CAF50;">导入设置</button>
+                    <input id="sc-import-settings-file" type="file" accept="application/json,.json" style="display:none;">
+                </div>
+                <div style="font-weight:bold;border-bottom:1px solid rgba(128,128,128,.3);padding-bottom:2px;">云端备注备份</div>
+                <div style="font-size:11px;opacity:.8;">复制文本 - 去写入 - 在备注中粘贴保存</div>
+                <div style="display:flex;gap:6px;">
+                    <button id="sc-cloud-export" class="SimcompaniesRetailCalculation-action-btn" style="background:#9C27B0;">去写入</button>
+                    <button id="sc-cloud-import" class="SimcompaniesRetailCalculation-action-btn" style="background:#FF9800;">从备注导入</button>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input id="sc-cloud-text" type="text" readonly style="flex:1;font-size:11px;padding:2px 4px;background:transparent;border:1px solid rgba(128,128,128,.35);border-radius:3px;white-space:nowrap;overflow-x:auto;" placeholder="（点「去写入」后这里显示备份文本）">
+                    <button id="sc-cloud-copy" class="SimcompaniesRetailCalculation-action-btn" style="background:#607D8B;">复制</button>
+                </div>
+            `;
+            backupMenu.appendChild(backupStatusEl);
+            backupMenu.querySelector('#sc-backup-back').onclick = () => switchBackupMenu(false);
+
+            const setBackupStatus = (msg, isError) => {
+                backupStatusEl.textContent = msg;
+                backupStatusEl.style.color = isError ? '#f44' : 'var(--sc-panel-label,#BDBDBD)';
+            };
+
+            // 本地备份：导出/导入
+            const exportSettingsEl = backupMenu.querySelector('#sc-export-settings');
+            if (exportSettingsEl) {
+                exportSettingsEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    try {
+                        downloadSettingsData();
+                        showToast('设置已导出', 'success');
+                    } catch (err) {
+                        console.error('导出设置失败', err);
+                        setBackupStatus('导出失败，请查看控制台', true);
+                    }
+                });
+            }
+            const importSettingsEl = backupMenu.querySelector('#sc-import-settings');
+            const importFileEl = backupMenu.querySelector('#sc-import-settings-file');
+            if (importSettingsEl && importFileEl) {
+                importSettingsEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    importFileEl.click();
+                });
+                importFileEl.addEventListener('change', () => {
+                    const file = importFileEl.files && importFileEl.files[0];
+                    importFileEl.value = '';
+                    if (!file) return;
+                    parseSettingsFile(file, (err, data) => {
+                        if (err) {
+                            console.error('导入设置失败', err);
+                            setBackupStatus('导入失败：文件格式不正确', true);
+                            return;
+                        }
+                        if (!confirm('导入将覆盖现有插件设置（两个领域），是否继续？')) return;
+                        try {
+                            const count = applySettingsData(data);
+                            showToast(`设置已导入（${count} 项），部分设置刷新页面后生效`, 'success');
+                        } catch (e2) {
+                            console.error('导入设置失败', e2);
+                            setBackupStatus('导入失败，请查看控制台', true);
+                        }
+                    });
+                });
+            }
+
+            // 去写入：仅跳转到作者公司主页（复制由下方"复制"按钮完成）
+            const cloudExportEl = backupMenu.querySelector('#sc-cloud-export');
+            const cloudImportEl = backupMenu.querySelector('#sc-cloud-import');
+            const cloudTextEl = backupMenu.querySelector('#sc-cloud-text');
+            const cloudCopyEl = backupMenu.querySelector('#sc-cloud-copy');
+            if (cloudExportEl) {
+                cloudExportEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const relay = CLOUD_RELAY[getRealmIdFromLink()] || null;
+                    if (!relay) {
+                        setBackupStatus('无法识别当前领域，请刷新游戏页面后重试', true);
+                        return;
+                    }
+                    location.href = relay.url;
+                });
+            }
+            // 打开备份面板时自动生成备份文本（高压缩，必要时自动降级）
+            function generateCloudText() {
+                if (!cloudTextEl) return;
+                let text;
+                try {
+                    text = encodeSettingsNoteHigh().text;
+                } catch (err) {
+                    console.error('生成云端备份文本失败', err);
+                    setBackupStatus('生成备份文本失败，请查看控制台', true);
+                    return;
+                }
+                const limit = 1900;
+                if (text.length > limit) {
+                    setBackupStatus(`备份超长（${text.length} 字符 > ${limit}），请精简配置后重试`, true);
+                }
+                cloudTextEl.value = text;
+            }
+            // 复制：复制已生成的备份文本（错误显示在状态行）
+            if (cloudCopyEl && cloudTextEl) {
+                cloudCopyEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const v = cloudTextEl.value;
+                    if (!v) {
+                        setBackupStatus('备份文本未生成，请重试', true);
+                        return;
+                    }
+                    const copied = () => setBackupStatus('已复制，请在作者公司主页备注框粘贴保存');
+                    const fail = () => setBackupStatus('自动复制失败，请手动选中下方文本复制', true);
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(v).then(copied).catch(fail);
+                    } else {
+                        try {
+                            cloudTextEl.select();
+                            if (document.execCommand('copy')) copied();
+                            else fail();
+                        } catch (e2) { fail(); }
+                    }
+                });
+            }
+            if (cloudImportEl) {
+                cloudImportEl.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const relay = CLOUD_RELAY[getRealmIdFromLink()] || null;
+                    if (!relay) {
+                        setBackupStatus('无法识别当前领域，请刷新游戏页面后重试', true);
+                        return;
+                    }
+                    const relayId = relay.id;
+                    try {
+                        const network = window.__SC_Network;
+                        let data;
+                        if (network && typeof network.requestJson === 'function') {
+                            data = await network.requestJson(`/api/v2/companies/me/note/${relayId}/`);
+                        } else {
+                            const res = await fetch(`/api/v2/companies/me/note/${relayId}/`);
+                            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                            data = await res.json();
+                        }
+                        const note = data && typeof data.note === 'string' ? data.note : '';
+                        if (!note) {
+                            setBackupStatus('备注为空：请先在当前领域作者公司主页的备注框粘贴保存备份文本', true);
+                            return;
+                        }
+                        const parsed = decodeSettingsNote(note);
+                        if (!confirm('导入将覆盖现有插件设置（两个领域），是否继续？')) return;
+                        const count = applySettingsData(parsed);
+                        setBackupStatus(`设置已从备注导入（${count} 项）`);
+                    } catch (err) {
+                        console.error('从备注导入失败', err);
+                        const msg = err && err.message ? err.message : '备注不存在或内容无效';
+                        setBackupStatus(`导入失败：${msg}`, true);
+                    }
+                });
+            }
+
             // 轮询检测 hasNewVersion
             let checkTimer = setInterval(() => {
                 console.log(hasNewVersion)
@@ -993,7 +1201,7 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
             }, 500);
 
             mainMenu.appendChild(btnGroup);
-            content.append(mainMenu, secondaryMenu, info);
+            content.append(mainMenu, secondaryMenu, backupMenu, info);
             panel.append(trigger, content);
             return panel;
         };
@@ -1393,8 +1601,8 @@ import { registerExportInfo, downloadExportData } from './core/exportInfo.js';
             const button = panelElement.querySelector(`[data-action-type="${type}"]`);
             if (!button) return;
 
-            // 2. 特殊 UI 分流（不涉及加载状态的）
-            if (type === 'mpShow') return MpPanel.showPanel();
+            // 特殊 UI 分流（不涉及加载状态的）
+            // if (type === 'mpShow') return MpPanel.showPanel(); // 2026-08 暂时注释：MP-?% 按钮已隐藏，功能停用
 
             // 3. 定义功能配置映射
             const updateConfigs = {
