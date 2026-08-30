@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.5
+// @version      1.33.6
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -337,6 +337,451 @@
     };
   })();
 
+  // src/utils/lzstring.js
+  var LZString = (function() {
+    var f = String.fromCharCode;
+    var keyStrBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    var keyStrUriSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$";
+    var baseReverseDic = {};
+    function getBaseValue(alphabet, character) {
+      if (!baseReverseDic[alphabet]) {
+        baseReverseDic[alphabet] = {};
+        for (var i = 0; i < alphabet.length; i++) {
+          baseReverseDic[alphabet][alphabet.charAt(i)] = i;
+        }
+      }
+      return baseReverseDic[alphabet][character];
+    }
+    var LZString2 = {
+      compressToBase64: function(input) {
+        if (input == null) return "";
+        var res = LZString2._compress(input, 6, function(a) {
+          return keyStrBase64.charAt(a);
+        });
+        switch (res.length % 4) {
+          // To produce valid Base64
+          default:
+          // When could this happen ?
+          case 0:
+            return res;
+          case 1:
+            return res + "===";
+          case 2:
+            return res + "==";
+          case 3:
+            return res + "=";
+        }
+      },
+      decompressFromBase64: function(input) {
+        if (input == null) return "";
+        if (input == "") return null;
+        return LZString2._decompress(input.length, 32, function(index) {
+          return getBaseValue(keyStrBase64, input.charAt(index));
+        });
+      },
+      compressToUTF16: function(input) {
+        if (input == null) return "";
+        return LZString2._compress(input, 15, function(a) {
+          return f(a + 32);
+        }) + " ";
+      },
+      decompressFromUTF16: function(compressed) {
+        if (compressed == null) return "";
+        if (compressed == "") return null;
+        return LZString2._decompress(compressed.length, 16384, function(index) {
+          return compressed.charCodeAt(index) - 32;
+        });
+      },
+      //compress into uint8array (UCS-2 big endian format)
+      compressToUint8Array: function(uncompressed) {
+        var compressed = LZString2.compress(uncompressed);
+        var buf = new Uint8Array(compressed.length * 2);
+        for (var i = 0, TotalLen = compressed.length; i < TotalLen; i++) {
+          var current_value = compressed.charCodeAt(i);
+          buf[i * 2] = current_value >>> 8;
+          buf[i * 2 + 1] = current_value % 256;
+        }
+        return buf;
+      },
+      //decompress from uint8array (UCS-2 big endian format)
+      decompressFromUint8Array: function(compressed) {
+        if (compressed === null || compressed === void 0) {
+          return LZString2.decompress(compressed);
+        } else {
+          var buf = new Array(compressed.length / 2);
+          for (var i = 0, TotalLen = buf.length; i < TotalLen; i++) {
+            buf[i] = compressed[i * 2] * 256 + compressed[i * 2 + 1];
+          }
+          var result = [];
+          buf.forEach(function(c) {
+            result.push(f(c));
+          });
+          return LZString2.decompress(result.join(""));
+        }
+      },
+      //compress into a string that is already URI encoded
+      compressToEncodedURIComponent: function(input) {
+        if (input == null) return "";
+        return LZString2._compress(input, 6, function(a) {
+          return keyStrUriSafe.charAt(a);
+        });
+      },
+      //decompress from an output of compressToEncodedURIComponent
+      decompressFromEncodedURIComponent: function(input) {
+        if (input == null) return "";
+        if (input == "") return null;
+        input = input.replace(/ /g, "+");
+        return LZString2._decompress(input.length, 32, function(index) {
+          return getBaseValue(keyStrUriSafe, input.charAt(index));
+        });
+      },
+      compress: function(uncompressed) {
+        return LZString2._compress(uncompressed, 16, function(a) {
+          return f(a);
+        });
+      },
+      _compress: function(uncompressed, bitsPerChar, getCharFromInt) {
+        if (uncompressed == null) return "";
+        var i, value, context_dictionary = {}, context_dictionaryToCreate = {}, context_c = "", context_wc = "", context_w = "", context_enlargeIn = 2, context_dictSize = 3, context_numBits = 2, context_data = [], context_data_val = 0, context_data_position = 0, ii;
+        for (ii = 0; ii < uncompressed.length; ii += 1) {
+          context_c = uncompressed.charAt(ii);
+          if (!Object.prototype.hasOwnProperty.call(context_dictionary, context_c)) {
+            context_dictionary[context_c] = context_dictSize++;
+            context_dictionaryToCreate[context_c] = true;
+          }
+          context_wc = context_w + context_c;
+          if (Object.prototype.hasOwnProperty.call(context_dictionary, context_wc)) {
+            context_w = context_wc;
+          } else {
+            if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
+              if (context_w.charCodeAt(0) < 256) {
+                for (i = 0; i < context_numBits; i++) {
+                  context_data_val = context_data_val << 1;
+                  if (context_data_position == bitsPerChar - 1) {
+                    context_data_position = 0;
+                    context_data.push(getCharFromInt(context_data_val));
+                    context_data_val = 0;
+                  } else {
+                    context_data_position++;
+                  }
+                }
+                value = context_w.charCodeAt(0);
+                for (i = 0; i < 8; i++) {
+                  context_data_val = context_data_val << 1 | value & 1;
+                  if (context_data_position == bitsPerChar - 1) {
+                    context_data_position = 0;
+                    context_data.push(getCharFromInt(context_data_val));
+                    context_data_val = 0;
+                  } else {
+                    context_data_position++;
+                  }
+                  value = value >> 1;
+                }
+              } else {
+                value = 1;
+                for (i = 0; i < context_numBits; i++) {
+                  context_data_val = context_data_val << 1 | value;
+                  if (context_data_position == bitsPerChar - 1) {
+                    context_data_position = 0;
+                    context_data.push(getCharFromInt(context_data_val));
+                    context_data_val = 0;
+                  } else {
+                    context_data_position++;
+                  }
+                  value = 0;
+                }
+                value = context_w.charCodeAt(0);
+                for (i = 0; i < 16; i++) {
+                  context_data_val = context_data_val << 1 | value & 1;
+                  if (context_data_position == bitsPerChar - 1) {
+                    context_data_position = 0;
+                    context_data.push(getCharFromInt(context_data_val));
+                    context_data_val = 0;
+                  } else {
+                    context_data_position++;
+                  }
+                  value = value >> 1;
+                }
+              }
+              context_enlargeIn--;
+              if (context_enlargeIn == 0) {
+                context_enlargeIn = Math.pow(2, context_numBits);
+                context_numBits++;
+              }
+              delete context_dictionaryToCreate[context_w];
+            } else {
+              value = context_dictionary[context_w];
+              for (i = 0; i < context_numBits; i++) {
+                context_data_val = context_data_val << 1 | value & 1;
+                if (context_data_position == bitsPerChar - 1) {
+                  context_data_position = 0;
+                  context_data.push(getCharFromInt(context_data_val));
+                  context_data_val = 0;
+                } else {
+                  context_data_position++;
+                }
+                value = value >> 1;
+              }
+            }
+            context_enlargeIn--;
+            if (context_enlargeIn == 0) {
+              context_enlargeIn = Math.pow(2, context_numBits);
+              context_numBits++;
+            }
+            context_dictionary[context_wc] = context_dictSize++;
+            context_w = String(context_c);
+          }
+        }
+        if (context_w !== "") {
+          if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
+            if (context_w.charCodeAt(0) < 256) {
+              for (i = 0; i < context_numBits; i++) {
+                context_data_val = context_data_val << 1;
+                if (context_data_position == bitsPerChar - 1) {
+                  context_data_position = 0;
+                  context_data.push(getCharFromInt(context_data_val));
+                  context_data_val = 0;
+                } else {
+                  context_data_position++;
+                }
+              }
+              value = context_w.charCodeAt(0);
+              for (i = 0; i < 8; i++) {
+                context_data_val = context_data_val << 1 | value & 1;
+                if (context_data_position == bitsPerChar - 1) {
+                  context_data_position = 0;
+                  context_data.push(getCharFromInt(context_data_val));
+                  context_data_val = 0;
+                } else {
+                  context_data_position++;
+                }
+                value = value >> 1;
+              }
+            } else {
+              value = 1;
+              for (i = 0; i < context_numBits; i++) {
+                context_data_val = context_data_val << 1 | value;
+                if (context_data_position == bitsPerChar - 1) {
+                  context_data_position = 0;
+                  context_data.push(getCharFromInt(context_data_val));
+                  context_data_val = 0;
+                } else {
+                  context_data_position++;
+                }
+                value = 0;
+              }
+              value = context_w.charCodeAt(0);
+              for (i = 0; i < 16; i++) {
+                context_data_val = context_data_val << 1 | value & 1;
+                if (context_data_position == bitsPerChar - 1) {
+                  context_data_position = 0;
+                  context_data.push(getCharFromInt(context_data_val));
+                  context_data_val = 0;
+                } else {
+                  context_data_position++;
+                }
+                value = value >> 1;
+              }
+            }
+            context_enlargeIn--;
+            if (context_enlargeIn == 0) {
+              context_enlargeIn = Math.pow(2, context_numBits);
+              context_numBits++;
+            }
+            delete context_dictionaryToCreate[context_w];
+          } else {
+            value = context_dictionary[context_w];
+            for (i = 0; i < context_numBits; i++) {
+              context_data_val = context_data_val << 1 | value & 1;
+              if (context_data_position == bitsPerChar - 1) {
+                context_data_position = 0;
+                context_data.push(getCharFromInt(context_data_val));
+                context_data_val = 0;
+              } else {
+                context_data_position++;
+              }
+              value = value >> 1;
+            }
+          }
+          context_enlargeIn--;
+          if (context_enlargeIn == 0) {
+            context_enlargeIn = Math.pow(2, context_numBits);
+            context_numBits++;
+          }
+        }
+        value = 2;
+        for (i = 0; i < context_numBits; i++) {
+          context_data_val = context_data_val << 1 | value & 1;
+          if (context_data_position == bitsPerChar - 1) {
+            context_data_position = 0;
+            context_data.push(getCharFromInt(context_data_val));
+            context_data_val = 0;
+          } else {
+            context_data_position++;
+          }
+          value = value >> 1;
+        }
+        while (true) {
+          context_data_val = context_data_val << 1;
+          if (context_data_position == bitsPerChar - 1) {
+            context_data.push(getCharFromInt(context_data_val));
+            break;
+          } else context_data_position++;
+        }
+        return context_data.join("");
+      },
+      decompress: function(compressed) {
+        if (compressed == null) return "";
+        if (compressed == "") return null;
+        return LZString2._decompress(compressed.length, 32768, function(index) {
+          return compressed.charCodeAt(index);
+        });
+      },
+      _decompress: function(length, resetValue, getNextValue) {
+        var dictionary = [], next, enlargeIn = 4, dictSize = 4, numBits = 3, entry = "", result = [], i, w, bits, resb, maxpower, power, c, data2 = { val: getNextValue(0), position: resetValue, index: 1 };
+        for (i = 0; i < 3; i += 1) {
+          dictionary[i] = i;
+        }
+        bits = 0;
+        maxpower = Math.pow(2, 2);
+        power = 1;
+        while (power != maxpower) {
+          resb = data2.val & data2.position;
+          data2.position >>= 1;
+          if (data2.position == 0) {
+            data2.position = resetValue;
+            data2.val = getNextValue(data2.index++);
+          }
+          bits |= (resb > 0 ? 1 : 0) * power;
+          power <<= 1;
+        }
+        switch (next = bits) {
+          case 0:
+            bits = 0;
+            maxpower = Math.pow(2, 8);
+            power = 1;
+            while (power != maxpower) {
+              resb = data2.val & data2.position;
+              data2.position >>= 1;
+              if (data2.position == 0) {
+                data2.position = resetValue;
+                data2.val = getNextValue(data2.index++);
+              }
+              bits |= (resb > 0 ? 1 : 0) * power;
+              power <<= 1;
+            }
+            c = f(bits);
+            break;
+          case 1:
+            bits = 0;
+            maxpower = Math.pow(2, 16);
+            power = 1;
+            while (power != maxpower) {
+              resb = data2.val & data2.position;
+              data2.position >>= 1;
+              if (data2.position == 0) {
+                data2.position = resetValue;
+                data2.val = getNextValue(data2.index++);
+              }
+              bits |= (resb > 0 ? 1 : 0) * power;
+              power <<= 1;
+            }
+            c = f(bits);
+            break;
+          case 2:
+            return "";
+        }
+        dictionary[3] = c;
+        w = c;
+        result.push(c);
+        while (true) {
+          if (data2.index > length) {
+            return "";
+          }
+          bits = 0;
+          maxpower = Math.pow(2, numBits);
+          power = 1;
+          while (power != maxpower) {
+            resb = data2.val & data2.position;
+            data2.position >>= 1;
+            if (data2.position == 0) {
+              data2.position = resetValue;
+              data2.val = getNextValue(data2.index++);
+            }
+            bits |= (resb > 0 ? 1 : 0) * power;
+            power <<= 1;
+          }
+          switch (c = bits) {
+            case 0:
+              bits = 0;
+              maxpower = Math.pow(2, 8);
+              power = 1;
+              while (power != maxpower) {
+                resb = data2.val & data2.position;
+                data2.position >>= 1;
+                if (data2.position == 0) {
+                  data2.position = resetValue;
+                  data2.val = getNextValue(data2.index++);
+                }
+                bits |= (resb > 0 ? 1 : 0) * power;
+                power <<= 1;
+              }
+              dictionary[dictSize++] = f(bits);
+              c = dictSize - 1;
+              enlargeIn--;
+              break;
+            case 1:
+              bits = 0;
+              maxpower = Math.pow(2, 16);
+              power = 1;
+              while (power != maxpower) {
+                resb = data2.val & data2.position;
+                data2.position >>= 1;
+                if (data2.position == 0) {
+                  data2.position = resetValue;
+                  data2.val = getNextValue(data2.index++);
+                }
+                bits |= (resb > 0 ? 1 : 0) * power;
+                power <<= 1;
+              }
+              dictionary[dictSize++] = f(bits);
+              c = dictSize - 1;
+              enlargeIn--;
+              break;
+            case 2:
+              return result.join("");
+          }
+          if (enlargeIn == 0) {
+            enlargeIn = Math.pow(2, numBits);
+            numBits++;
+          }
+          if (dictionary[c]) {
+            entry = dictionary[c];
+          } else {
+            if (c === dictSize) {
+              entry = w + w.charAt(0);
+            } else {
+              return null;
+            }
+          }
+          result.push(entry);
+          dictionary[dictSize++] = w + entry.charAt(0);
+          enlargeIn--;
+          w = entry;
+          if (enlargeIn == 0) {
+            enlargeIn = Math.pow(2, numBits);
+            numBits++;
+          }
+        }
+      }
+    };
+    return LZString2;
+  })();
+  var lzCompressToBase64 = LZString.compressToBase64;
+  var lzDecompressFromBase64 = LZString.decompressFromBase64;
+  var lzCompressToUTF16 = LZString.compressToUTF16;
+  var lzDecompressFromUTF16 = LZString.decompressFromUTF16;
+
   // src/core/exportInfo.js
   var providers = [];
   function registerExportInfo(provider) {
@@ -413,10 +858,160 @@
     setTimeout(() => URL.revokeObjectURL(url), 1e3);
     return data2;
   }
+  function readRawValue(key) {
+    const raw = localStorage.getItem(key);
+    return raw === null ? void 0 : raw;
+  }
+  function collectSettingsData() {
+    const realms = { "0": {}, "1": {} };
+    const global = {};
+    for (const provider of providers) {
+      if (provider.backup !== true) continue;
+      if (provider.scope === "realm") {
+        for (const rid of [0, 1]) {
+          const target = realms[String(rid)];
+          for (const key of collectKeys(provider, rid)) {
+            const raw = readRawValue(key);
+            if (raw !== void 0) target[key] = raw;
+          }
+        }
+      } else {
+        for (const key of collectKeys(provider, null)) {
+          const raw = readRawValue(key);
+          if (raw !== void 0) global[key] = raw;
+        }
+      }
+    }
+    return { realms, global };
+  }
+  function downloadSettingsData() {
+    const data2 = collectSettingsData();
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
+    const payload = {
+      app: "autoMaxPPHPL",
+      type: "settings-backup",
+      version: 1,
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      realms: data2.realms,
+      global: data2.global
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `SC_Settings_Backup_${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+    return payload;
+  }
+  function parseSettingsFile(file, onDone) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (!parsed || typeof parsed !== "object" || !parsed.realms || typeof parsed.realms !== "object" || !parsed.global || typeof parsed.global !== "object") {
+          throw new Error("\u5907\u4EFD\u6587\u4EF6\u683C\u5F0F\u4E0D\u6B63\u786E");
+        }
+        onDone(null, { realms: parsed.realms, global: parsed.global });
+      } catch (e) {
+        onDone(e);
+      }
+    };
+    reader.onerror = () => onDone(new Error("\u8BFB\u53D6\u6587\u4EF6\u5931\u8D25"));
+    reader.readAsText(file);
+  }
+  function applySettingsData(data2) {
+    let count = 0;
+    for (const rid of ["0", "1"]) {
+      const bucket = data2.realms[rid];
+      if (bucket && typeof bucket === "object") {
+        for (const key of Object.keys(bucket)) {
+          if (typeof bucket[key] === "string") {
+            localStorage.setItem(key, bucket[key]);
+            count += 1;
+          }
+        }
+      }
+    }
+    if (data2.global && typeof data2.global === "object") {
+      for (const key of Object.keys(data2.global)) {
+        if (typeof data2.global[key] === "string") {
+          localStorage.setItem(key, data2.global[key]);
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }
+  var CLOUD_NOTE_MARKER = "SC-BACKUP-1:";
+  function hasRiskChars(s) {
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c < 32 || c === 127 || c >= 55296 && c <= 57343) return true;
+    }
+    return false;
+  }
+  function encodeSettingsNote() {
+    const body = lzCompressToBase64(JSON.stringify(buildNotePayload()));
+    return CLOUD_NOTE_MARKER + body + CLOUD_NOTE_MARKER;
+  }
+  function encodeSettingsNoteHigh() {
+    const payload = JSON.stringify(buildNotePayload());
+    const u16 = lzCompressToUTF16(payload);
+    if (hasRiskChars(u16)) {
+      return { text: CLOUD_NOTE_MARKER + lzCompressToBase64(payload) + CLOUD_NOTE_MARKER, mode: "base64" };
+    }
+    return { text: CLOUD_NOTE_MARKER + u16 + CLOUD_NOTE_MARKER, mode: "utf16" };
+  }
+  function buildNotePayload() {
+    const data2 = collectSettingsData();
+    return {
+      app: "autoMaxPPHPL",
+      type: "settings-backup",
+      version: 1,
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      realms: data2.realms,
+      global: data2.global
+    };
+  }
+  function decodeSettingsNote(text) {
+    if (!text) throw new Error("\u5907\u6CE8\u5185\u5BB9\u4E3A\u7A7A");
+    const raw = String(text);
+    const firstIdx = raw.indexOf(CLOUD_NOTE_MARKER);
+    const lastIdx = raw.lastIndexOf(CLOUD_NOTE_MARKER);
+    if (firstIdx < 0 || lastIdx <= firstIdx) throw new Error("\u672A\u68C0\u6D4B\u5230\u5907\u4EFD\u6807\u8BB0");
+    const body = raw.slice(firstIdx + CLOUD_NOTE_MARKER.length, lastIdx);
+    const attempts = [
+      () => lzDecompressFromBase64(body.replace(/\s+/g, "")),
+      () => lzDecompressFromUTF16(body)
+    ];
+    let lastErr = null;
+    for (const fn of attempts) {
+      try {
+        const json = fn();
+        if (!json) continue;
+        const parsed = JSON.parse(json);
+        if (!parsed || typeof parsed.realms !== "object" || typeof parsed.global !== "object") continue;
+        return { realms: parsed.realms, global: parsed.global };
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error("\u5907\u6CE8\u5185\u5BB9\u65E0\u6CD5\u89E3\u538B");
+  }
   window.SC_ExportInfo = {
     registerExportInfo,
     collectExportData,
-    downloadExportData
+    downloadExportData,
+    collectSettingsData,
+    downloadSettingsData,
+    parseSettingsFile,
+    applySettingsData,
+    encodeSettingsNote,
+    encodeSettingsNoteHigh,
+    decodeSettingsNote
   };
 
   // src/features/autoRefresh.js
@@ -428,6 +1023,7 @@
     registerExportInfo({
       name: "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F\u8BBE\u7F6E",
       scope: "global",
+      backup: true,
       keys: [ENABLED_STORAGE_KEY, CUSTOM_AMOUNTS_STORAGE_KEY]
     });
     const CARD_SELECTOR = ".col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center";
@@ -1459,7 +2055,8 @@
     registerExportInfo({
       name: "\u9910\u9986\u5907\u8D27\u63D0\u9192\u8BBE\u7F6E",
       scope: "realm",
-      keys: (realmId) => [getScopedKey(SETTINGS_KEY_BASE)]
+      backup: true,
+      keys: (realmId) => realmId === null ? [SETTINGS_KEY_BASE] : [realmSettingsKey(realmId)]
     });
     const DISH_COEFF = {
       saladBar: { 117: 288, 121: 24.89, 134: 92.6, 122: 38.196, 119: 96.312, 123: 16.667 },
@@ -1623,6 +2220,12 @@
     }
     function dishName(kind) {
       return resourceIdNameMap[kind] || `#${kind}`;
+    }
+    function restaurantLabel(r) {
+      return String(r.name || "").trim() || `\u4F4D\u7F6E${r.position ?? "?"} #${r.id}`;
+    }
+    function realmSettingsKey(realmId) {
+      return `R${realmId}-SC-RestaurantStock_Settings`;
     }
     function perCycleConsume(level, kind, partitionCount, isLuxury, coeff) {
       const multiplier = PARTITION_MULTIPLIER[partitionCount] ?? DEFAULT_MULTIPLIER;
@@ -1901,7 +2504,10 @@
       const maxSelect = `<select data-sc-quality-max data-rest="${restId}" data-kind="${kind}" style="font-size:11px;padding:0 2px;">${mark(cur.max)}</select>`;
       return `<span style="white-space:nowrap;">\u4ECE ${minSelect} \u5230 ${maxSelect}</span>`;
     }
-    function buildSettingsHtml(settings, currentRestaurant) {
+    function buildSettingsHtml(settings, currentRestaurant, allRestaurants) {
+      const currentId = currentRestaurant ? String(currentRestaurant.id) : null;
+      const others = (allRestaurants || []).filter((r) => String(r.id) !== currentId);
+      const copyOptions = others.map((r) => `<option value="${r.id}">${restaurantLabel(r)}</option>`).join("");
       const restHtml = (currentRestaurant ? [currentRestaurant] : []).map((r) => {
         const props = r.restaurantProperties || {};
         const dishSpans = [];
@@ -1926,6 +2532,12 @@
                         <input data-sc-target-days type="number" min="1" value="${settings.targetDays}" style="width:52px;font-size:11px;padding:1px 4px;"></span>
                     <span style="opacity:.65;">\u5DEE\u91CF = \u2308\u6BCF\u65E5\u6D88\u8017 \xD7 \u76EE\u6807\u5929\u6570\u2309 \u2212 \u5E93\u5B58\uFF1B\u5269\u4F59\u5929\u6570\u4F4E\u4E8E\u9884\u8B66\u5929\u6570 \u2192 \u26A0\uFE0F \u9AD8\u4EAE</span>
                 </div>
+                <div style="display:flex;align-items:center;gap:6px;margin:4px 0;flex-wrap:wrap;">
+                    <span>\u590D\u5236\u8BBE\u7F6E\u81EA</span>
+                    <select data-sc-copy-source style="font-size:11px;padding:0 2px;max-width:190px;">${copyOptions || '<option value="">\uFF08\u65E0\u5176\u4ED6\u9910\u9986\uFF09</option>'}</select>
+                    <button data-sc-copy type="button" style="font-size:11px;line-height:1.4;padding:1px 8px;border:1px solid rgba(128,128,128,.4);border-radius:4px;background:transparent;cursor:pointer;">\u590D\u5236</button>
+                    <span style="opacity:.65;font-size:11px;">\u628A\u6765\u6E90\u9910\u9986\u7684\u54C1\u8D28\u8303\u56F4\u5957\u7528\u5230\u5F53\u524D\u9910\u9986</span>
+                </div>
                 ${restHtml || '<div style="opacity:.65;">\u5F53\u524D\u9875\u9762\u4E0D\u662F\u9910\u9986</div>'}
             </div>`;
     }
@@ -1933,7 +2545,7 @@
       const settings = loadSettings();
       const view = state2.view;
       const body = view === "all" ? buildAllTable(allRestaurants, settings) : view === "quality" ? buildQualityDetailTable(allRestaurants, settings) : buildCurrentTable(restaurant, allRestaurants, settings);
-      const settingsArea = state2.showSettings ? buildSettingsHtml(settings, restaurant) : "";
+      const settingsArea = state2.showSettings ? buildSettingsHtml(settings, restaurant, allRestaurants) : "";
       const modeText = view === "all" ? "\u5168\u90E8\u9910\u9986" : view === "quality" ? "\u54C1\u8D28\u660E\u7EC6" : "\u5F53\u524D\u9910\u9986";
       const viewBtnText = view === "all" ? "\u663E\u793A\u5F53\u524D\u9910\u9986" : "\u663E\u793A\u5168\u90E8\u9910\u9986";
       const detailBtnText = view === "quality" ? "\u5173\u95ED\u660E\u7EC6" : "\u54C1\u8D28\u660E\u7EC6";
@@ -2076,6 +2688,21 @@
             refreshStocks();
             return;
           }
+          const copyBtn = e.target.closest("[data-sc-copy]");
+          if (copyBtn) {
+            const copySettings = loadSettings();
+            const sourceId = block.querySelector("[data-sc-copy-source]")?.value;
+            if (sourceId && state2.restaurant) {
+              if (!copySettings.qualities) copySettings.qualities = {};
+              const src = copySettings.qualities[sourceId];
+              copySettings.qualities[String(state2.restaurant.id)] = src ? JSON.parse(JSON.stringify(src)) : {};
+              saveSettings(copySettings);
+              renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
+              state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+              refreshStocks();
+            }
+            return;
+          }
           const shortfall = e.target.closest("[data-sc-shortfall]");
           if (shortfall) {
             const raw = shortfall.getAttribute("data-sc-shortfall-raw");
@@ -2163,6 +2790,18 @@
         return;
       }
       const allRestaurants = Array.isArray(buildings) ? buildings.filter((b) => b && b.kind === "r") : [];
+      if (allRestaurants.length > 0) {
+        const pruneSettings = loadSettings();
+        const liveIds = new Set(allRestaurants.map((r) => String(r.id)));
+        let changed = false;
+        for (const rid of Object.keys(pruneSettings.qualities)) {
+          if (!liveIds.has(String(rid))) {
+            delete pruneSettings.qualities[rid];
+            changed = true;
+          }
+        }
+        if (changed) saveSettings(pruneSettings);
+      }
       const container = findMenuContainer();
       if (!container) {
         removeBlock();
@@ -3045,6 +3684,7 @@
   registerExportInfo({
     name: "\u51FA\u5E93\u5408\u540C MP \u8BBE\u7F6E",
     scope: "global",
+    backup: true,
     keys: ["SC_OutgoingMP_Presets", "SC_OutgoingMP_UseInput"]
   });
   registerExportInfo({
@@ -4062,7 +4702,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.5",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.6",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -4963,6 +5603,7 @@
   registerExportInfo({
     name: "\u81EA\u5B9A\u4E49\u9AD8\u7BA1\u6570\u636E",
     scope: "realm",
+    // backup: true, // 2026-08 临时排除：该模块自带"获取最新数据"按钮，缺数据可手动刷新
     keys: (realmId) => realmId === null ? ["SC-Saved-Boardroom", "SC-Saved-Bonuses"] : [`R${realmId}-SC-Saved-Boardroom`, `R${realmId}-SC-Saved-Bonuses`]
   });
 
@@ -4970,6 +5611,7 @@
   registerExportInfo({
     name: "\u4EA4\u6613\u6240\u8BA1\u7B97\u53C2\u6570",
     scope: "global",
+    backup: true,
     keys: ["sc_building_level", "sc_building_hours"]
   });
   var { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
@@ -6323,6 +6965,7 @@
   registerExportInfo({
     name: "\u5408\u540C\u9AD8\u4EF7\u63D0\u9192\u8BBE\u7F6E",
     scope: "global",
+    backup: true,
     keys: ["SC_Contract_HighPrice_Settings"]
   });
   var { SCXXCS: SCXXCS2, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL2, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT2 } = state;
@@ -8712,6 +9355,7 @@
   registerExportInfo({
     name: "\u804A\u5929\u8868\u60C5\u9009\u62E9\u5668\u6700\u8FD1\u4F7F\u7528",
     scope: "global",
+    // backup: true, // 2026-08 临时排除：最近使用表情，使用人数少且价值低
     keys: ["SC_EmojiPicker_Recent"]
   });
   (function() {
@@ -9709,6 +10353,7 @@
     registerExportInfo({
       name: "\u9875\u9762\u529F\u80FD\u5F00\u5173\u8BBE\u7F6E",
       scope: "global",
+      backup: true,
       keys: [PAGE_ACTIONS_CONFIG_KEY]
     });
     window.isPageModuleEnabled = (key) => {
@@ -9742,6 +10387,7 @@
     registerExportInfo({
       name: "\u9762\u677F\u4E0E\u5168\u5C40\u8BBE\u7F6E",
       scope: "global",
+      backup: true,
       keys: ["SC_PanelPosition", "mp_inputPercent", "sc_autoMaxPPHPL_ignored_version"]
     });
     registerExportInfo({
@@ -9902,6 +10548,25 @@
             /* \u663E\u793A\u4E8C\u7EA7\u83DC\u5355 */
             .SimcompaniesRetailCalculation-panel-content.show-settings #secondary-menu-container {
                 display: block;
+            }
+
+            /* 3. \u5907\u4EFD\u8BBE\u7F6E\u9762\u677F\uFF1Ashow-backup \u65F6\u9690\u85CF\u4E3B/\u4E8C\u7EA7\u83DC\u5355\uFF0C\u663E\u793A\u5907\u4EFD\u9762\u677F */
+            #backup-menu-container {
+                display: none;
+            }
+
+            .SimcompaniesRetailCalculation-panel-content.show-backup #main-menu-container {
+                display: none;
+            }
+
+            .SimcompaniesRetailCalculation-panel-content.show-backup #secondary-menu-container {
+                display: none;
+            }
+
+            .SimcompaniesRetailCalculation-panel-content.show-backup #backup-menu-container {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
             }
         `;
         document.head.appendChild(style);
@@ -10216,6 +10881,10 @@
             refreshPageActionToggles2();
           }
         };
+        const switchBackupMenu = (isBackup) => {
+          content.classList.toggle("show-backup", isBackup);
+          if (isBackup) generateCloudText();
+        };
         const mainMenu = document.createElement("div");
         mainMenu.id = "main-menu-container";
         const secondaryMenu = document.createElement("div");
@@ -10379,7 +11048,14 @@
             btn.onclick = showSaturationTable;
             return btn;
           })(),
-          createActionButton("MP-?%", "mpShow"),
+          // createActionButton('MP-?%', 'mpShow'), // 2026-08 暂时隐藏：改为"备份插件设置"
+          (() => {
+            const btn = document.createElement("button");
+            btn.className = "SimcompaniesRetailCalculation-action-btn";
+            btn.textContent = "\u5907\u4EFD\u63D2\u4EF6\u8BBE\u7F6E";
+            btn.onclick = () => switchBackupMenu(true);
+            return btn;
+          })(),
           createActionButton("\u8BA1\u7B97\u5F53\u524D\u51B0\u6DC7\u6DCB\u5269\u4F59\u91CF", "calculateDecay"),
           (() => {
             const btn = document.createElement("button");
@@ -10536,6 +11212,11 @@
         const info = document.createElement("div");
         info.style.cssText = `margin-top:10px;padding:8px;font-size:12px;line-height:1.5;color:#ccc;border-top:1px solid #555;`;
         const version = GM_info?.script?.version || "\u672A\u77E5\u7248\u672C";
+        const CLOUD_RELAY = {
+          0: { id: "3417230", url: "https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/", name: "Rabbit-House" },
+          1: { id: "3419562", url: "https://www.simcompanies.com/zh-cn/company/1/Hettich/", name: "Hettich" }
+        };
+        const cloudRelayInfo = CLOUD_RELAY[getRealmIdFromLink()] || null;
         info.innerHTML = `
                 \u4F5C\u8005\uFF1A<a href="https://www.simcompanies.com/zh-cn/company/0/Rabbit-House/" target="_blank" class="sc-info-link">Rabbit House</a> <span id="sc-feedback-export" style="cursor:pointer;">\u53CD\u9988\u8BF7\u8BF4\u660E\u95EE\u9898</span><br>
                 \u53CD\u9988\u7FA4\uFF1A798670333 <br>
@@ -10565,6 +11246,167 @@
             }
           });
         }
+        const backupMenu = document.createElement("div");
+        backupMenu.id = "backup-menu-container";
+        const backupStatusEl = document.createElement("div");
+        backupStatusEl.id = "sc-backup-status";
+        backupStatusEl.style.cssText = "font-size:11px;opacity:.85;min-height:14px;white-space:pre-wrap;";
+        backupMenu.innerHTML = `
+                <button id="sc-backup-back" class="SimcompaniesRetailCalculation-action-btn" style="background:#E91E63;">\u2B05 \u8FD4\u56DE</button>
+                <div style="font-weight:bold;border-bottom:1px solid rgba(128,128,128,.3);padding-bottom:2px;">\u672C\u5730\u5907\u4EFD</div>
+                <div style="font-size:11px;opacity:.8;">\u628A\u63D2\u4EF6\u8BBE\u7F6E\u4FDD\u5B58\u6210\u6587\u4EF6\uFF0C\u9700\u8981\u65F6\u5BFC\u5165\u6062\u590D\u3002</div>
+                <div style="display:flex;gap:6px;">
+                    <button id="sc-export-settings" class="SimcompaniesRetailCalculation-action-btn" style="background:#2196F3;">\u5BFC\u51FA\u8BBE\u7F6E</button>
+                    <button id="sc-import-settings" class="SimcompaniesRetailCalculation-action-btn" style="background:#4CAF50;">\u5BFC\u5165\u8BBE\u7F6E</button>
+                    <input id="sc-import-settings-file" type="file" accept="application/json,.json" style="display:none;">
+                </div>
+                <div style="font-weight:bold;border-bottom:1px solid rgba(128,128,128,.3);padding-bottom:2px;">\u4E91\u7AEF\u5907\u6CE8\u5907\u4EFD</div>
+                <div style="font-size:11px;opacity:.8;">\u590D\u5236\u6587\u672C - \u53BB\u5199\u5165 - \u5728\u5907\u6CE8\u4E2D\u7C98\u8D34\u4FDD\u5B58</div>
+                <div style="display:flex;gap:6px;">
+                    <button id="sc-cloud-export" class="SimcompaniesRetailCalculation-action-btn" style="background:#9C27B0;">\u53BB\u5199\u5165</button>
+                    <button id="sc-cloud-import" class="SimcompaniesRetailCalculation-action-btn" style="background:#FF9800;">\u4ECE\u5907\u6CE8\u5BFC\u5165</button>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input id="sc-cloud-text" type="text" readonly style="flex:1;font-size:11px;padding:2px 4px;background:transparent;border:1px solid rgba(128,128,128,.35);border-radius:3px;white-space:nowrap;overflow-x:auto;" placeholder="\uFF08\u70B9\u300C\u53BB\u5199\u5165\u300D\u540E\u8FD9\u91CC\u663E\u793A\u5907\u4EFD\u6587\u672C\uFF09">
+                    <button id="sc-cloud-copy" class="SimcompaniesRetailCalculation-action-btn" style="background:#607D8B;">\u590D\u5236</button>
+                </div>
+            `;
+        backupMenu.appendChild(backupStatusEl);
+        backupMenu.querySelector("#sc-backup-back").onclick = () => switchBackupMenu(false);
+        const setBackupStatus = (msg, isError) => {
+          backupStatusEl.textContent = msg;
+          backupStatusEl.style.color = isError ? "#f44" : "var(--sc-panel-label,#BDBDBD)";
+        };
+        const exportSettingsEl = backupMenu.querySelector("#sc-export-settings");
+        if (exportSettingsEl) {
+          exportSettingsEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            try {
+              downloadSettingsData();
+              showToast("\u8BBE\u7F6E\u5DF2\u5BFC\u51FA", "success");
+            } catch (err) {
+              console.error("\u5BFC\u51FA\u8BBE\u7F6E\u5931\u8D25", err);
+              setBackupStatus("\u5BFC\u51FA\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u63A7\u5236\u53F0", true);
+            }
+          });
+        }
+        const importSettingsEl = backupMenu.querySelector("#sc-import-settings");
+        const importFileEl = backupMenu.querySelector("#sc-import-settings-file");
+        if (importSettingsEl && importFileEl) {
+          importSettingsEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            importFileEl.click();
+          });
+          importFileEl.addEventListener("change", () => {
+            const file = importFileEl.files && importFileEl.files[0];
+            importFileEl.value = "";
+            if (!file) return;
+            parseSettingsFile(file, (err, data2) => {
+              if (err) {
+                console.error("\u5BFC\u5165\u8BBE\u7F6E\u5931\u8D25", err);
+                setBackupStatus("\u5BFC\u5165\u5931\u8D25\uFF1A\u6587\u4EF6\u683C\u5F0F\u4E0D\u6B63\u786E", true);
+                return;
+              }
+              if (!confirm("\u5BFC\u5165\u5C06\u8986\u76D6\u73B0\u6709\u63D2\u4EF6\u8BBE\u7F6E\uFF08\u4E24\u4E2A\u9886\u57DF\uFF09\uFF0C\u662F\u5426\u7EE7\u7EED\uFF1F")) return;
+              try {
+                const count = applySettingsData(data2);
+                showToast(`\u8BBE\u7F6E\u5DF2\u5BFC\u5165\uFF08${count} \u9879\uFF09\uFF0C\u90E8\u5206\u8BBE\u7F6E\u5237\u65B0\u9875\u9762\u540E\u751F\u6548`, "success");
+              } catch (e2) {
+                console.error("\u5BFC\u5165\u8BBE\u7F6E\u5931\u8D25", e2);
+                setBackupStatus("\u5BFC\u5165\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u63A7\u5236\u53F0", true);
+              }
+            });
+          });
+        }
+        const cloudExportEl = backupMenu.querySelector("#sc-cloud-export");
+        const cloudImportEl = backupMenu.querySelector("#sc-cloud-import");
+        const cloudTextEl = backupMenu.querySelector("#sc-cloud-text");
+        const cloudCopyEl = backupMenu.querySelector("#sc-cloud-copy");
+        if (cloudExportEl) {
+          cloudExportEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const relay = CLOUD_RELAY[getRealmIdFromLink()] || null;
+            if (!relay) {
+              setBackupStatus("\u65E0\u6CD5\u8BC6\u522B\u5F53\u524D\u9886\u57DF\uFF0C\u8BF7\u5237\u65B0\u6E38\u620F\u9875\u9762\u540E\u91CD\u8BD5", true);
+              return;
+            }
+            location.href = relay.url;
+          });
+        }
+        function generateCloudText() {
+          if (!cloudTextEl) return;
+          let text;
+          try {
+            text = encodeSettingsNoteHigh().text;
+          } catch (err) {
+            console.error("\u751F\u6210\u4E91\u7AEF\u5907\u4EFD\u6587\u672C\u5931\u8D25", err);
+            setBackupStatus("\u751F\u6210\u5907\u4EFD\u6587\u672C\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u63A7\u5236\u53F0", true);
+            return;
+          }
+          const limit = 1900;
+          if (text.length > limit) {
+            setBackupStatus(`\u5907\u4EFD\u8D85\u957F\uFF08${text.length} \u5B57\u7B26 > ${limit}\uFF09\uFF0C\u8BF7\u7CBE\u7B80\u914D\u7F6E\u540E\u91CD\u8BD5`, true);
+          }
+          cloudTextEl.value = text;
+        }
+        if (cloudCopyEl && cloudTextEl) {
+          cloudCopyEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const v = cloudTextEl.value;
+            if (!v) {
+              setBackupStatus("\u5907\u4EFD\u6587\u672C\u672A\u751F\u6210\uFF0C\u8BF7\u91CD\u8BD5", true);
+              return;
+            }
+            const copied = () => setBackupStatus("\u5DF2\u590D\u5236\uFF0C\u8BF7\u5728\u4F5C\u8005\u516C\u53F8\u4E3B\u9875\u5907\u6CE8\u6846\u7C98\u8D34\u4FDD\u5B58");
+            const fail = () => setBackupStatus("\u81EA\u52A8\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u9009\u4E2D\u4E0B\u65B9\u6587\u672C\u590D\u5236", true);
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(v).then(copied).catch(fail);
+            } else {
+              try {
+                cloudTextEl.select();
+                if (document.execCommand("copy")) copied();
+                else fail();
+              } catch (e2) {
+                fail();
+              }
+            }
+          });
+        }
+        if (cloudImportEl) {
+          cloudImportEl.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const relay = CLOUD_RELAY[getRealmIdFromLink()] || null;
+            if (!relay) {
+              setBackupStatus("\u65E0\u6CD5\u8BC6\u522B\u5F53\u524D\u9886\u57DF\uFF0C\u8BF7\u5237\u65B0\u6E38\u620F\u9875\u9762\u540E\u91CD\u8BD5", true);
+              return;
+            }
+            const relayId = relay.id;
+            try {
+              const network = window.__SC_Network;
+              let data2;
+              if (network && typeof network.requestJson === "function") {
+                data2 = await network.requestJson(`/api/v2/companies/me/note/${relayId}/`);
+              } else {
+                const res = await fetch(`/api/v2/companies/me/note/${relayId}/`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                data2 = await res.json();
+              }
+              const note = data2 && typeof data2.note === "string" ? data2.note : "";
+              if (!note) {
+                setBackupStatus("\u5907\u6CE8\u4E3A\u7A7A\uFF1A\u8BF7\u5148\u5728\u5F53\u524D\u9886\u57DF\u4F5C\u8005\u516C\u53F8\u4E3B\u9875\u7684\u5907\u6CE8\u6846\u7C98\u8D34\u4FDD\u5B58\u5907\u4EFD\u6587\u672C", true);
+                return;
+              }
+              const parsed = decodeSettingsNote(note);
+              if (!confirm("\u5BFC\u5165\u5C06\u8986\u76D6\u73B0\u6709\u63D2\u4EF6\u8BBE\u7F6E\uFF08\u4E24\u4E2A\u9886\u57DF\uFF09\uFF0C\u662F\u5426\u7EE7\u7EED\uFF1F")) return;
+              const count = applySettingsData(parsed);
+              setBackupStatus(`\u8BBE\u7F6E\u5DF2\u4ECE\u5907\u6CE8\u5BFC\u5165\uFF08${count} \u9879\uFF09`);
+            } catch (err) {
+              console.error("\u4ECE\u5907\u6CE8\u5BFC\u5165\u5931\u8D25", err);
+              const msg = err && err.message ? err.message : "\u5907\u6CE8\u4E0D\u5B58\u5728\u6216\u5185\u5BB9\u65E0\u6548";
+              setBackupStatus(`\u5BFC\u5165\u5931\u8D25\uFF1A${msg}`, true);
+            }
+          });
+        }
         let checkTimer = setInterval(() => {
           console.log(hasNewVersion);
           if (hasNewVersion === true) {
@@ -10578,7 +11420,7 @@
           }
         }, 500);
         mainMenu.appendChild(btnGroup);
-        content.append(mainMenu, secondaryMenu, info);
+        content.append(mainMenu, secondaryMenu, backupMenu, info);
         panel.append(trigger, content);
         return panel;
       };
@@ -10901,7 +11743,6 @@
       const handleUpdate = async (type) => {
         const button = panelElement.querySelector(`[data-action-type="${type}"]`);
         if (!button) return;
-        if (type === "mpShow") return MpPanel.showPanel();
         const updateConfigs = {
           "region": {
             action: async () => {
@@ -13447,4 +14288,4 @@
   })();
 })();
 
-// @changelog 餐馆备货提醒新增详细设置（品质范围、预警天数、目标天数）与品质明细视图，差量一键复制。
+// @changelog 新增备份插件设置面板（本地与云端备份）、餐馆备货提醒快捷复制；暂时隐藏 MP-?% 功能。
