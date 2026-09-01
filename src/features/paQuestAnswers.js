@@ -302,6 +302,10 @@ import { registerExportInfo } from '../core/exportInfo.js';
             if (element.scPaProcessed) return;
             element.scPaProcessed = true;
 
+            // 抑制自身反馈：不处理已注入的答案框及其内部节点
+            if (element.classList && element.classList.contains('sc-pa-answer-box')) return;
+            if (element.closest && element.closest('.sc-pa-answer-box')) return;
+
             if (!isSafeAnswerParent(element)) {
                 return;
             }
@@ -327,29 +331,63 @@ import { registerExportInfo } from '../core/exportInfo.js';
             }
         }
 
-        // 扫描页面上的消息
+        // 聊天消息只处理最近 N 条（DOM 顺序 = 时间顺序；老消息/上滚加载的历史无 PA 问题，跳过以控制开销）
+        var RECENT_LIMIT = 100;
+
+        // 取聊天容器最近 N 条消息（末尾可能有哨兵/锚点等空文本元素，需剔除）
+        function getRecentMessages(container, n) {
+            var children = Array.from(container.querySelectorAll(':scope > div'));
+            while (children.length && !(children[children.length - 1].textContent || '').trim()) {
+                children.pop();
+            }
+            return children.slice(Math.max(0, children.length - n));
+        }
+
+        // 判定消息是否属于最近 N 条（观察器路径用：上滚加载的历史老消息直接跳过）
+        function isRecentMessage(msgEl, n) {
+            var container = msgEl.closest ? msgEl.closest('div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]') : null;
+            if (!container) return true; // 非聊天容器（PA 对话区等）照常处理
+            var children = Array.from(container.querySelectorAll(':scope > div'));
+            while (children.length && !(children[children.length - 1].textContent || '').trim()) {
+                children.pop();
+            }
+            var idx = children.indexOf(msgEl);
+            return idx === -1 || idx >= children.length - n;
+        }
+
+        // 分块处理消息：每批 chunkSize 条，批间 setTimeout 让出主线程（避免消息多时阻塞）
+        function processInChunks(elements, chunkSize) {
+            var i = 0;
+            function next() {
+                var end = Math.min(i + chunkSize, elements.length);
+                for (; i < end; i++) {
+                    var el = elements[i];
+                    if (el && !el.scPaProcessed) processMessage(el);
+                }
+                if (i < elements.length) setTimeout(next, 0);
+            }
+            next();
+        }
+
+        // 扫描页面上的消息（收集后分块异步处理）
         function scanPage() {
             if (!questData || questData.length === 0) return;
+            var targets = [];
 
-            // 1. 处理 PA 系统消息（通过 pa-reply 链接定位）
+            // 1. PA 系统消息（通过 pa-reply 链接定位，全量——数量少且是目标本身）
             document.querySelectorAll('a.pa-reply').forEach(function (link) {
                 var msgEl = findPaMessageElement(link);
-                if (msgEl && !msgEl.scPaProcessed) {
-                    processMessage(msgEl);
-                }
+                if (msgEl && !msgEl.scPaProcessed) targets.push(msgEl);
             });
 
-            // 2. 处理聊天室消息（通过聊天容器定位，与模块20复用相同逻辑）
-            var chatContainers = findChatContainers();
-            chatContainers.forEach(function (container) {
-                container.querySelectorAll(':scope > div').forEach(function (msgEl) {
-                    if (!msgEl.scPaProcessed) {
-                        processMessage(msgEl);
-                    }
+            // 2. 聊天室消息（只取最近 N 条）
+            findChatContainers().forEach(function (container) {
+                getRecentMessages(container, RECENT_LIMIT).forEach(function (msgEl) {
+                    if (!msgEl.scPaProcessed) targets.push(msgEl);
                 });
             });
 
-            // 3. 处理 PA 对话区域中不含 pa-reply 的消息
+            // 3. PA 对话区域中不含 pa-reply 的消息
             var paReplyLinksForContainer = document.querySelectorAll('a.pa-reply');
             if (paReplyLinksForContainer.length > 0) {
                 var paContainer = paReplyLinksForContainer[0].parentElement;
@@ -369,11 +407,13 @@ import { registerExportInfo } from '../core/exportInfo.js';
                         if (!child.scPaProcessed && child.textContent.trim().length > 3
                             && !child.querySelector('a.pa-reply')
                             && !child.querySelector('.sc-pa-answer-box')) {
-                            processMessage(child);
+                            targets.push(child);
                         }
                     });
                 }
             }
+
+            processInChunks(targets, 50);
         }
 
         // 查找聊天容器（与模块20相同逻辑）
@@ -496,6 +536,9 @@ import { registerExportInfo } from '../core/exportInfo.js';
         // 扫描单个元素（用于 MutationObserver）
         function scanElement(element) {
             if (!questData || questData.length === 0) return;
+            // 抑制自身反馈：跳过已注入的答案框及其内部节点
+            if (element.classList && element.classList.contains('sc-pa-answer-box')) return;
+            if (element.closest && element.closest('.sc-pa-answer-box')) return;
 
             // 如果是 pa-reply 链接，处理其消息容器
             if (element.tagName === 'A' && element.classList.contains('pa-reply')) {
@@ -506,9 +549,9 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 return;
             }
 
-            // 如果是聊天消息容器（与模块20相同检测逻辑）
+            // 如果是聊天消息容器（与模块20相同检测逻辑）：只处理最近 N 条
             if (element.matches && element.matches('div[style*="column-reverse"][style*="overflow"]')) {
-                element.querySelectorAll(':scope > div').forEach(function (msgEl) {
+                getRecentMessages(element, RECENT_LIMIT).forEach(function (msgEl) {
                     if (!msgEl.scPaProcessed) processMessage(msgEl);
                 });
                 return;
@@ -528,11 +571,11 @@ import { registerExportInfo } from '../core/exportInfo.js';
             }
 
             // React 整体重建消息容器时，容器内部的消息不会作为独立新增节点出现，
-            // 这里递归处理新增节点内部嵌套的已知聊天容器及其消息子元素
+            // 这里递归处理新增节点内部嵌套的已知聊天容器及其消息子元素（同样限最近 N 条）
             if (element.querySelectorAll && !isChatContainer(element)) {
                 var nestedContainers = element.querySelectorAll('div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]');
                 nestedContainers.forEach(function (c) {
-                    c.querySelectorAll(':scope > div').forEach(function (msgEl) {
+                    getRecentMessages(c, RECENT_LIMIT).forEach(function (msgEl) {
                         if (!msgEl.scPaProcessed) processMessage(msgEl);
                     });
                 });
@@ -543,6 +586,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 && element.textContent.trim().length > 5) {
                 // 跳过容器本身（已在前面专门处理）
                 if (element.matches && element.matches('div[style*="column-reverse"]')) return;
+                // 聊天容器内的历史加载（上滚）消息跳过：只处理最近 N 条
+                if (!isRecentMessage(element, RECENT_LIMIT)) return;
                 processMessage(element);
             }
         }

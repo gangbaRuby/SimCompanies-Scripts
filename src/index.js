@@ -680,6 +680,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     if (typeof window.scChatEmojiPickerRefresh === 'function') {
                         window.scChatEmojiPickerRefresh();
                     }
+                    if (typeof window.scChatAccessibilityRefresh === 'function') {
+                        window.scChatAccessibilityRefresh();
+                    }
                 };
 
                 // 初始状态下手动更新一次文字，避免显示空白
