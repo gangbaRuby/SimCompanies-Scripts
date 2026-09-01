@@ -1,4 +1,4 @@
-﻿    const ChatAccessibility = (function () {
+    const ChatAccessibility = (function () {
         // 颜色类表情 → [单中文字] 映射（色弱用户可辨别）
         const EMOJI_TEXT = {
             '🟢': '绿', '🔴': '红', '🟡': '黄', '🔵': '蓝', '🟣': '紫', '🟠': '橙',
@@ -165,10 +165,12 @@
                 return;
             }
 
-            chatContainers.forEach(container => {
-                // 先处理所有 emoji（无论开关状态，以便后续 CSS 切换）
-                scanContainer(container);
-            });
+            // 仅开启时扫描包裹（关闭时不产生 DOM 开销；开启由设置面板/头部按钮触发重新扫描）
+            if (isEnabled()) {
+                chatContainers.forEach(container => {
+                    scanContainer(container);
+                });
+            }
 
             // 给所有符合条件的聊天室 header 添加切换按钮
             addToggleButtons();
@@ -176,9 +178,10 @@
             // 应用当前开关状态到所有容器
             refreshAllContainers();
 
-            // 监听新消息（始终监听，但 CSS 控制显示）
+            // 监听新消息（始终监听，但 CSS 控制显示；关闭时不扫描包裹）
             if (observer) observer.disconnect();
             observer = new MutationObserver((mutations) => {
+                if (!isEnabled()) return;
                 for (const m of mutations) {
                     for (const n of m.addedNodes) {
                         if (n.nodeType === 1) scanContainer(n);
@@ -201,6 +204,9 @@
 
         // 延迟启动
         setTimeout(init, 1000);
+
+        // 供设置面板开关后触发重新扫描（与 scChatEmojiPickerRefresh 同模式）
+        window.scChatAccessibilityRefresh = () => init();
 
         return { init, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
     })();

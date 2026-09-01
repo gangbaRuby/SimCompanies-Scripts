@@ -1,4 +1,4 @@
-﻿import { createGlobalCustomToggle } from '../utils/uiComponents.js';
+import { createGlobalCustomToggle } from '../utils/uiComponents.js';
 import { state } from '../core/state.js';
 import { getRealmIdFromLink } from '../core/storage.js';
 import { executiveCustomButton } from './executiveBoardroom.js';
@@ -143,9 +143,20 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             }
         };
 
+        // 查找页面上的百科资源链接（排除游戏菜单/抽屉内的链接：
+        // 菜单里可能有"最近查看"等资源入口，DOM 顺序靠前会误匹配，导致按钮被插进菜单）
+        function findResourceLink() {
+            const links = document.querySelectorAll('a[href*="/encyclopedia/"][href*="/resource/"]');
+            for (const link of links) {
+                if (link.closest('nav, aside, [class*="menu"], [class*="drawer"], [class*="sidebar"]')) continue;
+                return link;
+            }
+            return links[0] || null; // 兜底：全部在菜单里时退回第一个
+        }
+
         // 从百科全书链接解析资源ID（同模块18）
         function parseResourceId() {
-            const link = document.querySelector('a[href*="/encyclopedia/"][href*="/resource/"]');
+            const link = findResourceLink();
             if (!link) return null;
             const match = link.href.match(/\/resource\/(\d+)\//);
             return match ? parseInt(match[1], 10) : null;
@@ -229,7 +240,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             // 全局查重，防止多次注入
             if (document.querySelector('[data-warehouse-custom-toggle]')) return;
 
-            const link = document.querySelector('a[href*="/encyclopedia/"][href*="/resource/"]');
+            const link = findResourceLink();
             if (!link) return;
             const parent = link.parentElement;
             if (!parent) return;
@@ -464,8 +475,9 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 return;
             }
             initRetries = 0;
-            // 清理旧展示（SPA 切换物品时）
+            // 清理旧展示（SPA 切换物品时）：利润显示 + 注入按钮一并清除
             document.querySelectorAll('.sc-warehouse-profit').forEach(e => e.remove());
+            document.querySelectorAll('[data-warehouse-custom-toggle]').forEach(e => e.remove());
             pendingItems.clear();
 
             if (domObserver) domObserver.disconnect();
