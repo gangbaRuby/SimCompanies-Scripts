@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.6
+// @version      1.33.7
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1617,6 +1617,8 @@
     function processMessage(element) {
       if (element.scPaProcessed) return;
       element.scPaProcessed = true;
+      if (element.classList && element.classList.contains("sc-pa-answer-box")) return;
+      if (element.closest && element.closest(".sc-pa-answer-box")) return;
       if (!isSafeAnswerParent(element)) {
         return;
       }
@@ -1638,20 +1640,46 @@
         }
       }
     }
+    var RECENT_LIMIT = 100;
+    function getRecentMessages(container, n) {
+      var children = Array.from(container.querySelectorAll(":scope > div"));
+      while (children.length && !(children[children.length - 1].textContent || "").trim()) {
+        children.pop();
+      }
+      return children.slice(Math.max(0, children.length - n));
+    }
+    function isRecentMessage(msgEl, n) {
+      var container = msgEl.closest ? msgEl.closest('div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]') : null;
+      if (!container) return true;
+      var children = Array.from(container.querySelectorAll(":scope > div"));
+      while (children.length && !(children[children.length - 1].textContent || "").trim()) {
+        children.pop();
+      }
+      var idx = children.indexOf(msgEl);
+      return idx === -1 || idx >= children.length - n;
+    }
+    function processInChunks(elements, chunkSize) {
+      var i = 0;
+      function next() {
+        var end = Math.min(i + chunkSize, elements.length);
+        for (; i < end; i++) {
+          var el = elements[i];
+          if (el && !el.scPaProcessed) processMessage(el);
+        }
+        if (i < elements.length) setTimeout(next, 0);
+      }
+      next();
+    }
     function scanPage() {
       if (!questData || questData.length === 0) return;
+      var targets = [];
       document.querySelectorAll("a.pa-reply").forEach(function(link) {
         var msgEl = findPaMessageElement(link);
-        if (msgEl && !msgEl.scPaProcessed) {
-          processMessage(msgEl);
-        }
+        if (msgEl && !msgEl.scPaProcessed) targets.push(msgEl);
       });
-      var chatContainers = findChatContainers();
-      chatContainers.forEach(function(container) {
-        container.querySelectorAll(":scope > div").forEach(function(msgEl) {
-          if (!msgEl.scPaProcessed) {
-            processMessage(msgEl);
-          }
+      findChatContainers().forEach(function(container) {
+        getRecentMessages(container, RECENT_LIMIT).forEach(function(msgEl) {
+          if (!msgEl.scPaProcessed) targets.push(msgEl);
         });
       });
       var paReplyLinksForContainer = document.querySelectorAll("a.pa-reply");
@@ -1671,11 +1699,12 @@
         if (paContainer && paContainer !== document.body && !paContainer.querySelector(".sc-pa-answer-box")) {
           Array.from(paContainer.children).forEach(function(child) {
             if (!child.scPaProcessed && child.textContent.trim().length > 3 && !child.querySelector("a.pa-reply") && !child.querySelector(".sc-pa-answer-box")) {
-              processMessage(child);
+              targets.push(child);
             }
           });
         }
       }
+      processInChunks(targets, 50);
     }
     function findChatContainers() {
       const byClass = document.querySelectorAll("div.css-xo2rg1.e1llepen2");
@@ -1768,6 +1797,8 @@
     }
     function scanElement(element) {
       if (!questData || questData.length === 0) return;
+      if (element.classList && element.classList.contains("sc-pa-answer-box")) return;
+      if (element.closest && element.closest(".sc-pa-answer-box")) return;
       if (element.tagName === "A" && element.classList.contains("pa-reply")) {
         var msgEl = findPaMessageElement(element);
         if (msgEl && !msgEl.scPaProcessed) {
@@ -1776,7 +1807,7 @@
         return;
       }
       if (element.matches && element.matches('div[style*="column-reverse"][style*="overflow"]')) {
-        element.querySelectorAll(":scope > div").forEach(function(msgEl2) {
+        getRecentMessages(element, RECENT_LIMIT).forEach(function(msgEl2) {
           if (!msgEl2.scPaProcessed) processMessage(msgEl2);
         });
         return;
@@ -1795,13 +1826,14 @@
       if (element.querySelectorAll && !isChatContainer(element)) {
         var nestedContainers = element.querySelectorAll('div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]');
         nestedContainers.forEach(function(c) {
-          c.querySelectorAll(":scope > div").forEach(function(msgEl2) {
+          getRecentMessages(c, RECENT_LIMIT).forEach(function(msgEl2) {
             if (!msgEl2.scPaProcessed) processMessage(msgEl2);
           });
         });
       }
       if (!element.scPaProcessed && element.nodeType === 1 && element.textContent.trim().length > 5) {
         if (element.matches && element.matches('div[style*="column-reverse"]')) return;
+        if (!isRecentMessage(element, RECENT_LIMIT)) return;
         processMessage(element);
       }
     }
@@ -4702,7 +4734,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.6",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.7",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -4874,6 +4906,23 @@
           console.error("\u52A0\u8F7D\u81EA\u5B9A\u4E49\u8463\u4E8B\u4F1A\u6570\u636E\u5931\u8D25:", e);
         }
       }
+    }
+    function getAcademyRadioValue() {
+      const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
+      try {
+        const stored = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
+        const academyActive = Number(stored?.academyActive);
+        if (Number.isFinite(academyActive) && academyActive >= 0) {
+          if (academyActive >= 20) return 20;
+          if (academyActive >= 15) return 15;
+          if (academyActive >= 10) return 10;
+          if (academyActive >= 5) return 5;
+          return 0;
+        }
+      } catch (e) {
+        console.warn("\u8BFB\u53D6\u5B66\u9662\u7B49\u7EA7\u5931\u8D25\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u533A\u95F4 15-19:", e);
+      }
+      return 15;
     }
     function calculateResults() {
       const getSkill = (slotId, skillKey) => {
@@ -5534,6 +5583,7 @@
         }
       };
       const rightContainer = document.getElementById("sc-right-panel-container");
+      const academyRadioValue = getAcademyRadioValue();
       rightContainer.innerHTML = `
                 <div style="font-size: 15px; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid var(--sc-border); padding-bottom: 10px; color: var(--sc-fg);">
                     \u9AD8\u7BA1\u52A0\u6210\u6A21\u62DF\u8BA1\u7B97
@@ -5542,11 +5592,11 @@
                 <div style="margin-bottom: 15px; font-size: 13px; background: var(--sc-aca-bg); padding: 10px; border-radius: 8px; border: 1px solid var(--sc-border);">
                     <strong style="display: block; margin-bottom: 6px; color: var(--sc-fg); font-size: 12px;">\u5B66\u9662\u603B\u7B49\u7EA7:</strong>
                     <div style="display: flex; flex-wrap: wrap; gap: 8px 12px; color: var(--sc-fg); font-size: 12px;">
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="0" style="vertical-align:middle;"> 0-4</label>
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="5" style="vertical-align:middle;"> 5-9</label>
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="10" style="vertical-align:middle;"> 10-14</label>
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="15" checked style="vertical-align:middle;"> 15-19</label>
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="20" style="vertical-align:middle;"> 20+</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="0" ${academyRadioValue === 0 ? "checked" : ""} style="vertical-align:middle;"> 0-4</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="5" ${academyRadioValue === 5 ? "checked" : ""} style="vertical-align:middle;"> 5-9</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="10" ${academyRadioValue === 10 ? "checked" : ""} style="vertical-align:middle;"> 10-14</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="15" ${academyRadioValue === 15 ? "checked" : ""} style="vertical-align:middle;"> 15-19</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="20" ${academyRadioValue === 20 ? "checked" : ""} style="vertical-align:middle;"> 20+</label>
                     </div>
                 </div>
 
@@ -8888,8 +8938,16 @@
         el.style.fontWeight = "bold";
       }
     };
+    function findResourceLink() {
+      const links = document.querySelectorAll('a[href*="/encyclopedia/"][href*="/resource/"]');
+      for (const link of links) {
+        if (link.closest('nav, aside, [class*="menu"], [class*="drawer"], [class*="sidebar"]')) continue;
+        return link;
+      }
+      return links[0] || null;
+    }
     function parseResourceId() {
-      const link = document.querySelector('a[href*="/encyclopedia/"][href*="/resource/"]');
+      const link = findResourceLink();
       if (!link) return null;
       const match2 = link.href.match(/\/resource\/(\d+)\//);
       return match2 ? parseInt(match2[1], 10) : null;
@@ -8959,7 +9017,7 @@
     }
     function injectCustomToggle() {
       if (document.querySelector("[data-warehouse-custom-toggle]")) return;
-      const link = document.querySelector('a[href*="/encyclopedia/"][href*="/resource/"]');
+      const link = findResourceLink();
       if (!link) return;
       const parent = link.parentElement;
       if (!parent) return;
@@ -9157,6 +9215,7 @@
       }
       initRetries = 0;
       document.querySelectorAll(".sc-warehouse-profit").forEach((e) => e.remove());
+      document.querySelectorAll("[data-warehouse-custom-toggle]").forEach((e) => e.remove());
       pendingItems.clear();
       if (domObserver) domObserver.disconnect();
       tryInit();
@@ -9323,13 +9382,16 @@
         setTimeout(init2, 1e3);
         return;
       }
-      chatContainers.forEach((container) => {
-        scanContainer(container);
-      });
+      if (isEnabled()) {
+        chatContainers.forEach((container) => {
+          scanContainer(container);
+        });
+      }
       addToggleButtons();
       refreshAllContainers();
       if (observer) observer.disconnect();
       observer = new MutationObserver((mutations) => {
+        if (!isEnabled()) return;
         for (const m of mutations) {
           for (const n of m.addedNodes) {
             if (n.nodeType === 1) scanContainer(n);
@@ -9348,6 +9410,7 @@
       }
     }).observe(document, { subtree: true, childList: true });
     setTimeout(init2, 1e3);
+    window.scChatAccessibilityRefresh = () => init2();
     return { init: init2, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
   })();
 
@@ -10920,6 +10983,9 @@
             updateUI();
             if (typeof window.scChatEmojiPickerRefresh === "function") {
               window.scChatEmojiPickerRefresh();
+            }
+            if (typeof window.scChatAccessibilityRefresh === "function") {
+              window.scChatAccessibilityRefresh();
             }
           };
           const initialConfig = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
@@ -14288,4 +14354,4 @@
   })();
 })();
 
-// @changelog 新增备份插件设置面板（本地与云端备份）、餐馆备货提醒快捷复制；暂时隐藏 MP-?% 功能。
+// @changelog 修复仓库按钮残留问题，优化聊天扫描性能，支持自定义高管数据自动选择学院等级。
