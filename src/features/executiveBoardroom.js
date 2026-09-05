@@ -66,6 +66,24 @@ export const executiveCustomButton = (function () {
             }
         }
 
+        function getAcademyRadioValue() {
+            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            try {
+                const stored = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
+                const academyActive = Number(stored?.academyActive);
+                if (Number.isFinite(academyActive) && academyActive >= 0) {
+                    if (academyActive >= 20) return 20;
+                    if (academyActive >= 15) return 15;
+                    if (academyActive >= 10) return 10;
+                    if (academyActive >= 5) return 5;
+                    return 0;
+                }
+            } catch (e) {
+                console.warn('读取学院等级失败，使用默认区间 15-19:', e);
+            }
+            return 15;
+        }
+
         function calculateResults() {
             const getSkill = (slotId, skillKey) => {
                 return (boardroomState[slotId] && boardroomState[slotId].skills)
@@ -808,6 +826,7 @@ export const executiveCustomButton = (function () {
             };
 
             const rightContainer = document.getElementById('sc-right-panel-container');
+            const academyRadioValue = getAcademyRadioValue();
             rightContainer.innerHTML = `
                 <div style="font-size: 15px; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid var(--sc-border); padding-bottom: 10px; color: var(--sc-fg);">
                     高管加成模拟计算
@@ -816,11 +835,11 @@ export const executiveCustomButton = (function () {
                 <div style="margin-bottom: 15px; font-size: 13px; background: var(--sc-aca-bg); padding: 10px; border-radius: 8px; border: 1px solid var(--sc-border);">
                     <strong style="display: block; margin-bottom: 6px; color: var(--sc-fg); font-size: 12px;">学院总等级:</strong>
                     <div style="display: flex; flex-wrap: wrap; gap: 8px 12px; color: var(--sc-fg); font-size: 12px;">
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="0" style="vertical-align:middle;"> 0-4</label>
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="5" style="vertical-align:middle;"> 5-9</label>
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="10" style="vertical-align:middle;"> 10-14</label>
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="15" checked style="vertical-align:middle;"> 15-19</label>
-                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="20" style="vertical-align:middle;"> 20+</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="0" ${academyRadioValue === 0 ? 'checked' : ''} style="vertical-align:middle;"> 0-4</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="5" ${academyRadioValue === 5 ? 'checked' : ''} style="vertical-align:middle;"> 5-9</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="10" ${academyRadioValue === 10 ? 'checked' : ''} style="vertical-align:middle;"> 10-14</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="15" ${academyRadioValue === 15 ? 'checked' : ''} style="vertical-align:middle;"> 15-19</label>
+                        <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="20" ${academyRadioValue === 20 ? 'checked' : ''} style="vertical-align:middle;"> 20+</label>
                     </div>
                 </div>
 
