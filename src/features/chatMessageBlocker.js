@@ -15,10 +15,10 @@
 //   拦截 WS 的 onmessage（属性赋值方式，bundle :70544-70567），命中名单 sender.id 的
 //   消息/组内消息直接丢弃，不让其进入 React 状态 → 实时消息完全不渲染。
 //
-// 已渲染/缓存/历史中被屏蔽消息：不做 remove()、不用 display:none（会破坏历史加载触发），
-//   改为加 .sc-chatblock-hidden = visibility:hidden（保留布局占位），
+// 已渲染/缓存/历史中被屏蔽消息：不做 remove()（React 锚点/历史加载安全），
+//   加 .sc-chatblock-hidden：visibility:hidden 且高度压为 0（不占空间），
 //   在 MutationObserver 微任务里同帧执行，避免"先看到再隐藏"的闪现。
-//   代价：被屏蔽者的历史消息在滚动时会以不可见的空白占位存在（状态里仍有该消息，无法删除）。
+//   节点保留在 DOM 中，避免 React insertBefore 锚点失效；历史消息仍随游戏分页正常加载。
 //
 // 消息组 DOM：聊天容器直接子级（div.css-mnxdu9 等），同发送者连续消息为一组；
 //   发送者 = 组的"直接子级"公司链接（头像区），正文里的 @提及/引用链接不算发送者。
@@ -340,9 +340,9 @@ import { registerExportInfo } from '../core/exportInfo.js';
         if (styleInjected) return;
         styleInjected = true;
         const style = document.createElement('style');
-        // visibility:hidden 保留布局：不破坏历史加载触发/滚动，也不触发 React 锚点问题；
-        // 不用 display:none（会让"加载历史"的顶部触发元素失去可观察性）。
-        style.textContent = `.${HIDDEN_CLASS}{visibility:hidden !important;}`;
+        // 隐藏且高度归零：不占视觉空间；保留 DOM 节点（不做 remove()/display:none），
+        // 避免 React 以该节点为 insertBefore 锚点时失效。
+        style.textContent = `.${HIDDEN_CLASS}{visibility:hidden !important;height:0 !important;min-height:0 !important;max-height:0 !important;padding-top:0 !important;padding-bottom:0 !important;margin-top:0 !important;margin-bottom:0 !important;border-width:0 !important;overflow:hidden !important;}`;
         document.head.appendChild(style);
     }
 
