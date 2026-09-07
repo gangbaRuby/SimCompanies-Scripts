@@ -33,7 +33,6 @@
 //   - 消息组"直接子级 = 公司链接"的结构若变化，:has 规则与按钮定位都要检查
 // ======================
 import { registerExportInfo } from '../core/exportInfo.js';
-import { getRealmIdFromLink } from '../core/storage.js';
 
 (function () {
     'use strict';
@@ -367,10 +366,9 @@ import { getRealmIdFromLink } from '../core/storage.js';
         else cleanupUI();
     };
     // 导入"当前领域"游戏内黑名单（/api/v2/contacts/ 的 ignoringCompanies，均为公司唯一 id）。
-    // 只有 id 也足以屏蔽（判定按 sender.id）；name/slug 留空，首次在聊天数据里见到该 id 会自动补齐。
+    // 注意：被屏蔽对象不一定是当前领域的公司，因此导入时【不写 realmId】，
+    // 只在第一次在聊天数据里见到该 id 时自动补正确领域/名字/slug。
     window.scChatBlockImportFromGame = async () => {
-        const realmId = getRealmIdFromLink();
-        if (realmId === null || realmId === undefined) return { ok: false, error: '未识别当前领域' };
         let ids;
         try {
             const resp = await fetch('/api/v2/contacts/', { credentials: 'same-origin' });
@@ -387,7 +385,7 @@ import { getRealmIdFromLink } from '../core/storage.js';
             const id = Number(raw);
             if (!Number.isFinite(id)) continue;
             if (list.some(e => Number(e.id) === id)) { duplicate++; continue; }
-            list.push({ id, name: '', realmId });
+            list.push({ id, name: '' });
             added++;
         }
         if (added > 0) {
