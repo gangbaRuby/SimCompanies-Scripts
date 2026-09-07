@@ -1,11 +1,13 @@
 // ======================
-// 聊天室全局屏蔽（v1：按公司名匹配）
+// 聊天室全局屏蔽（v1.1：按公司名匹配 + CSS 隐藏）
 // ----------------------
 // 屏蔽名单：SC_ChatBlock_Names（全局键，backup:true 可随设置备份）。
 // 匹配方式：聊天消息行内公司主页链接 href 中的公司 slug，与名单名称做归一化比较
 //   （小写 + 去除非字母/数字/汉字，空格与连字符视为相同：
 //    "Super Super Poop" / "super super poop" / slug "super-super-poop" 互相命中）。
-// 删除：命中名单的消息行（聊天容器直接子级）整条从 DOM 移除，新旧消息均处理。
+// 隐藏：命中名单的消息行保留在 DOM 中，仅加 .sc-chatblock-hidden（display:none !important）
+//   使其不可见且不占空间。不直接 remove()：React 上滚加载历史时会拿"当前首条消息"当
+//   insertBefore 锚点，直接删除会让锚点脱离 DOM 触发 NotFoundError。
 // v1 限制：按公司名匹配，同名但不同领域的公司会一起被屏蔽（跨领域误伤风险，
 //   待后续按游戏 id 细化）。
 // 聊天容器选择器与 paQuestAnswers/chatAccessibility 相同。
@@ -18,6 +20,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
     const MODULE_KEY = 'chatBlock';
     const STORAGE_KEY = 'SC_ChatBlock_Names';
     const COMPANY_LINK_SELECTOR = 'a[href*="/company/"]';
+    const HIDDEN_CLASS = 'sc-chatblock-hidden';
+    let styleInjected = false;
 
     registerExportInfo({
         name: '聊天室全局屏蔽名单',
@@ -101,24 +105,34 @@ import { registerExportInfo } from '../core/exportInfo.js';
     }
 
 
-    // 扫描单个容器：删除命中屏蔽名单的消息行
+    // 注入隐藏样式（display:none 需 !important 以覆盖行内/类样式）
+    function injectStyles() {
+        if (styleInjected) return;
+        styleInjected = true;
+        const style = document.createElement('style');
+        style.textContent = `.${HIDDEN_CLASS}{display:none !important;}`;
+        document.head.appendChild(style);
+    }
+
+    // 扫描单个容器：隐藏命中屏蔽名单的消息行（保留 DOM，避免 React insertBefore 锚点失效）
     function scanContainer(container) {
         const list = readList();
         if (list.length === 0) return 0;
         const normSet = new Set(list.map(normalizeName));
         const rows = container.querySelectorAll(':scope > div');
-        let removed = 0;
+        let hidden = 0;
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
+            if (!row.classList || row.classList.contains(HIDDEN_CLASS)) continue;
             const links = row.querySelectorAll(COMPANY_LINK_SELECTOR);
             let hit = false;
             for (let j = 0; j < links.length; j++) {
                 const slug = companySlugFromLink(links[j]);
                 if (slug && normSet.has(normalizeName(slug))) { hit = true; break; }
             }
-            if (hit && row.isConnected) { row.remove(); removed++; }
+            if (hit) { row.classList.add(HIDDEN_CLASS); hidden++; }
         }
-        return removed;
+        return hidden;
     }
 
     function scanAll() {
@@ -153,6 +167,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
             return;
         }
         initAttempts = 0;
+        injectStyles();
         if (isEnabled()) scanAll();
         observer = new MutationObserver(scheduleScan);
         containers.forEach(c => observer.observe(c, { childList: true, subtree: true }));
