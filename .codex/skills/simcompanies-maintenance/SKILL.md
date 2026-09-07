@@ -50,6 +50,8 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 - **领域隔离**：涉及领域/公司实体的用户配置（品质范围、备注、预设等）必须按领域分开存储，避免跨领域串扰（建筑 id 跨领域可能重复）。
 - **范围类输入约束**：任何"从~到"范围输入必须保证前后关系（如品质从 ≤ 到）：修改时钳制，读取时归一（脏数据自动交换）。
 - **开关面板子设置**：功能开关设置面板里带详细设置的开关，用 `subContent` 提供子设置内容、CSS 类 `sc-collapsed` 控制显隐；子设置**仅在功能开启时展示**（关闭即收起，省空间），点击开关时同步显隐。
+- **游戏分页/列表接口拦截**：对游戏 HTTP 列表或分页接口做"响应过滤"前，先确认客户端判定"是否还有更多"的方式（例：聊天历史用 `fullHistory = r.length < 30`，见 `chatMessageBlocker.js` 模块头失效检查点）。过滤会减少返回条数，可能让客户端误判到底并提前停止加载。
+- **React 动态列表的隐藏/删除**：不要直接 `remove()` React 管理的列表节点（会被 React 用作 `insertBefore` 锚点，删除后抛 `NotFoundError`），也不要简单 `display:none`（可能让"滚动加载更多"的触发元素失去可观察性）。优先在数据层过滤；确需 DOM 处理时保留节点（如按稳定属性匹配的 CSS `:has()` 渲染期隐藏 + 零高占位），并补齐清理/重建路径。
 
 ### 5. 正式发布
 
@@ -73,6 +75,15 @@ npm run release -- "<changelog>"
 - **分支保护**：`main` 有必需状态检查时，CI 未绿会拒绝合并；本仓库**未启用 auto-merge**（`gh pr merge --auto` 会报 `enablePullRequestAutoMerge` 错误），正确做法是等 CI 变绿（轮询 `gh pr checks`）后再执行 `gh pr merge`。
 - **release 后检查 CHANGELOG 格式**：新版本条目与下一节之间应保留空行（条目通常为"更新说明 + 原未发布明细"）。
 - **中文 PR 载荷**：`gh pr create` 没有 `--title-file`（只有 `--body-file`）；标题与正文统一用 UTF-8 JSON 文件 + `gh api ... --input` 提交，创建后到 GitHub 核对中文（配合第 6 节编码规则）。
+
+### 5.2 发布后沉淀
+
+每次正式发布推完版本标签后，回顾本次发布踩过的坑，把"会再遇到的"条目按归属就地沉淀：
+
+- 本机环境/工具类（网络通道、沙箱、CLI 路径、编码等）→ 写 `AGENTS.local.md`（本地、不提交）。
+- 发布/合并实操类 → 本节 5.1。
+- 代码约定/数据层/DOM 类 → 4.1（及本地模块地图）。
+- 只记会再遇到的；**不写入账号、令牌、Cookie、公司名/ID、本机路径等私有或敏感信息**；面向仓库的文档保持中文。
 
 ## 6. 公开协作质量
 
