@@ -44,7 +44,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
     });
 
     let observer = null;
-    let scanTimer = null;
+    let scanScheduled = false;
     let containerWatchTimer = null;
     let initAttempts = 0;
     let styleInjected = false;
@@ -358,10 +358,17 @@ import { registerExportInfo } from '../core/exportInfo.js';
         observer = new MutationObserver(scheduleScan);
         containers.forEach(c => observer.observe(c, { childList: true, subtree: true }));
     }
+    // MutationObserver 触发后立即重扫：用微任务在浏览器绘制前隐藏，
+    // 避免"先看到被屏蔽消息再隐藏"的闪现（房间切换常从游戏内存缓存重绘，无 HTTP 可拦）
+    const enqueueMicro = typeof queueMicrotask === 'function' ? queueMicrotask : (fn) => setTimeout(fn, 0);
     function scheduleScan() {
         if (!isEnabled()) return;
-        if (scanTimer) clearTimeout(scanTimer);
-        scanTimer = setTimeout(() => { scanTimer = null; scanAll(); }, 80);
+        if (scanScheduled) return;
+        scanScheduled = true;
+        enqueueMicro(() => {
+            scanScheduled = false;
+            scanAll();
+        });
     }
 
     // SPA 路由变化监听
