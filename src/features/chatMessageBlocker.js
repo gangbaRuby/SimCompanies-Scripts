@@ -608,7 +608,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 });
                 insertBeforeTitle(header, btn);
             }
-            btn.textContent = paused ? '▶ 恢复屏蔽' : '⏸ 暂停屏蔽';
+            btn.textContent = paused ? '恢复屏蔽' : '暂停屏蔽';
             btn.title = paused ? '恢复屏蔽（再次隐藏被屏蔽消息）' : '暂时解除屏蔽，显示被屏蔽的消息（供查看）';
         });
     }
