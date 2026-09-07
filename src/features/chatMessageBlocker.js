@@ -431,7 +431,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
         btn.className = BTN_CLASS;
         btn.title = '屏蔽此人消息';
         btn.setAttribute('aria-label', '屏蔽此人');
-        btn.style.cssText = 'background:none;border:none;cursor:pointer;padding:0 4px;line-height:1;display:inline-flex;align-items:center;color:#f44336;opacity:.85;';
+        // 颜色随官方图标：color:inherit 自动适配深浅色，不单独着色
+        btn.style.cssText = 'background:none;border:none;cursor:pointer;padding:0 4px;line-height:1;display:inline-flex;align-items:center;color:inherit;';
         // eye-off 图标（lucide），stroke=currentColor 由按钮颜色控制
         btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
         btn.addEventListener('click', (ev) => {
@@ -443,6 +444,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 setTimeout(() => { btn.style.opacity = '0.85'; }, 1200);
                 return;
             }
+            if (!window.confirm(`屏蔽后“${rowInfo.name}”的聊天消息将不再显示。确定屏蔽该用户吗？`)) return;
             const p = parseCompanyHref(link);
             const res = window.scChatBlockAddById
                 ? window.scChatBlockAddById({ id: rowInfo.id, name: rowInfo.name, realmId: p ? p.realmId : rowInfo.realmId, slug: p ? p.slug : undefined })
