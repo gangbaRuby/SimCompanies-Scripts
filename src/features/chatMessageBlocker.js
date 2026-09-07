@@ -19,6 +19,8 @@
 // 实时消息（WebSocket）：NEW_MESSAGE/UPDATE_MESSAGE/GROUP 帧命中名单 sender.id 直接丢弃。
 // JS 兜底：MutationObserver + body 常驻监听，对新挂载行补隐藏（同帧微任务）。
 // 屏蔽按钮：注入到组内回复按钮（svg[data-icon="reply"]）之后，点击按 id 加入名单。
+// 名单自愈：被屏蔽者 id 不变但改名时，网络数据一出现该 id 即更新 name/realmId，
+//   DOM 兜底隐藏时顺带更新 slug 并重建 CSS，之后缓存整列挂载也不闪。
 //
 // v1 遗留：旧键 SC_ChatBlock_Names（字符串名单）不再读写，用户自行清空。
 //
@@ -140,6 +142,53 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 name: sender.company,
                 realmId: sender.realmId
             });
+            // 名单自愈：被屏蔽者改名后，网络数据里一出现该 id 就同步最新公司名/领域
+            updateBlockedEntryFromSender(sender);
+        }
+    }
+
+    // 用网络数据更新名单中该 id 的名字/领域（id 不变、名字变了也能持续识别）
+    function updateBlockedEntryFromSender(sender) {
+        if (!sender || typeof sender.id !== 'number') return;
+        if (!blockedIds().has(sender.id)) return;
+        let changed = false;
+        const list = readList();
+        for (const e of list) {
+            if (Number(e.id) === sender.id) {
+                if (sender.company && String(e.name || '') !== String(sender.company)) {
+                    e.name = sender.company;
+                    changed = true;
+                }
+                if (sender.realmId != null && Number(e.realmId) !== Number(sender.realmId)) {
+                    e.realmId = Number(sender.realmId);
+                    changed = true;
+                }
+            }
+        }
+        if (changed) {
+            writeList(list);
+            invalidateCache(); // 重建 CSS 预隐藏规则
+        }
+    }
+
+    // 用 DOM 消息组链接更新名单中该 id 的 slug（改名后新链接段），并重建 CSS
+    function rememberRowSlug(row, info) {
+        if (!row || !info || typeof info.id !== 'number') return;
+        const link = senderCompanyLink(row);
+        if (!link) return;
+        const p = parseCompanyHref(link);
+        if (!p) return;
+        let changed = false;
+        const list = readList();
+        for (const e of list) {
+            if (Number(e.id) === info.id && (!e.slug || e.slug !== p.slug)) {
+                e.slug = p.slug;
+                changed = true;
+            }
+        }
+        if (changed) {
+            writeList(list);
+            invalidateCache();
         }
     }
     function indexMessage(m) {
@@ -411,16 +460,14 @@ import { registerExportInfo } from '../core/exportInfo.js';
         const rows = container.querySelectorAll(':scope > div');
         for (const row of rows) {
             if (row.classList.contains(HIDDEN_CLASS)) continue;
-            if (isBlockedRow(row)) {
+            const info = resolveSender(row);
+            if (info && typeof info.id === 'number' && blockedIds().has(info.id)) {
                 row.classList.add(HIDDEN_CLASS);
+                rememberRowSlug(row, info); // 记录最新 slug（改名自愈）
                 continue;
             }
             injectBlockButton(row);
         }
-    }
-    function isBlockedRow(row) {
-        const info = resolveSender(row);
-        return !!(info && typeof info.id === 'number' && blockedIds().has(info.id));
     }
     function scanAll() {
         if (!isEnabled()) return;
