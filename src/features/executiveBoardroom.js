@@ -397,8 +397,9 @@ export const executiveCustomButton = (function () {
             return Math.floor(val);
         }
 
-        // 精确枚举 o/f/m/t/v/y 的分配（候选不足时用空席占位），一趟求出三个目标的最优摆法
-        function findBestPlacements(pool, academyLevel) {
+        // 精确枚举 o/f/m/t/v/y 的分配（候选不足时用空席占位），一趟求出所选目标的最优摆法
+        // kMin：指定销售速度所需的高管销售加成下限（floor(effCmo/3) >= kMin）；非目标模式传 null
+        function findBestPlacements(pool, academyLevel, kMin) {
             const coefs = OPT_SEATS.map(seat => {
                 if (seat === 'v') return { coo: academyLevel >= 5 ? 0.5 : 0, cmo: 0 };
                 if (seat === 'y') return { coo: 0, cmo: academyLevel >= 15 ? 0.5 : 0 };
@@ -415,8 +416,8 @@ export const executiveCustomButton = (function () {
 
             const idx = new Array(OPT_SEATS.length).fill(-1);
             const used = new Array(total).fill(false);
-            const best = { admin: null, restaurant: null, sales: null };
-            const bestArr = { admin: null, restaurant: null, sales: null };
+            const best = { admin: null, restaurant: null, sales: null, targetSales: null };
+            const bestArr = { admin: null, restaurant: null, sales: null, targetSales: null };
 
             const isBetter = (cur, next) => cur === null || next[0] > cur[0] || (next[0] === cur[0] && next[1] > cur[1]);
 
@@ -432,12 +433,17 @@ export const executiveCustomButton = (function () {
                 // 目标①管理费用最低：effCoo 最大；平手取 effCmo 更大
                 // 目标②餐馆评级最高：effCmo 最大；平手取 effCoo 更大
                 // 目标③销售速度最高：floor(effCmo/3) 最大；同速取 effCoo 更大（管理费用更低）
+                // 目标④指定销售速度：effCmo >= 3*kMin 前提下 effCoo 最大；平手取 effCmo 更大
                 const adminKey = [effCoo, effCmo];
                 const restaurantKey = [effCmo, effCoo];
                 const salesKey = [Math.floor(effCmo / 3), effCoo];
                 if (isBetter(best.admin, adminKey)) { best.admin = adminKey; bestArr.admin = idx.slice(); }
                 if (isBetter(best.restaurant, restaurantKey)) { best.restaurant = restaurantKey; bestArr.restaurant = idx.slice(); }
                 if (isBetter(best.sales, salesKey)) { best.sales = salesKey; bestArr.sales = idx.slice(); }
+                if (kMin !== null && effCmo >= 3 * kMin) {
+                    const targetKey = [effCoo, effCmo];
+                    if (isBetter(best.targetSales, targetKey)) { best.targetSales = targetKey; bestArr.targetSales = idx.slice(); }
+                }
             };
 
             const search = (s) => {
@@ -475,9 +481,11 @@ export const executiveCustomButton = (function () {
             return {
                 admin: makeResult(bestArr.admin),
                 restaurant: makeResult(bestArr.restaurant),
-                sales: makeResult(bestArr.sales)
+                sales: makeResult(bestArr.sales),
+                targetSales: bestArr.targetSales ? makeResult(bestArr.targetSales) : null
             };
         }
+
 
         // 读取零售计算缓存里的基础值，用于换算展示
         function readBaseNumbers() {
@@ -532,8 +540,21 @@ export const executiveCustomButton = (function () {
                 showToast('暂无可用的高管数据', 'error');
                 return;
             }
-            const best = findBestPlacements(pool, academyLevel)[targetKey];
-            if (!best) return;
+
+            let kMin = null;
+            if (targetKey === 'target') {
+                kMin = optTargetK();
+                if (kMin === null) {
+                    showToast('请先输入有效的目标销售速度', 'error');
+                    return;
+                }
+            }
+            const bests = findBestPlacements(pool, academyLevel, kMin);
+            const best = targetKey === 'target' ? bests.targetSales : bests[targetKey];
+            if (!best) {
+                showToast('当前目标无法达到，请调整目标销售速度', 'error');
+                return;
+            }
 
             const original = Object.assign({}, boardroomState);
             Object.keys(boardroomState).forEach(k => { boardroomState[k] = null; });
@@ -573,10 +594,89 @@ export const executiveCustomButton = (function () {
             renderBoardroom();
             saveBoardroom();
             renderOptimizerResults();
+            computeAndShowOptResult();
             showToast('已应用最优摆放并保存', 'success');
         }
 
-        // 渲染「最优摆放建议」结果区
+        // ============ 最优摆放建议（手动选择目标后计算） ============
+        let optMode = 'admin';       // admin | restaurant | sales | target
+        let optTargetInput = '';     // 目标最终销售速度(%)，仅 target 模式使用
+
+        const OPT_MODE_LABELS = {
+            admin: '管理费用最低',
+            restaurant: '餐馆评级最高',
+            sales: '销售速度最高（同速时管理费用最低）',
+            target: '指定销售速度时管理费用最低'
+        };
+
+        // 「指定销售速度」所需的 CMO 加成下限 k（需满足 floor(effCmo/3) >= k）
+        function optTargetK() {
+            const value = parseFloat(optTargetInput);
+            if (!Number.isFinite(value) || value < 0) return null;
+            const base = readBaseNumbers();
+            return Math.max(0, Math.ceil(value - base.baseSalesVal - 1e-9));
+        }
+
+        // 按当前手动选择的目标计算并把结果写入 #sc-opt-result
+        function computeAndShowOptResult() {
+            const resultBox = document.getElementById('sc-opt-result');
+            if (!resultBox) return;
+
+            syncAcademyRadioToRealm();
+            const academyLevel = getCheckedAcademyLevel();
+            const pool = collectExecutivePool();
+            if (pool.length === 0) {
+                resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-fg3); padding: 4px 2px;">暂无高管数据：请先录入或点击「获取当前最新高管数据」。</div>';
+                return;
+            }
+
+            let kMin = null;
+            let targetValue = null;
+            if (optMode === 'target') {
+                targetValue = parseFloat(optTargetInput);
+                if (!Number.isFinite(targetValue) || targetValue < 0) {
+                    resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); padding: 4px 2px;">请输入有效的目标销售速度（%）后再计算。</div>';
+                    return;
+                }
+                kMin = optTargetK();
+            }
+
+            const bests = findBestPlacements(pool, academyLevel, kMin);
+
+            if (optMode === 'target' && !bests.targetSales) {
+                const base = readBaseNumbers();
+                const maxK = Math.floor(bests.restaurant.effCmo / 3);
+                const reachable = (base.baseSalesVal + maxK).toFixed(1);
+                resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); line-height: 1.7; padding: 6px 2px;">目标销售速度 ' + targetValue.toFixed(1) + '% 无法达到：至少需要高管销售加成 +' + kMin + '%，当前高管最高只能到 +' + maxK + '%（销售速度最高约 ' + reachable + '%）。请调低目标，或提升 CMO 技能后再试。</div>';
+                return;
+            }
+
+            const best = optMode === 'target' ? bests.targetSales : bests[optMode];
+            const m = formatMetrics(best.effCoo, best.effCmo);
+            const seatText = best.placement
+                .filter(item => isOptSeatActive(item.seat, academyLevel) && item.obj && item.name)
+                .map(item => SLOT_LABELS[item.seat] + '：' + item.name)
+                .join(' ｜ ');
+
+            let html = '';
+            if (optMode === 'target') {
+                const maxK = Math.floor(bests.restaurant.effCmo / 3);
+                html += '<div style="font-size: 11px; color: var(--sc-fg3); margin: 2px 0 6px;">目标：销售速度 ≥ ' + targetValue.toFixed(1) + '%（需 CMO 加成 ≥ +' + kMin + '%，当前上限 +' + maxK + '%）</div>';
+            }
+            html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.8;">';
+            html += '<div style="font-weight: bold; color: var(--sc-fg2);">' + OPT_MODE_LABELS[optMode] + '</div>';
+            html += '<div style="color: var(--sc-fg);">' + seatText + '</div>';
+            html += '<div style="color: var(--sc-fg3);">预计：管理费用 <span style="color: var(--sc-successFg); font-weight: bold;">' + m.adminText + '</span> ｜ 餐馆评级 ' + m.restaurantText + ' ｜ 销售速度 ' + m.salesText + '</div>';
+            html += '<div style="margin-top: 6px;"><button data-opt-apply="' + optMode + '" style="padding: 5px 14px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">应用并保存</button></div>';
+            html += '</div>';
+            resultBox.innerHTML = html;
+            const applyBtn = resultBox.querySelector('button[data-opt-apply]');
+            if (applyBtn) {
+                applyBtn.onclick = () => applyBestPlacement(applyBtn.getAttribute('data-opt-apply'));
+            }
+        }
+
+        // 渲染「最优摆放建议」面板：先手动选择目标，点「计算摆法」才出结果
         function renderOptimizerResults() {
             const container = document.getElementById('sc-boardroom-opt-results');
             if (!container) return;
@@ -589,7 +689,6 @@ export const executiveCustomButton = (function () {
                 return;
             }
 
-            const bests = findBestPlacements(pool, academyLevel);
             const cur = currentMetrics(academyLevel);
             const realLevel = readRealmAcademyLevel();
 
@@ -602,12 +701,6 @@ export const executiveCustomButton = (function () {
                 ? '学院总等级 ' + realLevel + '，学徒生效：' + (apps.length ? apps.join('/') : '无')
                 : '学院等级未获取，按所选区间（学徒生效：' + (apps.length ? apps.join('/') : '无') + '）';
 
-            const cardDefs = [
-                { key: 'admin', title: '管理费用最低' },
-                { key: 'restaurant', title: '餐馆评级最高' },
-                { key: 'sales', title: '销售速度最高（同速时管理费用最低）' }
-            ];
-
             let html = '';
             html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg3); line-height: 1.7;">';
             html += '<div style="font-weight: bold; color: var(--sc-fg);">最优摆放建议</div>';
@@ -615,25 +708,45 @@ export const executiveCustomButton = (function () {
             html += '<div>当前：管理费用 ' + cur.text.adminText + ' ｜ 餐馆评级 ' + cur.text.restaurantText + ' ｜ 销售速度 ' + cur.text.salesText + '</div>';
             html += '</div>';
 
-            cardDefs.forEach((def, i) => {
-                const b = bests[def.key];
-                const m = formatMetrics(b.effCoo, b.effCmo);
-                const seatText = b.placement
-                    .filter(item => isOptSeatActive(item.seat, academyLevel) && item.obj && item.name)
-                    .map(item => SLOT_LABELS[item.seat] + '：' + item.name)
-                    .join(' ｜ ');
-                html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.8;">';
-                html += '<div style="font-weight: bold; color: var(--sc-fg2);">' + (i + 1) + '. ' + def.title + '</div>';
-                html += '<div style="color: var(--sc-fg);">' + seatText + '</div>';
-                html += '<div style="color: var(--sc-fg3);">预计：管理费用 <span style="color: var(--sc-successFg); font-weight: bold;">' + m.adminText + '</span> ｜ 餐馆评级 ' + m.restaurantText + ' ｜ 销售速度 ' + m.salesText + '</div>';
-                html += '<div style="margin-top: 6px;"><button data-opt-apply="' + def.key + '" style="padding: 5px 14px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">应用并保存</button></div>';
-                html += '</div>';
-            });
+            html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.9;">';
+            html += '<div style="margin-bottom: 4px;"><label for="sc-opt-mode" style="color: var(--sc-fg2); font-weight: bold;">优化目标：</label>';
+            html += '<select id="sc-opt-mode" style="max-width: 100%; padding: 4px 6px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 12px;">';
+            html += '<option value="admin">管理费用最低</option>';
+            html += '<option value="restaurant">餐馆评级最高</option>';
+            html += '<option value="sales">销售速度最高（同速时管理费用最低）</option>';
+            html += '<option value="target">指定销售速度时管理费用最低</option>';
+            html += '</select></div>';
+            if (optMode === 'target') {
+                html += '<div style="margin-bottom: 4px;">目标最终销售速度（%）：';
+                html += '<input id="sc-opt-target" type="number" min="0" step="0.1" placeholder="如 ' + cur.text.salesText.replace('%', '') + '" style="width: 90px; padding: 3px 6px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 12px;">';
+                html += '<div style="font-size: 11px; color: var(--sc-fg3);">最终销售速度 = 基础销售速度 + CMO 加成；可参考上方「当前」值。</div></div>';
+            }
+            html += '<div style="margin-top: 2px;"><button id="sc-opt-calc-btn" style="padding: 5px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">计算摆法</button></div>';
+            html += '</div>';
+
+            html += '<div id="sc-opt-result" style="font-size: 12px; color: var(--sc-fg3); padding: 2px 2px 4px;">选择上方优化目标后点击「计算摆法」。</div>';
             container.innerHTML = html;
-            container.querySelectorAll('button[data-opt-apply]').forEach(btn => {
-                btn.onclick = () => applyBestPlacement(btn.getAttribute('data-opt-apply'));
-            });
+
+            const modeSel = document.getElementById('sc-opt-mode');
+            modeSel.value = optMode;
+            modeSel.onchange = () => {
+                optMode = modeSel.value;
+                // 切换目标后重绘（含目标输入框显隐）并清空旧结果
+                renderOptimizerResults();
+            };
+
+            const targetInput = document.getElementById('sc-opt-target');
+            if (targetInput) {
+                targetInput.value = optTargetInput;
+                targetInput.oninput = () => { optTargetInput = targetInput.value; };
+            }
+
+            const calcBtn = document.getElementById('sc-opt-calc-btn');
+            if (calcBtn) {
+                calcBtn.onclick = () => computeAndShowOptResult();
+            }
         }
+
 
         function renderBoardroom() {
             const leftContainer = document.getElementById('sc-slots-container');
