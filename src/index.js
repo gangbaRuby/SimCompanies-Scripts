@@ -949,8 +949,8 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 const importBtn = document.createElement('button');
                 importBtn.type = 'button';
                 importBtn.className = 'SimcompaniesRetailCalculation-action-btn';
-                importBtn.textContent = '导入当前领域黑名单';
-                importBtn.title = '把游戏内「当前领域已屏蔽的公司」合并进插件屏蔽名单（按公司唯一 ID）';
+                importBtn.textContent = '导入账号已屏蔽公司';
+                importBtn.title = '把游戏内账号已屏蔽的公司合并进插件屏蔽名单（按公司唯一 ID）';
                 importBtn.style.cssText = 'align-self:flex-start;background:#607D8B;color:white;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px;';
                 importBtn.onclick = async () => {
                     if (importBtn.dataset.busy) return;
