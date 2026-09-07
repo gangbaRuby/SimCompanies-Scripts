@@ -1,26 +1,37 @@
 // ======================
-// 聊天室全局屏蔽（v2.1：数据层按 sender.id 过滤 + 消息组屏蔽按钮 + DOM 兜底隐藏）
+// 聊天室全局屏蔽（v2.2：WS 实时过滤 + DOM 占位隐藏，不修改 HTTP 响应）
 // ----------------------
 // 屏蔽名单：SC_ChatBlock_List（全局键，backup:true）→ [{ id, name, realmId }]；
 //   id 为游戏内公司唯一 id（sender.id，跨领域唯一，来自网络数据），匹配以 id 为准。
-// 数据层拦截（v2.1）：拦截 /api/v2/chatroom/<room>/ 与 .../from-id/<id>/ 的 GET 响应
-//   （window.fetch + XMLHttpRequest 双钩子，沿用 requestHooks/marketInterceptor 模式）：
-//   - 登记 (realmId, 公司名) → sender.id（DOM 没有 id，只能靠数据层登记表解析）；
-//   - 功能开启时在响应交给 React/Redux 前直接滤掉命中 id 的消息 →
-//     React 完全不渲染（历史/最新加载都不出现被屏蔽者）。
+//
+// 为什么不改 HTTP 响应：
+//   bundle :299934 fullHistory = r.length < 30 —— 游戏按"返回条数 < 30"判断历史已到底。
+//   若过滤掉被屏蔽消息把条数改少，会导致历史加载提前停止（曾复现"历史不能正常加载"）。
+//   因此 /api/v2/chatroom/<room>/ 与 from-id 的 GET 响应一律不改，仅登记 sender 用于解析 id。
+//
+// 实时消息（WebSocket）：
+//   帧样例：{routing:"NEW_MESSAGE"|"UPDATE_MESSAGE", data:{...sender:{id},...}}，
+//           {routing:"GROUP", messages:[{routing:..., data:...}, ...]}。
+//   拦截 WS 的 onmessage（属性赋值方式，bundle :70544-70567），命中名单 sender.id 的
+//   消息/组内消息直接丢弃，不让其进入 React 状态 → 实时消息完全不渲染。
+//
+// 已渲染/缓存/历史中被屏蔽消息：不做 remove()、不用 display:none（会破坏历史加载触发），
+//   改为加 .sc-chatblock-hidden = visibility:hidden（保留布局占位），
+//   在 MutationObserver 微任务里同帧执行，避免"先看到再隐藏"的闪现。
+//   代价：被屏蔽者的历史消息在滚动时会以不可见的空白占位存在（状态里仍有该消息，无法删除）。
+//
 // 消息组 DOM：聊天容器直接子级（div.css-mnxdu9 等），同发送者连续消息为一组；
 //   发送者 = 组的"直接子级"公司链接（头像区），正文里的 @提及/引用链接不算发送者。
-// 屏蔽按钮：注入到组内回复按钮（svg[data-icon="reply"]）之后；点击时经登记表解析
-//   sender.id，按 id 加入名单并立即隐藏该组。
-// DOM 兜底隐藏：已渲染/实时（WS 尚未拦截）消息中命中 id 的组加 .sc-chatblock-hidden
-//   （display:none !important，保留节点避免 React insertBefore 锚点失效）。
+// 屏蔽按钮：注入到组内回复按钮（svg[data-icon="reply"]）之后；点击经登记表解析
+//   sender.id，按 id 加入名单并立即占位隐藏该组。
 // v1 遗留：旧键 SC_ChatBlock_Names（字符串名单）不再读写，用户自行清空。
 //
 // 未来失效检查点（对照 bundle index-CcG5yGSH.js）：
 //   - 端点路径变化 → :38472-38473（api_chatroom / api_chatroom_from_id）
 //   - 消息字段改名 → :71291-71301（MESSAGES_LOADED 消费 sender.id / sender.company）
-//   - WS 实时通道（尚未拦截）→ :71105-71195（NEW_MESSAGE/UPDATE_MESSAGE/GROUP）、
-//     WS 客户端 :70544-70567（onmessage 属性赋值方式）
+//   - fullHistory 判定 → :299934（r.length < 30；若改为服务端字段，可考虑恢复 HTTP 过滤）
+//   - WS 事件结构 → :71105-71195（NEW_MESSAGE/UPDATE_MESSAGE/GROUP/RESYNC_AFTER_RECONNECT）、
+//     WS 客户端 :70544-70567（onmessage 属性赋值方式；若改 addEventListener 需同步）
 //   - 聊天 DOM：容器 :290732-290737（css-xo2rg1/e1llepen2）、消息组/按钮结构 :291485-291551
 // ======================
 import { registerExportInfo } from '../core/exportInfo.js';
@@ -32,9 +43,10 @@ import { registerExportInfo } from '../core/exportInfo.js';
     const STORAGE_KEY = 'SC_ChatBlock_List';
     // /api/v2/chatroom/<room>/ 或 /api/v2/chatroom/<room>/from-id/<id>/（GET）
     const CHATROOM_URL_RE = /\/api\/v2\/chatroom\/[^/?#]+(\/from-id\/\d+)?\/?(\?|$)/;
-    const COMPANY_HREF_MARK = '/company/';
     const HIDDEN_CLASS = 'sc-chatblock-hidden';
     const BTN_CLASS = 'sc-chat-block-btn';
+    const CHAT_CONTAINER_SEL = 'div.css-xo2rg1.e1llepen2';
+    const CHAT_CONTAINER_SEL_ALL = 'div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]';
 
     registerExportInfo({
         name: '聊天室全局屏蔽名单',
@@ -44,12 +56,14 @@ import { registerExportInfo } from '../core/exportInfo.js';
     });
 
     let observer = null;
+    let bodyObserver = null;
     let scanScheduled = false;
     let containerWatchTimer = null;
     let initAttempts = 0;
     let styleInjected = false;
     let blockedCache = null;
-    // (realmId|normalizeCompany) -> { id, name, realmId }，由数据层登记
+    let observedContainers = new WeakSet();
+    // (realmId|normalizeCompany) -> { id, name, realmId }，由 HTTP/WS 数据登记
     const senderIndex = new Map();
 
     // ---------- 开关与名单存储 ----------
@@ -90,7 +104,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         return String(realmId == null ? '?' : realmId) + '|' + normalizeName(company);
     }
 
-    // ---------- 数据层：登记 + 过滤 ----------
+    // ---------- 数据登记（不改动任何响应/帧的内容） ----------
     function indexSender(sender) {
         if (sender && typeof sender.id === 'number' && sender.company) {
             senderIndex.set(entryKey(sender.realmId, sender.company), {
@@ -100,28 +114,15 @@ import { registerExportInfo } from '../core/exportInfo.js';
             });
         }
     }
-    // 返回 true 表示数组被改动（有消息被滤掉）
-    function indexAndFilter(arr) {
-        if (!Array.isArray(arr)) return false;
-        for (const m of arr) {
-            if (m && m.sender) indexSender(m.sender);
-        }
-        if (!isEnabled()) return false;
-        const ids = blockedIds();
-        if (ids.size === 0) return false;
-        let changed = false;
-        for (let i = arr.length - 1; i >= 0; i--) {
-            const m = arr[i];
-            const sid = m && m.sender && m.sender.id;
-            if (typeof sid === 'number' && ids.has(sid)) {
-                arr.splice(i, 1);
-                changed = true;
-            }
-        }
-        return changed;
+    function indexMessage(m) {
+        if (m && m.sender) indexSender(m.sender);
+    }
+    function isBlockedSender(m) {
+        const sid = m && m.sender && m.sender.id;
+        return typeof sid === 'number' && blockedIds().has(sid);
     }
 
-    // fetch 钩子
+    // ---------- HTTP 钩子：仅登记 sender，绝不改响应（fullHistory=r.length<30 限制） ----------
     const origFetch = window.fetch;
     window.fetch = async function (...args) {
         const res = await origFetch.apply(this, args);
@@ -129,35 +130,31 @@ import { registerExportInfo } from '../core/exportInfo.js';
             if (!res || !res.ok) return res;
             const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
             if (!CHATROOM_URL_RE.test(url)) return res;
-            const method = ((args[1] && args[1].method) || 'GET').toUpperCase();
-            if (method !== 'GET') return res;
             const text = await res.clone().text();
             if (!text) return res;
             const arr = JSON.parse(text);
-            if (!indexAndFilter(arr)) return res;
-            const headers = new Headers(res.headers);
-            headers.delete('content-length');
-            return new Response(JSON.stringify(arr), { status: res.status, statusText: res.statusText, headers });
-        } catch (e) {
-            return res;
-        }
+            if (Array.isArray(arr)) {
+                for (const m of arr) indexMessage(m);
+            }
+        } catch (e) { /* 忽略 */ }
+        return res;
     };
 
-    // XHR 钩子（axios 默认走 XHR）：在实例上覆盖 responseText/response 读取器，
-    // 仅在命中聊天室 GET 且 readyState=4 时返回过滤后的文本。
     const prevOpen = XMLHttpRequest.prototype.open;
     const prevSend = XMLHttpRequest.prototype.send;
     const protoResponseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
     const protoResponseDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
 
-    function filteredGetter(origGet) {
+    function indexOnlyGetter(origGet) {
         return function () {
             const raw = origGet ? origGet.call(this) : undefined;
             if (this.readyState === 4 && typeof raw === 'string' && raw) {
                 try {
                     const arr = JSON.parse(raw);
-                    if (indexAndFilter(arr)) return JSON.stringify(arr);
-                } catch (e) { /* 非 JSON 原样返回 */ }
+                    if (Array.isArray(arr)) {
+                        for (const m of arr) indexMessage(m);
+                    }
+                } catch (e) { /* 忽略 */ }
             }
             return raw;
         };
@@ -174,7 +171,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 if (protoResponseTextDesc) {
                     Object.defineProperty(self, 'responseText', {
                         configurable: true,
-                        get: filteredGetter(protoResponseTextDesc.get)
+                        get: indexOnlyGetter(protoResponseTextDesc.get)
                     });
                 }
             } catch (e) { /* 忽略 */ }
@@ -182,13 +179,82 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 if (protoResponseDesc) {
                     Object.defineProperty(self, 'response', {
                         configurable: true,
-                        get: filteredGetter(protoResponseDesc.get)
+                        get: indexOnlyGetter(protoResponseDesc.get)
                     });
                 }
             } catch (e) { /* 忽略 */ }
         }
         return prevSend.apply(this, arguments);
     };
+
+    // ---------- WebSocket 钩子：实时消息按名单过滤，不让其进入状态 ----------
+    function filterWsFrame(frame) {
+        if (!frame || typeof frame !== 'object') return { keep: true, data: null };
+        if (frame.routing === 'NEW_MESSAGE' || frame.routing === 'UPDATE_MESSAGE') {
+            if (frame.data) {
+                indexMessage(frame.data);
+                if (isBlockedSender(frame.data)) return { keep: false, data: null };
+            }
+            return { keep: true, data: null };
+        }
+        if (frame.routing === 'GROUP' && Array.isArray(frame.messages)) {
+            let changed = false;
+            const kept = [];
+            for (const sub of frame.messages) {
+                const r = filterWsFrame(sub);
+                if (!r.keep) { changed = true; continue; }
+                if (r.data) { kept.push(r.data); changed = true; }
+                else kept.push(sub);
+            }
+            if (changed) {
+                if (kept.length === 0) return { keep: false, data: null };
+                return { keep: true, data: { ...frame, messages: kept } };
+            }
+            return { keep: true, data: null };
+        }
+        return { keep: true, data: null };
+    }
+
+    function patchWsOnMessage(ws) {
+        let userHandler = null;
+        const protoDesc = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'onmessage');
+        const nativeSet = protoDesc && protoDesc.set;
+        if (!nativeSet) return;
+        const wrapper = (ev) => {
+            let out = ev;
+            if (typeof ev.data === 'string') {
+                try {
+                    const frame = JSON.parse(ev.data);
+                    const r = filterWsFrame(frame);
+                    if (!r.keep) return; // 丢弃整帧
+                    if (r.data) out = new MessageEvent('message', { data: JSON.stringify(r.data) });
+                } catch (e) { /* 原样放行 */ }
+            }
+            if (userHandler) userHandler.call(ws, out);
+        };
+        Object.defineProperty(ws, 'onmessage', {
+            configurable: true,
+            enumerable: true,
+            get() { return userHandler; },
+            set(fn) {
+                userHandler = fn;
+                try { nativeSet.call(ws, wrapper); } catch (e) { /* 忽略 */ }
+            }
+        });
+    }
+
+    const NativeWebSocket = window.WebSocket;
+    if (typeof NativeWebSocket === 'function') {
+        try {
+            window.WebSocket = new Proxy(NativeWebSocket, {
+                construct(target, args) {
+                    const ws = new target(...args);
+                    try { patchWsOnMessage(ws); } catch (e) { /* 忽略 */ }
+                    return ws;
+                }
+            });
+        } catch (e) { /* 忽略：不支持则退化为 DOM 兜底 */ }
+    }
 
     // ---------- 供设置面板/按钮调用 ----------
     window.scChatBlockList = () => readList();
@@ -213,7 +279,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         invalidateCache();
         return { ok: true };
     };
-    // 开关切换/名单变更后调用：开启→立即扫描隐藏+补按钮；关闭→清理按钮并解除隐藏
+    // 开关切换/名单变更后调用：开启→立即扫描占位隐藏+补按钮；关闭→清理
     window.scChatBlockRefresh = () => {
         initAttempts = 0;
         init();
@@ -223,21 +289,20 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
     // ---------- 聊天容器与消息组解析 ----------
     function findChatContainers() {
-        const byClass = document.querySelectorAll('div.css-xo2rg1.e1llepen2');
+        const byClass = document.querySelectorAll(CHAT_CONTAINER_SEL);
         if (byClass.length > 0) return byClass;
         return document.querySelectorAll('div[style*="column-reverse"][style*="overflow"]');
     }
     function isChatContainer(el) {
         if (!el || el.nodeType !== 1 || !el.matches) return false;
-        return el.matches('div.css-xo2rg1.e1llepen2') ||
+        return el.matches(CHAT_CONTAINER_SEL) ||
             el.matches('div[style*="column-reverse"][style*="overflow"]');
     }
-    // 发送者链接 = 组的"直接子级"公司链接（头像区）；正文里的 @提及不算
     function senderCompanyLink(row) {
         if (!row || !row.children) return null;
         for (let i = 0; i < row.children.length; i++) {
             const ch = row.children[i];
-            if (ch.tagName === 'A' && (ch.getAttribute('href') || '').includes(COMPANY_HREF_MARK)) return ch;
+            if (ch.tagName === 'A' && (ch.getAttribute('href') || '').includes('/company/')) return ch;
         }
         return null;
     }
@@ -246,7 +311,6 @@ import { registerExportInfo } from '../core/exportInfo.js';
         const m = href.match(/\/company\/(\d+)\/([^/?#]+)/);
         return m ? { realmId: Number(m[1]), name: m[2] } : null;
     }
-    // 解析消息组发送者：优先登记表；回退按屏蔽名单（realm+名称）解析（WS/未登记场景）
     function resolveSender(row) {
         const link = senderCompanyLink(row);
         if (!link) return null;
@@ -262,10 +326,6 @@ import { registerExportInfo } from '../core/exportInfo.js';
         }
         return null;
     }
-    function isBlockedRow(row) {
-        const info = resolveSender(row);
-        return !!(info && typeof info.id === 'number' && blockedIds().has(info.id));
-    }
     function findReplyButton(row) {
         const icons = row.querySelectorAll('button svg[data-icon="reply"]');
         for (const ic of icons) {
@@ -275,12 +335,14 @@ import { registerExportInfo } from '../core/exportInfo.js';
         return null;
     }
 
-    // ---------- DOM 兜底隐藏 + 屏蔽按钮注入 ----------
+    // ---------- DOM 兜底：占位隐藏 + 屏蔽按钮注入 ----------
     function injectStyles() {
         if (styleInjected) return;
         styleInjected = true;
         const style = document.createElement('style');
-        style.textContent = `.${HIDDEN_CLASS}{display:none !important;}`;
+        // visibility:hidden 保留布局：不破坏历史加载触发/滚动，也不触发 React 锚点问题；
+        // 不用 display:none（会让"加载历史"的顶部触发元素失去可观察性）。
+        style.textContent = `.${HIDDEN_CLASS}{visibility:hidden !important;}`;
         document.head.appendChild(style);
     }
 
@@ -321,6 +383,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
     function processContainer(container) {
         if (!isEnabled()) return;
+        ensureObserved(container);
         const rows = container.querySelectorAll(':scope > div');
         for (const row of rows) {
             if (row.classList.contains(HIDDEN_CLASS)) continue;
@@ -331,35 +394,20 @@ import { registerExportInfo } from '../core/exportInfo.js';
             injectBlockButton(row);
         }
     }
+    function isBlockedRow(row) {
+        const info = resolveSender(row);
+        return !!(info && typeof info.id === 'number' && blockedIds().has(info.id));
+    }
     function scanAll() {
         if (!isEnabled()) return;
         findChatContainers().forEach(c => processContainer(c));
     }
-    // 关闭功能时：移除注入按钮，并解除已隐藏消息（再开启时 scanAll 会重新隐藏）
     function cleanupUI() {
         document.querySelectorAll(`.${BTN_CLASS}`).forEach(b => b.remove());
         document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach(el => el.classList.remove(HIDDEN_CLASS));
     }
 
-    // ---------- 生命周期 ----------
-    function init() {
-        if (observer) { observer.disconnect(); observer = null; }
-        injectStyles();
-        const containers = findChatContainers();
-        if (containers.length === 0) {
-            if (initAttempts < 8) {
-                initAttempts++;
-                containerWatchTimer = setTimeout(init, 1000);
-            }
-            return;
-        }
-        initAttempts = 0;
-        if (isEnabled()) scanAll();
-        observer = new MutationObserver(scheduleScan);
-        containers.forEach(c => observer.observe(c, { childList: true, subtree: true }));
-    }
-    // MutationObserver 触发后立即重扫：用微任务在浏览器绘制前隐藏，
-    // 避免"先看到被屏蔽消息再隐藏"的闪现（房间切换常从游戏内存缓存重绘，无 HTTP 可拦）
+    // MutationObserver 触发后立即重扫：微任务在浏览器绘制前执行，避免"先看到再隐藏"闪现
     const enqueueMicro = typeof queueMicrotask === 'function' ? queueMicrotask : (fn) => setTimeout(fn, 0);
     function scheduleScan() {
         if (!isEnabled()) return;
@@ -369,6 +417,55 @@ import { registerExportInfo } from '../core/exportInfo.js';
             scanScheduled = false;
             scanAll();
         });
+    }
+
+    function ensureObserved(container) {
+        if (!observer || observedContainers.has(container)) return;
+        observedContainers.add(container);
+        observer.observe(container, { childList: true, subtree: true });
+    }
+    function ensureBodyObserver() {
+        if (bodyObserver) return;
+        bodyObserver = new MutationObserver((muts) => {
+            if (!isEnabled()) return;
+            for (const m of muts) {
+                for (const n of m.addedNodes) {
+                    if (n.nodeType !== 1) continue;
+                    if (n.matches && n.matches(CHAT_CONTAINER_SEL_ALL)) { scheduleScan(); return; }
+                    if (n.closest && n.closest(CHAT_CONTAINER_SEL_ALL)) { scheduleScan(); return; }
+                }
+            }
+        });
+        // 容器元素可能被 React 整体重建，观察 body 以尽快覆盖新容器
+        bodyObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    function detachBodyObserver() {
+        if (bodyObserver) { bodyObserver.disconnect(); bodyObserver = null; }
+    }
+
+    // ---------- 生命周期 ----------
+    function init() {
+        if (observer) { observer.disconnect(); observer = null; }
+        observedContainers = new WeakSet();
+        injectStyles();
+        const containers = findChatContainers();
+        if (containers.length === 0) {
+            detachBodyObserver();
+            if (initAttempts < 8) {
+                initAttempts++;
+                containerWatchTimer = setTimeout(init, 1000);
+            }
+            return;
+        }
+        initAttempts = 0;
+        observer = new MutationObserver(scheduleScan);
+        containers.forEach(c => ensureObserved(c));
+        if (isEnabled()) {
+            scanAll();
+            ensureBodyObserver();
+        } else {
+            detachBodyObserver();
+        }
     }
 
     // SPA 路由变化监听
