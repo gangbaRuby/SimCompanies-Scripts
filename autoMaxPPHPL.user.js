@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.7
+// @version      1.33.8
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -4734,7 +4734,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.7",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.8",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -9414,6 +9414,646 @@
     return { init: init2, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
   })();
 
+  // src/features/chatMessageBlocker.js
+  (function() {
+    "use strict";
+    const MODULE_KEY = "chatBlock";
+    const STORAGE_KEY = "SC_ChatBlock_List";
+    const CHATROOM_URL_RE = /\/api\/v2\/chatroom\/[^/?#]+(\/from-id\/\d+)?\/?(\?|$)/;
+    const HIDDEN_CLASS = "sc-chatblock-hidden";
+    const BTN_CLASS = "sc-chat-block-btn";
+    const QUICK_CLASS = "sc-chat-block-quick";
+    const CSS_ID = "sc-chatblock-css";
+    const CHAT_CONTAINER_SEL = "div.css-xo2rg1.e1llepen2";
+    const CHAT_CONTAINER_SEL_ALL = 'div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]';
+    registerExportInfo({
+      name: "\u804A\u5929\u5BA4\u5168\u5C40\u5C4F\u853D\u540D\u5355",
+      scope: "global",
+      backup: true,
+      keys: [STORAGE_KEY]
+    });
+    let observer = null;
+    let bodyObserver = null;
+    let scanScheduled = false;
+    let containerWatchTimer = null;
+    let initAttempts = 0;
+    let cssReady = false;
+    let paused = false;
+    let blockedCache = null;
+    let observedContainers = /* @__PURE__ */ new WeakSet();
+    const senderIndex = /* @__PURE__ */ new Map();
+    function isEnabled() {
+      try {
+        const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+        return cfg[MODULE_KEY] === true;
+      } catch (e) {
+        return false;
+      }
+    }
+    function isBlockingActive() {
+      return isEnabled() && !paused;
+    }
+    function readList() {
+      try {
+        const arr = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    function writeList(arr) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    }
+    function blockedIds() {
+      if (!blockedCache) {
+        blockedCache = new Set(readList().map((e) => Number(e && e.id)).filter((n) => Number.isFinite(n)));
+      }
+      return blockedCache;
+    }
+    function invalidateCache() {
+      blockedCache = null;
+      syncCss();
+    }
+    function normalizeName(raw) {
+      let s = String(raw == null ? "" : raw).trim().toLowerCase();
+      try {
+        s = decodeURIComponent(s);
+      } catch (e) {
+      }
+      return s.replace(/[^a-z0-9\u4e00-\u9fff]/g, "");
+    }
+    function entryKey(realmId, company) {
+      return String(realmId == null ? "?" : realmId) + "|" + normalizeName(company);
+    }
+    const HIDE_BASE = `.${HIDDEN_CLASS}{visibility:hidden !important;height:0 !important;min-height:0 !important;max-height:0 !important;padding-top:0 !important;padding-bottom:0 !important;margin-top:0 !important;margin-bottom:0 !important;border-width:0 !important;overflow:hidden !important;}`;
+    function cssEscapeStr(s) {
+      return String(s).replace(/["\\]/g, (m) => "\\" + m);
+    }
+    function syncCss() {
+      let el = document.getElementById(CSS_ID);
+      if (!el) {
+        el = document.createElement("style");
+        el.id = CSS_ID;
+        document.head.appendChild(el);
+      }
+      let css = HIDE_BASE;
+      if (isEnabled() && !paused) {
+        for (const e of readList()) {
+          if (typeof e.realmId === "number" && e.slug) {
+            const hrefPart = "/company/" + e.realmId + "/" + e.slug + "/";
+            const rule = `visibility:hidden !important;height:0 !important;min-height:0 !important;max-height:0 !important;padding-top:0 !important;padding-bottom:0 !important;margin-top:0 !important;margin-bottom:0 !important;border-width:0 !important;overflow:hidden !important;`;
+            css += `div.css-xo2rg1.e1llepen2 div:has(> a[href*="${cssEscapeStr(hrefPart)}"]){${rule}}`;
+            css += `div[style*="column-reverse"][style*="overflow"] div:has(> a[href*="${cssEscapeStr(hrefPart)}"]){${rule}}`;
+          }
+        }
+      }
+      el.textContent = css;
+      cssReady = true;
+    }
+    function ensureCss() {
+      if (!cssReady || !document.getElementById(CSS_ID)) syncCss();
+      else syncCss();
+    }
+    function indexSender(sender) {
+      if (sender && typeof sender.id === "number" && sender.company) {
+        senderIndex.set(entryKey(sender.realmId, sender.company), {
+          id: sender.id,
+          name: sender.company,
+          realmId: sender.realmId
+        });
+        updateBlockedEntryFromSender(sender);
+      }
+    }
+    function updateBlockedEntryFromSender(sender) {
+      if (!sender || typeof sender.id !== "number") return;
+      if (!blockedIds().has(sender.id)) return;
+      let changed = false;
+      const list = readList();
+      for (const e of list) {
+        if (Number(e.id) === sender.id) {
+          if (sender.company && String(e.name || "") !== String(sender.company)) {
+            e.name = sender.company;
+            changed = true;
+          }
+          if (sender.realmId != null && Number(e.realmId) !== Number(sender.realmId)) {
+            e.realmId = Number(sender.realmId);
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        writeList(list);
+        invalidateCache();
+      }
+    }
+    function rememberRowSlug(row, info) {
+      if (!row || !info || typeof info.id !== "number") return;
+      const link = senderCompanyLink(row);
+      if (!link) return;
+      const p = parseCompanyHref(link);
+      if (!p) return;
+      let changed = false;
+      const list = readList();
+      for (const e of list) {
+        if (Number(e.id) === info.id && (!e.slug || e.slug !== p.slug)) {
+          e.slug = p.slug;
+          changed = true;
+        }
+      }
+      if (changed) {
+        writeList(list);
+        invalidateCache();
+      }
+    }
+    function indexMessage(m) {
+      if (m && m.sender) indexSender(m.sender);
+    }
+    function isBlockedSender(m) {
+      const sid = m && m.sender && m.sender.id;
+      return typeof sid === "number" && blockedIds().has(sid);
+    }
+    const origFetch = window.fetch;
+    window.fetch = async function(...args) {
+      const res = await origFetch.apply(this, args);
+      try {
+        if (!res || !res.ok) return res;
+        const url = typeof args[0] === "string" ? args[0] : args[0] && args[0].url || "";
+        if (!CHATROOM_URL_RE.test(url)) return res;
+        const text = await res.clone().text();
+        if (!text) return res;
+        const arr = JSON.parse(text);
+        if (Array.isArray(arr)) {
+          for (const m of arr) indexMessage(m);
+        }
+      } catch (e) {
+      }
+      return res;
+    };
+    const prevOpen = XMLHttpRequest.prototype.open;
+    const prevSend = XMLHttpRequest.prototype.send;
+    const protoResponseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "responseText");
+    const protoResponseDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "response");
+    function indexOnlyGetter(origGet) {
+      return function() {
+        const raw = origGet ? origGet.call(this) : void 0;
+        if (this.readyState === 4 && typeof raw === "string" && raw) {
+          try {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              for (const m of arr) indexMessage(m);
+            }
+          } catch (e) {
+          }
+        }
+        return raw;
+      };
+    }
+    XMLHttpRequest.prototype.open = function(method, url) {
+      this.__scChatroomGet = String(method || "").toUpperCase() === "GET" && CHATROOM_URL_RE.test(String(url));
+      return prevOpen.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function() {
+      const self = this;
+      if (self.__scChatroomGet) {
+        try {
+          if (protoResponseTextDesc) {
+            Object.defineProperty(self, "responseText", {
+              configurable: true,
+              get: indexOnlyGetter(protoResponseTextDesc.get)
+            });
+          }
+        } catch (e) {
+        }
+        try {
+          if (protoResponseDesc) {
+            Object.defineProperty(self, "response", {
+              configurable: true,
+              get: indexOnlyGetter(protoResponseDesc.get)
+            });
+          }
+        } catch (e) {
+        }
+      }
+      return prevSend.apply(this, arguments);
+    };
+    function filterWsFrame(frame) {
+      if (!frame || typeof frame !== "object") return { keep: true, data: null };
+      if (frame.routing === "NEW_MESSAGE" || frame.routing === "UPDATE_MESSAGE") {
+        if (frame.data) {
+          indexMessage(frame.data);
+          if (isBlockingActive() && isBlockedSender(frame.data)) return { keep: false, data: null };
+        }
+        return { keep: true, data: null };
+      }
+      if (frame.routing === "GROUP" && Array.isArray(frame.messages)) {
+        let changed = false;
+        const kept = [];
+        for (const sub of frame.messages) {
+          const r = filterWsFrame(sub);
+          if (!r.keep) {
+            changed = true;
+            continue;
+          }
+          if (r.data) {
+            kept.push(r.data);
+            changed = true;
+          } else kept.push(sub);
+        }
+        if (changed) {
+          if (kept.length === 0) return { keep: false, data: null };
+          return { keep: true, data: { ...frame, messages: kept } };
+        }
+        return { keep: true, data: null };
+      }
+      return { keep: true, data: null };
+    }
+    function patchWsOnMessage(ws) {
+      let userHandler = null;
+      const protoDesc = Object.getOwnPropertyDescriptor(WebSocket.prototype, "onmessage");
+      const nativeSet = protoDesc && protoDesc.set;
+      if (!nativeSet) return;
+      const wrapper = (ev) => {
+        let out = ev;
+        if (typeof ev.data === "string") {
+          try {
+            const frame = JSON.parse(ev.data);
+            const r = filterWsFrame(frame);
+            if (!r.keep) return;
+            if (r.data) out = new MessageEvent("message", { data: JSON.stringify(r.data) });
+          } catch (e) {
+          }
+        }
+        if (userHandler) userHandler.call(ws, out);
+      };
+      Object.defineProperty(ws, "onmessage", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return userHandler;
+        },
+        set(fn) {
+          userHandler = fn;
+          try {
+            nativeSet.call(ws, wrapper);
+          } catch (e) {
+          }
+        }
+      });
+    }
+    const NativeWebSocket = window.WebSocket;
+    if (typeof NativeWebSocket === "function") {
+      try {
+        window.WebSocket = new Proxy(NativeWebSocket, {
+          construct(target, args) {
+            const ws = new target(...args);
+            try {
+              patchWsOnMessage(ws);
+            } catch (e) {
+            }
+            return ws;
+          }
+        });
+      } catch (e) {
+      }
+    }
+    window.scChatBlockList = () => readList();
+    window.scChatBlockAddById = (entry) => {
+      const id = Number(entry && entry.id);
+      if (!Number.isFinite(id)) return { ok: false, reason: "invalid" };
+      const name = String(entry && entry.name || "").trim() || `#${id}`;
+      const list = readList();
+      if (list.some((e) => Number(e.id) === id)) return { ok: false, reason: "duplicate" };
+      list.push({
+        id,
+        name,
+        realmId: entry && entry.realmId != null ? Number(entry.realmId) : null,
+        slug: entry && entry.slug ? String(entry.slug) : void 0
+      });
+      writeList(list);
+      invalidateCache();
+      return { ok: true, id, name };
+    };
+    window.scChatBlockRemoveById = (id) => {
+      const n = Number(id);
+      writeList(readList().filter((e) => Number(e.id) !== n));
+      invalidateCache();
+      return { ok: true };
+    };
+    window.scChatBlockRefresh = () => {
+      initAttempts = 0;
+      syncCss();
+      init2();
+      if (isEnabled()) scanAll();
+      else cleanupUI();
+    };
+    window.scChatBlockImportFromGame = async () => {
+      let ids;
+      try {
+        const resp = await fetch("/api/v2/contacts/", { credentials: "same-origin" });
+        if (!resp.ok) return { ok: false, error: "HTTP " + resp.status };
+        const data2 = await resp.json();
+        ids = Array.isArray(data2 && data2.ignoringCompanies) ? data2.ignoringCompanies : [];
+      } catch (e) {
+        return { ok: false, error: e && e.message ? e.message : String(e) };
+      }
+      let added = 0;
+      let duplicate = 0;
+      const list = readList();
+      for (const raw of ids) {
+        const id = Number(raw);
+        if (!Number.isFinite(id)) continue;
+        if (list.some((e) => Number(e.id) === id)) {
+          duplicate++;
+          continue;
+        }
+        list.push({ id, name: "" });
+        added++;
+      }
+      if (added > 0) {
+        writeList(list);
+        invalidateCache();
+      }
+      return { ok: true, added, duplicate };
+    };
+    function findChatContainers() {
+      const byClass = document.querySelectorAll(CHAT_CONTAINER_SEL);
+      if (byClass.length > 0) return byClass;
+      return document.querySelectorAll('div[style*="column-reverse"][style*="overflow"]');
+    }
+    function isChatContainer(el) {
+      if (!el || el.nodeType !== 1 || !el.matches) return false;
+      return el.matches(CHAT_CONTAINER_SEL) || el.matches('div[style*="column-reverse"][style*="overflow"]');
+    }
+    function senderCompanyLink(row) {
+      if (!row || !row.children) return null;
+      for (let i = 0; i < row.children.length; i++) {
+        const ch = row.children[i];
+        if (ch.tagName === "A" && (ch.getAttribute("href") || "").includes("/company/")) return ch;
+      }
+      return null;
+    }
+    function parseCompanyHref(a) {
+      const href = a.getAttribute("href") || "";
+      const m = href.match(/\/company\/(\d+)\/([^/?#]+)/);
+      return m ? { realmId: Number(m[1]), slug: m[2] } : null;
+    }
+    function resolveSender(row) {
+      const link = senderCompanyLink(row);
+      if (!link) return null;
+      const p = parseCompanyHref(link);
+      if (!p) return null;
+      const idxInfo = senderIndex.get(entryKey(p.realmId, p.slug));
+      if (idxInfo) return idxInfo;
+      const slugNorm = normalizeName(p.slug);
+      for (const e of readList()) {
+        if (typeof e.id === "number" && Number(e.realmId) === p.realmId && normalizeName(e.name || e.slug) === slugNorm) {
+          return { id: e.id, name: e.name || e.slug, realmId: p.realmId, slug: e.slug || p.slug };
+        }
+      }
+      return null;
+    }
+    function findReplyButton(row) {
+      const icons = row.querySelectorAll('button svg[data-icon="reply"]');
+      for (const ic of icons) {
+        const btn = ic.closest("button");
+        if (btn) return btn;
+      }
+      return null;
+    }
+    function injectBlockButton(row) {
+      if (row.classList.contains(HIDDEN_CLASS)) return;
+      if (row.querySelector(`.${BTN_CLASS}`)) return;
+      const link = senderCompanyLink(row);
+      if (!link) return;
+      const cur = resolveSender(row);
+      if (!cur || typeof cur.id !== "number") return;
+      const replyBtn = findReplyButton(row);
+      if (!replyBtn) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = BTN_CLASS;
+      btn.title = "\u5C4F\u853D\u6B64\u4EBA\u6D88\u606F";
+      btn.setAttribute("aria-label", "\u5C4F\u853D\u6B64\u4EBA");
+      btn.style.cssText = "background:none;border:none;cursor:pointer;padding:0 4px;line-height:1;display:inline-flex;align-items:center;color:inherit;";
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
+      const doBlock = (rowInfo) => {
+        const p = parseCompanyHref(link);
+        const res = window.scChatBlockAddById ? window.scChatBlockAddById({ id: rowInfo.id, name: rowInfo.name, realmId: p ? p.realmId : rowInfo.realmId, slug: p ? p.slug : void 0 }) : { ok: false };
+        if (res && (res.ok || res.reason === "duplicate")) {
+          if (!paused) row.classList.add(HIDDEN_CLASS);
+          window.scChatBlockRefresh && window.scChatBlockRefresh();
+        }
+      };
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        const rowInfo = resolveSender(row);
+        if (!rowInfo || typeof rowInfo.id !== "number") {
+          btn.style.opacity = "0.35";
+          setTimeout(() => {
+            btn.style.opacity = "1";
+          }, 1200);
+          return;
+        }
+        const existing = row.querySelector(".sc-chat-block-confirm");
+        if (existing) {
+          existing.remove();
+          doBlock(rowInfo);
+          return;
+        }
+        document.querySelectorAll(".sc-chat-block-confirm").forEach((c) => c.remove());
+        const chip = document.createElement("span");
+        chip.className = "sc-chat-block-confirm";
+        chip.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin-left:2px;font-size:11px;line-height:1;color:inherit;white-space:nowrap;";
+        const label = document.createElement("span");
+        label.textContent = `\u5C4F\u853D\u201C${rowInfo.name}\u201D?`;
+        label.style.cssText = "opacity:.85;";
+        const okBtn = document.createElement("button");
+        okBtn.type = "button";
+        okBtn.textContent = "\u2713";
+        okBtn.title = "\u786E\u8BA4\u5C4F\u853D";
+        okBtn.setAttribute("aria-label", "\u786E\u8BA4\u5C4F\u853D");
+        okBtn.style.cssText = "background:none;border:1px solid currentColor;border-radius:3px;cursor:pointer;font-size:10px;line-height:1;padding:1px 4px;color:#4CAF50;";
+        const noBtn = document.createElement("button");
+        noBtn.type = "button";
+        noBtn.textContent = "\u2715";
+        noBtn.title = "\u53D6\u6D88";
+        noBtn.setAttribute("aria-label", "\u53D6\u6D88\u5C4F\u853D");
+        noBtn.style.cssText = "background:none;border:1px solid currentColor;border-radius:3px;cursor:pointer;font-size:10px;line-height:1;padding:1px 4px;color:inherit;opacity:.7;";
+        okBtn.onclick = (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          chip.remove();
+          doBlock(rowInfo);
+        };
+        noBtn.onclick = (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          chip.remove();
+        };
+        chip.append(label, okBtn, noBtn);
+        btn.insertAdjacentElement("afterend", chip);
+        setTimeout(() => chip.remove(), 6e3);
+      });
+      replyBtn.insertAdjacentElement("afterend", btn);
+    }
+    function processContainer(container) {
+      if (!isEnabled()) return;
+      const active = isBlockingActive();
+      ensureObserved(container);
+      const rows = container.querySelectorAll(":scope > div");
+      for (const row of rows) {
+        if (row.classList.contains(HIDDEN_CLASS)) continue;
+        const info = resolveSender(row);
+        if (info && typeof info.id === "number" && blockedIds().has(info.id)) {
+          if (!active) continue;
+          row.classList.add(HIDDEN_CLASS);
+          rememberRowSlug(row, info);
+          continue;
+        }
+        injectBlockButton(row);
+      }
+    }
+    function scanAll() {
+      if (!isEnabled()) return;
+      findChatContainers().forEach((c) => processContainer(c));
+      updateQuickButtons();
+    }
+    function cleanupUI() {
+      paused = false;
+      document.querySelectorAll(`.${BTN_CLASS}`).forEach((b) => b.remove());
+      document.querySelectorAll(".sc-chat-block-confirm").forEach((c) => c.remove());
+      document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((el) => el.classList.remove(HIDDEN_CLASS));
+      syncCss();
+      updateQuickButtons();
+    }
+    function chatRoomHeaders() {
+      return Array.from(document.querySelectorAll("div.well-header.text-uppercase"));
+    }
+    function insertBeforeTitle(header, btn) {
+      let ref = header.firstChild;
+      while (ref) {
+        if (ref.nodeType === 3) {
+          if (ref.textContent && ref.textContent.trim()) break;
+        }
+        ref = ref.nextSibling;
+      }
+      header.insertBefore(btn, ref || header.firstChild);
+    }
+    function setPaused(v) {
+      if (paused === v) return;
+      paused = v;
+      if (v) {
+        document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((el) => el.classList.remove(HIDDEN_CLASS));
+        syncCss();
+      } else {
+        syncCss();
+        scanAll();
+      }
+      updateQuickButtons();
+    }
+    function updateQuickButtons() {
+      const on = isEnabled();
+      if (!on) {
+        document.querySelectorAll(`.${QUICK_CLASS}`).forEach((b) => b.remove());
+        return;
+      }
+      chatRoomHeaders().forEach((header) => {
+        let btn = header.querySelector(`.${QUICK_CLASS}`);
+        if (!btn) {
+          btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = QUICK_CLASS;
+          btn.style.cssText = "background:none;border:1px solid currentColor;border-radius:4px;cursor:pointer;font-size:12px;padding:1px 6px;margin-right:8px;vertical-align:middle;line-height:1.4;color:inherit;opacity:0.8;";
+          btn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            ev.preventDefault();
+            setPaused(!paused);
+          });
+          insertBeforeTitle(header, btn);
+        }
+        btn.textContent = paused ? "\u6062\u590D\u5C4F\u853D" : "\u6682\u505C\u5C4F\u853D";
+        btn.title = paused ? "\u6062\u590D\u5C4F\u853D\uFF08\u518D\u6B21\u9690\u85CF\u88AB\u5C4F\u853D\u6D88\u606F\uFF09" : "\u6682\u65F6\u89E3\u9664\u5C4F\u853D\uFF0C\u663E\u793A\u88AB\u5C4F\u853D\u7684\u6D88\u606F\uFF08\u4F9B\u67E5\u770B\uFF09";
+      });
+    }
+    const enqueueMicro = typeof queueMicrotask === "function" ? queueMicrotask : (fn) => setTimeout(fn, 0);
+    function scheduleScan() {
+      if (!isEnabled()) return;
+      if (scanScheduled) return;
+      scanScheduled = true;
+      enqueueMicro(() => {
+        scanScheduled = false;
+        scanAll();
+      });
+    }
+    function ensureObserved(container) {
+      if (!observer || observedContainers.has(container)) return;
+      observedContainers.add(container);
+      observer.observe(container, { childList: true, subtree: true });
+    }
+    function ensureBodyObserver() {
+      if (bodyObserver) return;
+      bodyObserver = new MutationObserver((muts) => {
+        if (!isEnabled()) return;
+        for (const m of muts) {
+          for (const n of m.addedNodes) {
+            if (n.nodeType !== 1) continue;
+            const cont = n.matches && n.matches(CHAT_CONTAINER_SEL_ALL) ? n : n.closest ? n.closest(CHAT_CONTAINER_SEL_ALL) : null;
+            if (cont && !observedContainers.has(cont)) {
+              scanAll();
+              return;
+            }
+          }
+        }
+      });
+      bodyObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    function detachBodyObserver() {
+      if (bodyObserver) {
+        bodyObserver.disconnect();
+        bodyObserver = null;
+      }
+    }
+    function init2() {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      observedContainers = /* @__PURE__ */ new WeakSet();
+      ensureCss();
+      if (!isEnabled()) {
+        detachBodyObserver();
+        return;
+      }
+      ensureBodyObserver();
+      const containers = findChatContainers();
+      if (containers.length === 0) {
+        if (initAttempts < 8) {
+          initAttempts++;
+          containerWatchTimer = setTimeout(init2, 1e3);
+        }
+        return;
+      }
+      initAttempts = 0;
+      observer = new MutationObserver(scheduleScan);
+      containers.forEach((c) => ensureObserved(c));
+      scanAll();
+    }
+    let lastUrl = location.href;
+    new MutationObserver(() => {
+      if (lastUrl !== location.href) {
+        lastUrl = location.href;
+        initAttempts = 0;
+        if (containerWatchTimer) clearTimeout(containerWatchTimer);
+        setTimeout(init2, 300);
+      }
+    }).observe(document, { subtree: true, childList: true });
+    setTimeout(() => {
+      ensureCss();
+      init2();
+    }, 500);
+  })();
+
   // src/features/chatEmojiPicker.js
   registerExportInfo({
     name: "\u804A\u5929\u8868\u60C5\u9009\u62E9\u5668\u6700\u8FD1\u4F7F\u7528",
@@ -10631,6 +11271,11 @@
                 flex-direction: column;
                 gap: 8px;
             }
+
+            /* 4. \u5B50\u8BBE\u7F6E\u6536\u8D77\uFF1A\u5E26\u8BE6\u7EC6\u8BBE\u7F6E\u7684\u529F\u80FD\u5F00\u5173\u4EC5\u5728\u529F\u80FD\u5F00\u542F\u65F6\u5C55\u793A\u8BBE\u7F6E\u5185\u5BB9 */
+            .sc-toggle-item > .sc-toggle-sub.sc-collapsed {
+                display: none;
+            }
         `;
         document.head.appendChild(style);
       };
@@ -10981,11 +11626,19 @@
             config[key] = newState;
             localStorage.setItem(configKey, JSON.stringify(config));
             updateUI();
+            const subWrap = btn.closest(".sc-toggle-item");
+            if (subWrap) {
+              const subEl = subWrap.querySelector(":scope > .sc-toggle-sub");
+              if (subEl) subEl.classList.toggle("sc-collapsed", !newState);
+            }
             if (typeof window.scChatEmojiPickerRefresh === "function") {
               window.scChatEmojiPickerRefresh();
             }
             if (typeof window.scChatAccessibilityRefresh === "function") {
               window.scChatAccessibilityRefresh();
+            }
+            if (typeof window.scChatBlockRefresh === "function") {
+              window.scChatBlockRefresh();
             }
           };
           const initialConfig = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
@@ -11097,6 +11750,167 @@
           row.appendChild(actionRow);
           return row;
         };
+        const chatBlockRefreshEntryCount = () => {
+          const el = document.getElementById("sc-chatblock-count");
+          if (!el) return;
+          const names = typeof window.scChatBlockList === "function" ? window.scChatBlockList() : [];
+          el.textContent = `\u5DF2\u5C4F\u853D ${names.length} \u4EBA`;
+        };
+        const createChatBlockManageControls = () => {
+          const box = document.createElement("div");
+          box.className = "sc-chatblock-entry";
+          box.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "SimcompaniesRetailCalculation-action-btn";
+          btn.textContent = "\u2699\uFE0F \u7BA1\u7406\u5C4F\u853D\u540D\u5355";
+          btn.style.cssText = "flex:1;background:#607D8B;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;white-space:nowrap;";
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            showChatBlockModal();
+          };
+          const count = document.createElement("span");
+          count.id = "sc-chatblock-count";
+          count.style.cssText = "font-size:12px;color:var(--sc-panel-fg,#efefef);white-space:nowrap;";
+          box.append(btn, count);
+          chatBlockRefreshEntryCount();
+          return box;
+        };
+        const showChatBlockModal = () => {
+          if (document.getElementById("sc-chatblock-modal")) return;
+          const dark = DM();
+          const C = {
+            bg: dark ? "#1e1e1e" : "#ffffff",
+            bg2: dark ? "#2c2c2c" : "#f5f5f5",
+            fg: dark ? "#efefef" : "#333333",
+            fg2: dark ? "#cccccc" : "#555555",
+            fg3: dark ? "#aaaaaa" : "#777777",
+            border: dark ? "#555555" : "#cccccc",
+            border2: dark ? "#444444" : "#dddddd"
+          };
+          const prevBodyOverflow = document.body.style.overflow;
+          document.body.style.overflow = "hidden";
+          const overlay = document.createElement("div");
+          overlay.id = "sc-chatblock-modal";
+          overlay.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.55);z-index:99999;display:flex;justify-content:center;align-items:center;";
+          const dialog = document.createElement("div");
+          dialog.style.cssText = `background:${C.bg};color:${C.fg};width:min(420px, calc(100vw - 24px));max-height:min(600px, calc(100vh - 32px));border:1px solid ${C.border};border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:hidden;font-family:sans-serif;box-sizing:border-box;`;
+          const header = document.createElement("div");
+          header.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid ${C.border};flex:none;`;
+          const title = document.createElement("span");
+          title.textContent = "\u804A\u5929\u5BA4\u5168\u5C40\u5C4F\u853D\u540D\u5355";
+          title.style.cssText = "font-size:14px;font-weight:bold;";
+          const closeBtn = document.createElement("button");
+          closeBtn.type = "button";
+          closeBtn.textContent = "\u2715";
+          closeBtn.setAttribute("aria-label", "\u5173\u95ED");
+          closeBtn.style.cssText = `background:none;border:none;color:${C.fg2};font-size:18px;cursor:pointer;line-height:1;padding:2px 8px;`;
+          header.append(title, closeBtn);
+          const body = document.createElement("div");
+          body.style.cssText = "padding:12px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;";
+          const hint = document.createElement("div");
+          hint.style.cssText = `font-size:11px;color:${C.fg3};line-height:1.5;`;
+          hint.textContent = "\u70B9\u51FB\u804A\u5929\u6D88\u606F\u4E0A\u7684\u300C\u5C4F\u853D\u300D\u6309\u94AE\u53EF\u6309\u73A9\u5BB6\u552F\u4E00 ID \u5C4F\u853D\u8BE5\u7528\u6237\uFF1B\u6B64\u5904\u7BA1\u7406\u5DF2\u5C4F\u853D\u540D\u5355\u3002";
+          const listLabel = document.createElement("div");
+          listLabel.textContent = "\u5F53\u524D\u5C4F\u853D\u540D\u5355";
+          listLabel.style.cssText = `font-size:12px;color:${C.fg2};font-weight:bold;`;
+          const list = document.createElement("div");
+          list.style.cssText = `max-height:300px;overflow-y:auto;border:1px solid ${C.border2};border-radius:6px;background:${C.bg2};padding:2px 8px;`;
+          const status = document.createElement("div");
+          status.style.cssText = "font-size:12px;min-height:16px;line-height:1.4;";
+          const setStatus = (msg, ok) => {
+            status.textContent = msg || "";
+            status.style.color = ok ? "#4CAF50" : "#f44336";
+          };
+          const renderList = () => {
+            const entries = typeof window.scChatBlockList === "function" ? window.scChatBlockList() : [];
+            list.innerHTML = "";
+            if (entries.length === 0) {
+              const empty = document.createElement("div");
+              empty.textContent = "\u6682\u65E0\u5C4F\u853D\u540D\u5355\uFF1A\u53BB\u804A\u5929\u5BA4\u6D88\u606F\u4E0A\u70B9\u51FB\u300C\u5C4F\u853D\u300D\u6309\u94AE\u6DFB\u52A0\u3002";
+              empty.style.cssText = `font-size:12px;color:${C.fg3};padding:8px 2px;`;
+              list.appendChild(empty);
+              return;
+            }
+            entries.forEach((entry, idx) => {
+              const row = document.createElement("div");
+              row.style.cssText = "display:flex;align-items:center;gap:8px;padding:5px 2px;";
+              if (idx !== entries.length - 1) row.style.borderBottom = `1px solid ${C.border2}`;
+              const info2 = document.createElement("div");
+              info2.style.cssText = "flex:1;min-width:0;";
+              const nameEl = document.createElement("div");
+              nameEl.textContent = entry.name || "#" + entry.id;
+              nameEl.title = entry.name || "#" + entry.id;
+              nameEl.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;";
+              const metaEl = document.createElement("div");
+              const realmTxt = entry.realmId != null ? ` \xB7 R${entry.realmId}` : "";
+              metaEl.textContent = `ID ${entry.id}${realmTxt}`;
+              metaEl.style.cssText = `font-size:11px;color:${C.fg3};`;
+              info2.append(nameEl, metaEl);
+              const delBtn = document.createElement("button");
+              delBtn.type = "button";
+              delBtn.textContent = "\u5220\u9664";
+              delBtn.className = "SimcompaniesRetailCalculation-action-btn";
+              delBtn.style.cssText = "flex:none;background:#f44336;color:white;border:none;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:12px;white-space:nowrap;";
+              delBtn.onclick = () => {
+                if (typeof window.scChatBlockRemoveById === "function") window.scChatBlockRemoveById(entry.id);
+                setStatus(`\u5DF2\u89E3\u9664\u5C4F\u853D\uFF1A${entry.name || "#" + entry.id}`, true);
+                renderList();
+                chatBlockRefreshEntryCount();
+              };
+              row.append(info2, delBtn);
+              list.appendChild(row);
+            });
+          };
+          const importBtn = document.createElement("button");
+          importBtn.type = "button";
+          importBtn.className = "SimcompaniesRetailCalculation-action-btn";
+          importBtn.textContent = "\u5BFC\u5165\u8D26\u53F7\u5DF2\u5C4F\u853D\u516C\u53F8";
+          importBtn.title = "\u628A\u6E38\u620F\u5185\u8D26\u53F7\u5DF2\u5C4F\u853D\u7684\u516C\u53F8\u5408\u5E76\u8FDB\u63D2\u4EF6\u5C4F\u853D\u540D\u5355\uFF08\u6309\u516C\u53F8\u552F\u4E00 ID\uFF09";
+          importBtn.style.cssText = "align-self:flex-start;background:#607D8B;color:white;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px;";
+          importBtn.onclick = async () => {
+            if (importBtn.dataset.busy) return;
+            importBtn.dataset.busy = "1";
+            importBtn.disabled = true;
+            setStatus("\u6B63\u5728\u8BFB\u53D6\u6E38\u620F\u5185\u9ED1\u540D\u5355...", true);
+            try {
+              const res = typeof window.scChatBlockImportFromGame === "function" ? await window.scChatBlockImportFromGame() : { ok: false, error: "\u5BFC\u5165\u51FD\u6570\u672A\u52A0\u8F7D" };
+              if (res && res.ok) {
+                setStatus(`\u5DF2\u5BFC\u5165 ${res.added} \u4EBA${res.duplicate ? `\uFF08${res.duplicate} \u4E2A\u5DF2\u5728\u540D\u5355\u4E2D\uFF09` : ""}`, true);
+                renderList();
+                chatBlockRefreshEntryCount();
+                if (typeof window.scChatBlockRefresh === "function") window.scChatBlockRefresh();
+              } else {
+                setStatus(res && res.error ? `\u5BFC\u5165\u5931\u8D25\uFF1A${res.error}` : "\u5BFC\u5165\u5931\u8D25", false);
+              }
+            } catch (err) {
+              setStatus("\u5BFC\u5165\u5931\u8D25\uFF1A" + (err && err.message ? err.message : err), false);
+            } finally {
+              delete importBtn.dataset.busy;
+              importBtn.disabled = false;
+            }
+          };
+          body.append(hint, listLabel, list, status, importBtn);
+          dialog.append(header, body);
+          overlay.appendChild(dialog);
+          document.body.appendChild(overlay);
+          const onKeyDown = (ev) => {
+            if (ev.key === "Escape") closeModal();
+          };
+          const closeModal = () => {
+            document.body.style.overflow = prevBodyOverflow;
+            document.removeEventListener("keydown", onKeyDown);
+            overlay.remove();
+            chatBlockRefreshEntryCount();
+          };
+          closeBtn.onclick = closeModal;
+          overlay.addEventListener("click", (ev) => {
+            if (ev.target === overlay) closeModal();
+          });
+          document.addEventListener("keydown", onKeyDown);
+          renderList();
+          chatBlockRefreshEntryCount();
+        };
         mainMenu.append(
           createStatusRow("r1"),
           createStatusRow("r2"),
@@ -11204,11 +12018,12 @@
           { type: "toggle", key: "autoSelectBestMarketRow", label: "\u4EA4\u6613\u6240\u81EA\u52A8\u9009\u4E2D\u9AD8\u4EAE\u884C", defaultEnabled: false },
           { type: "toggle", key: "warehouseProfit", label: "\u4ED3\u5E93\u65F6\u5229\u6DA6\u8BA1\u7B97" },
           { type: "toggle", key: "chatAccessibility", label: "\u804A\u5929\u5BA4\u8272\u5F31\u8F85\u52A9", defaultEnabled: false },
+          { type: "toggle", key: "chatBlock", label: "\u804A\u5929\u5BA4\u5168\u5C40\u5C4F\u853D", defaultEnabled: false, subContent: createChatBlockManageControls },
           { type: "toggle", key: "landscapeHighlight", label: "\u5730\u56FE\u7A7A\u95F2\u5EFA\u7B51\u9AD8\u4EAE" },
           { type: "toggle", key: "restaurantStock", label: "\u9910\u9986\u5907\u8D27\u63D0\u9192" },
           { type: "toggle", key: "paQuestAnswers", label: "PA\u4EFB\u52A1\u7B54\u6848", defaultEnabled: true },
           { type: "toggle", key: "snipboardPreview", label: "Snipboard\u56FE\u7247\u9884\u89C8", defaultEnabled: true },
-          { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, heightInput: true },
+          { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, subContent: createChatInputHeightControls },
           { type: "toggle", key: "chatEmojiPicker", label: "\u804A\u5929\u8868\u60C5\u9009\u62E9\u5668", defaultEnabled: true }
         ];
         const ITEMS_PER_PAGE = 5;
@@ -11226,12 +12041,23 @@
             } else {
               el = createPageActionToggle(item.key, item.label, item.defaultEnabled !== false);
             }
-            if (item.heightInput) {
+            if (item.subContent) {
               const wrap = document.createElement("div");
               wrap.className = "sc-toggle-item";
               wrap.style.cssText = "display:flex;flex-direction:column;";
-              wrap.appendChild(el);
-              wrap.appendChild(createChatInputHeightControls());
+              const sub = document.createElement("div");
+              sub.className = "sc-toggle-sub";
+              sub.appendChild(item.subContent());
+              wrap.append(el, sub);
+              let subConfig = {};
+              try {
+                subConfig = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+              } catch (err) {
+                subConfig = {};
+              }
+              const defaultEnabled = item.defaultEnabled !== false;
+              const isEnabled = subConfig[item.key] !== void 0 ? subConfig[item.key] !== false : defaultEnabled;
+              sub.classList.toggle("sc-collapsed", !isEnabled);
               el = wrap;
             } else {
               el.classList.add("sc-toggle-item");
@@ -14354,4 +15180,4 @@
   })();
 })();
 
-// @changelog 修复仓库按钮残留问题，优化聊天扫描性能，支持自定义高管数据自动选择学院等级。
+// @changelog 1.33.8：新增聊天室全局屏蔽（消息旁一键按玩家 ID 屏蔽、可导入账号已屏蔽公司、支持临时暂停查看）；功能开关的详细设置仅在开启时展示。
