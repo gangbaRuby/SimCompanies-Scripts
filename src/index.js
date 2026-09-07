@@ -12,6 +12,7 @@ import './features/incomingContractsHandler.js';
 import './features/marketInterceptor.js';
 import './features/warehouseRetailProfit.js';
 import './features/chatAccessibility.js';
+import './features/chatMessageBlocker.js';
 import './features/chatEmojiPicker.js';
 import './features/executiveBoardroom.js';
 import { Network } from './core/network.js';
@@ -694,6 +695,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     if (typeof window.scChatAccessibilityRefresh === 'function') {
                         window.scChatAccessibilityRefresh();
                     }
+                    if (typeof window.scChatBlockRefresh === 'function') {
+                        window.scChatBlockRefresh();
+                    }
                 };
 
                 // 初始状态下手动更新一次文字，避免显示空白
@@ -811,7 +815,188 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 row.appendChild(actionRow);
                 return row;
             };
+            // ---------- 聊天室全局屏蔽：名单管理入口 + 居中弹层 ----------
+            const chatBlockRefreshEntryCount = () => {
+                const el = document.getElementById('sc-chatblock-count');
+                if (!el) return;
+                const names = (typeof window.scChatBlockList === 'function') ? window.scChatBlockList() : [];
+                el.textContent = `已屏蔽 ${names.length} 人`;
+            };
 
+            const createChatBlockManageControls = () => {
+                const box = document.createElement('div');
+                box.className = 'sc-chatblock-entry';
+                box.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'SimcompaniesRetailCalculation-action-btn';
+                btn.textContent = '⚙️ 管理屏蔽名单';
+                btn.style.cssText = 'flex:1;background:#607D8B;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;white-space:nowrap;';
+                btn.onclick = (e) => { e.stopPropagation(); showChatBlockModal(); };
+                const count = document.createElement('span');
+                count.id = 'sc-chatblock-count';
+                count.style.cssText = 'font-size:12px;color:var(--sc-panel-fg,#efefef);white-space:nowrap;';
+                box.append(btn, count);
+                chatBlockRefreshEntryCount();
+                return box;
+            };
+
+            // 居中弹层（宽度/高度随视口收缩：width:min(420px, 100vw-24px)、max-height:min(600px, 100vh-32px)）
+            // 添加屏蔽统一走聊天消息上的「屏蔽」按钮（按玩家唯一 ID）；此处仅管理/删除名单
+            const showChatBlockModal = () => {
+                if (document.getElementById('sc-chatblock-modal')) return;
+
+                // 深浅色色板（与既有弹层一致）
+                const dark = DM();
+                const C = {
+                    bg: dark ? '#1e1e1e' : '#ffffff',
+                    bg2: dark ? '#2c2c2c' : '#f5f5f5',
+                    fg: dark ? '#efefef' : '#333333',
+                    fg2: dark ? '#cccccc' : '#555555',
+                    fg3: dark ? '#aaaaaa' : '#777777',
+                    border: dark ? '#555555' : '#cccccc',
+                    border2: dark ? '#444444' : '#dddddd'
+                };
+
+                const prevBodyOverflow = document.body.style.overflow;
+                document.body.style.overflow = 'hidden';
+
+                const overlay = document.createElement('div');
+                overlay.id = 'sc-chatblock-modal';
+                overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.55);z-index:99999;display:flex;justify-content:center;align-items:center;';
+
+                const dialog = document.createElement('div');
+                dialog.style.cssText = `background:${C.bg};color:${C.fg};width:min(420px, calc(100vw - 24px));max-height:min(600px, calc(100vh - 32px));border:1px solid ${C.border};border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:hidden;font-family:sans-serif;box-sizing:border-box;`;
+
+                // 头部（标题 + 关闭）
+                const header = document.createElement('div');
+                header.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid ${C.border};flex:none;`;
+                const title = document.createElement('span');
+                title.textContent = '聊天室全局屏蔽名单';
+                title.style.cssText = 'font-size:14px;font-weight:bold;';
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.textContent = '✕';
+                closeBtn.setAttribute('aria-label', '关闭');
+                closeBtn.style.cssText = `background:none;border:none;color:${C.fg2};font-size:18px;cursor:pointer;line-height:1;padding:2px 8px;`;
+                header.append(title, closeBtn);
+
+                // 内容体（可滚动）
+                const body = document.createElement('div');
+                body.style.cssText = 'padding:12px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;';
+
+                const hint = document.createElement('div');
+                hint.style.cssText = `font-size:11px;color:${C.fg3};line-height:1.5;`;
+                hint.textContent = '点击聊天消息上的「屏蔽」按钮可按玩家唯一 ID 屏蔽该用户；此处管理已屏蔽名单。';
+
+                const listLabel = document.createElement('div');
+                listLabel.textContent = '当前屏蔽名单';
+                listLabel.style.cssText = `font-size:12px;color:${C.fg2};font-weight:bold;`;
+
+                const list = document.createElement('div');
+                list.style.cssText = `max-height:300px;overflow-y:auto;border:1px solid ${C.border2};border-radius:6px;background:${C.bg2};padding:2px 8px;`;
+
+                // 状态行（删除等操作反馈，不使用 toast）
+                const status = document.createElement('div');
+                status.style.cssText = 'font-size:12px;min-height:16px;line-height:1.4;';
+                const setStatus = (msg, ok) => {
+                    status.textContent = msg || '';
+                    status.style.color = ok ? '#4CAF50' : '#f44336';
+                };
+
+                const renderList = () => {
+                    const entries = (typeof window.scChatBlockList === 'function') ? window.scChatBlockList() : [];
+                    list.innerHTML = '';
+                    if (entries.length === 0) {
+                        const empty = document.createElement('div');
+                        empty.textContent = '暂无屏蔽名单：去聊天室消息上点击「屏蔽」按钮添加。';
+                        empty.style.cssText = `font-size:12px;color:${C.fg3};padding:8px 2px;`;
+                        list.appendChild(empty);
+                        return;
+                    }
+                    entries.forEach((entry, idx) => {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 2px;';
+                        if (idx !== entries.length - 1) row.style.borderBottom = `1px solid ${C.border2}`;
+                        const info = document.createElement('div');
+                        info.style.cssText = 'flex:1;min-width:0;';
+                        const nameEl = document.createElement('div');
+                        nameEl.textContent = entry.name || ('#' + entry.id);
+                        nameEl.title = entry.name || ('#' + entry.id);
+                        nameEl.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;';
+                        const metaEl = document.createElement('div');
+                        const realmTxt = (entry.realmId != null) ? ` · R${entry.realmId}` : '';
+                        metaEl.textContent = `ID ${entry.id}${realmTxt}`;
+                        metaEl.style.cssText = `font-size:11px;color:${C.fg3};`;
+                        info.append(nameEl, metaEl);
+                        const delBtn = document.createElement('button');
+                        delBtn.type = 'button';
+                        delBtn.textContent = '删除';
+                        delBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+                        delBtn.style.cssText = 'flex:none;background:#f44336;color:white;border:none;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:12px;white-space:nowrap;';
+                        delBtn.onclick = () => {
+                            if (typeof window.scChatBlockRemoveById === 'function') window.scChatBlockRemoveById(entry.id);
+                            setStatus(`已解除屏蔽：${entry.name || ('#' + entry.id)}`, true);
+                            renderList();
+                            chatBlockRefreshEntryCount();
+                        };
+                        row.append(info, delBtn);
+                        list.appendChild(row);
+                    });
+                };
+
+                // 导入当前领域游戏内黑名单（/api/v2/contacts/ 的 ignoringCompanies）
+                const importBtn = document.createElement('button');
+                importBtn.type = 'button';
+                importBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+                importBtn.textContent = '导入账号已屏蔽公司';
+                importBtn.title = '把游戏内账号已屏蔽的公司合并进插件屏蔽名单（按公司唯一 ID）';
+                importBtn.style.cssText = 'align-self:flex-start;background:#607D8B;color:white;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px;';
+                importBtn.onclick = async () => {
+                    if (importBtn.dataset.busy) return;
+                    importBtn.dataset.busy = '1';
+                    importBtn.disabled = true;
+                    setStatus('正在读取游戏内黑名单...', true);
+                    try {
+                        const res = (typeof window.scChatBlockImportFromGame === 'function')
+                            ? await window.scChatBlockImportFromGame()
+                            : { ok: false, error: '导入函数未加载' };
+                        if (res && res.ok) {
+                            setStatus(`已导入 ${res.added} 人${res.duplicate ? `（${res.duplicate} 个已在名单中）` : ''}`, true);
+                            renderList();
+                            chatBlockRefreshEntryCount();
+                            if (typeof window.scChatBlockRefresh === 'function') window.scChatBlockRefresh();
+                        } else {
+                            setStatus((res && res.error) ? `导入失败：${res.error}` : '导入失败', false);
+                        }
+                    } catch (err) {
+                        setStatus('导入失败：' + ((err && err.message) ? err.message : err), false);
+                    } finally {
+                        delete importBtn.dataset.busy;
+                        importBtn.disabled = false;
+                    }
+                };
+
+                body.append(hint, listLabel, list, status, importBtn);
+                dialog.append(header, body);
+                overlay.appendChild(dialog);
+                document.body.appendChild(overlay);
+
+                const onKeyDown = (ev) => { if (ev.key === 'Escape') closeModal(); };
+                const closeModal = () => {
+                    document.body.style.overflow = prevBodyOverflow;
+                    document.removeEventListener('keydown', onKeyDown);
+                    overlay.remove();
+                    chatBlockRefreshEntryCount();
+                };
+
+                closeBtn.onclick = closeModal;
+                overlay.addEventListener('click', (ev) => { if (ev.target === overlay) closeModal(); });
+                document.addEventListener('keydown', onKeyDown);
+
+                renderList();
+                chatBlockRefreshEntryCount();
+            };
             mainMenu.append(
                 createStatusRow('r1'),
                 createStatusRow('r2'),
@@ -929,6 +1114,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 { type: 'toggle', key: 'autoSelectBestMarketRow', label: '交易所自动选中高亮行', defaultEnabled: false },
                 { type: 'toggle', key: 'warehouseProfit', label: '仓库时利润计算' },
                 { type: 'toggle', key: 'chatAccessibility', label: '聊天室色弱辅助', defaultEnabled: false },
+                { type: 'toggle', key: 'chatBlock', label: '聊天室全局屏蔽', defaultEnabled: false, subContent: createChatBlockManageControls },
                 { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
                 { type: 'toggle', key: 'restaurantStock', label: '餐馆备货提醒' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
