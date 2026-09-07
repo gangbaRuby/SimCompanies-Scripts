@@ -49,6 +49,7 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 - **领域作用域键**：一律经 `core/storage.js` 的 `getScopedKey` 生成（`R<realmId>-<名称>`，如 `R0-SC-Saved-Bonuses`、`R0-SC-AGENCY_FOUND_EXECUTIVE`），不要用 `SC_<名称>_<realmId>` 后缀；新增领域键前先 grep 现有模式确认。
 - **领域隔离**：涉及领域/公司实体的用户配置（品质范围、备注、预设等）必须按领域分开存储，避免跨领域串扰（建筑 id 跨领域可能重复）。
 - **范围类输入约束**：任何"从~到"范围输入必须保证前后关系（如品质从 ≤ 到）：修改时钳制，读取时归一（脏数据自动交换）。
+- **开关面板子设置**：功能开关设置面板里带详细设置的开关，用 `subContent` 提供子设置内容、CSS 类 `sc-collapsed` 控制显隐；子设置**仅在功能开启时展示**（关闭即收起，省空间），点击开关时同步显隐。
 
 ### 5. 正式发布
 

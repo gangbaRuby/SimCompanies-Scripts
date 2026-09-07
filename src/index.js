@@ -250,6 +250,11 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 flex-direction: column;
                 gap: 8px;
             }
+
+            /* 4. 子设置收起：带详细设置的功能开关仅在功能开启时展示设置内容 */
+            .sc-toggle-item > .sc-toggle-sub.sc-collapsed {
+                display: none;
+            }
         `;
             document.head.appendChild(style);
         };
@@ -677,6 +682,12 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
                     localStorage.setItem(configKey, JSON.stringify(config));
                     updateUI(); // 保存后立即同步 UI
+                    // 带详细设置的开关：仅在功能开启时展示子设置内容（点击后同步显隐）
+                    const subWrap = btn.closest('.sc-toggle-item');
+                    if (subWrap) {
+                        const subEl = subWrap.querySelector(':scope > .sc-toggle-sub');
+                        if (subEl) subEl.classList.toggle('sc-collapsed', !newState);
+                    }
                     if (typeof window.scChatEmojiPickerRefresh === 'function') {
                         window.scChatEmojiPickerRefresh();
                     }
@@ -922,7 +933,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 { type: 'toggle', key: 'restaurantStock', label: '餐馆备货提醒' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
                 { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
-                { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true, heightInput: true },
+                { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true, subContent: createChatInputHeightControls },
                 { type: 'toggle', key: 'chatEmojiPicker', label: '聊天表情选择器', defaultEnabled: true },
             ];
             const ITEMS_PER_PAGE = 5;
@@ -937,12 +948,20 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     let el;
                     if (item.type === 'factory') { el = item.fn(); }
                     else { el = createPageActionToggle(item.key, item.label, item.defaultEnabled !== false); }
-                    if (item.heightInput) {
+                    if (item.subContent) {
                         const wrap = document.createElement('div');
                         wrap.className = 'sc-toggle-item';
                         wrap.style.cssText = 'display:flex;flex-direction:column;';
-                        wrap.appendChild(el);
-                        wrap.appendChild(createChatInputHeightControls());
+                        const sub = document.createElement('div');
+                        sub.className = 'sc-toggle-sub';
+                        sub.appendChild(item.subContent());
+                        wrap.append(el, sub);
+                        // 带详细设置的开关：仅在功能开启时展示子设置内容
+                        let subConfig = {};
+                        try { subConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}'); } catch (err) { subConfig = {}; }
+                        const defaultEnabled = item.defaultEnabled !== false;
+                        const isEnabled = subConfig[item.key] !== undefined ? subConfig[item.key] !== false : defaultEnabled;
+                        sub.classList.toggle('sc-collapsed', !isEnabled);
                         el = wrap;
                     } else {
                         el.classList.add('sc-toggle-item');
