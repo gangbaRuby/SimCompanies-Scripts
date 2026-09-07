@@ -42,6 +42,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
     const CHATROOM_URL_RE = /\/api\/v2\/chatroom\/[^/?#]+(\/from-id\/\d+)?\/?(\?|$)/;
     const HIDDEN_CLASS = 'sc-chatblock-hidden';
     const BTN_CLASS = 'sc-chat-block-btn';
+    const QUICK_CLASS = 'sc-chat-block-quick';
     const CSS_ID = 'sc-chatblock-css';
     const CHAT_CONTAINER_SEL = 'div.css-xo2rg1.e1llepen2';
     const CHAT_CONTAINER_SEL_ALL = 'div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]';
@@ -540,12 +541,49 @@ import { registerExportInfo } from '../core/exportInfo.js';
     function scanAll() {
         if (!isEnabled()) return;
         findChatContainers().forEach(c => processContainer(c));
+        updateQuickButtons();
     }
     function cleanupUI() {
         document.querySelectorAll(`.${BTN_CLASS}`).forEach(b => b.remove());
         document.querySelectorAll('.sc-chat-block-confirm').forEach(c => c.remove());
         document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach(el => el.classList.remove(HIDDEN_CLASS));
         syncCss(); // 关闭时移除 :has 预隐藏规则
+        updateQuickButtons(); // 标题快速开关保留，但状态切为 🔴（可一键再开）
+    }
+
+    // ---------- 聊天室标题左侧快速开关（色弱模块同款风格；开启时才出现） ----------
+    function setEnabledState(v) {
+        try {
+            const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+            cfg[MODULE_KEY] = v;
+            localStorage.setItem('SC_PageActions_Settings', JSON.stringify(cfg));
+        } catch (e) { /* 忽略 */ }
+    }
+    function chatRoomHeaders() {
+        return Array.from(document.querySelectorAll('div.well-header.text-uppercase'));
+    }
+    function updateQuickButtons() {
+        const on = isEnabled();
+        chatRoomHeaders().forEach(header => {
+            let btn = header.querySelector(`.${QUICK_CLASS}`);
+            if (!btn) {
+                if (!on) return;
+                btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = QUICK_CLASS;
+                btn.style.cssText = 'background:none;border:1px solid currentColor;border-radius:4px;cursor:pointer;font-size:12px;padding:1px 6px;margin-right:8px;vertical-align:middle;line-height:1.4;color:inherit;opacity:0.8;';
+                btn.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    setEnabledState(!isEnabled());
+                    updateQuickButtons();
+                    if (typeof window.scChatBlockRefresh === 'function') window.scChatBlockRefresh();
+                });
+                header.insertBefore(btn, header.firstChild);
+            }
+            btn.textContent = on ? '🟢 全局屏蔽' : '🔴 全局屏蔽';
+            btn.title = on ? '点击关闭聊天室全局屏蔽' : '点击开启聊天室全局屏蔽';
+        });
     }
 
     // 微任务同帧重扫（兜底）
