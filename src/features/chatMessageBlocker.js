@@ -60,6 +60,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
     let containerWatchTimer = null;
     let initAttempts = 0;
     let cssReady = false;
+    let paused = false; // 标题按钮"临时暂停屏蔽"（仅本次会话；看消息用，非功能总开关）
     let blockedCache = null;
     let observedContainers = new WeakSet();
     const senderIndex = new Map();
@@ -72,6 +73,10 @@ import { registerExportInfo } from '../core/exportInfo.js';
         } catch (e) {
             return false;
         }
+    }
+    // 是否真正在屏蔽：功能开启且未临时暂停
+    function isBlockingActive() {
+        return isEnabled() && !paused;
     }
     function readList() {
         try {
@@ -116,7 +121,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
             document.head.appendChild(el);
         }
         let css = HIDE_BASE;
-        if (isEnabled()) {
+        if (isEnabled() && !paused) { // 暂停时移除 :has 预隐藏规则
             // 只作用于聊天容器内部的消息组（组直接子级 = 公司链接 a），避免误伤页面其它公司链接
             for (const e of readList()) {
                 if (typeof e.realmId === 'number' && e.slug) {
@@ -271,7 +276,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         if (frame.routing === 'NEW_MESSAGE' || frame.routing === 'UPDATE_MESSAGE') {
             if (frame.data) {
                 indexMessage(frame.data);
-                if (isBlockedSender(frame.data)) return { keep: false, data: null };
+                if (isBlockingActive() && isBlockedSender(frame.data)) return { keep: false, data: null };
             }
             return { keep: true, data: null };
         }
@@ -471,7 +476,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 ? window.scChatBlockAddById({ id: rowInfo.id, name: rowInfo.name, realmId: p ? p.realmId : rowInfo.realmId, slug: p ? p.slug : undefined })
                 : { ok: false };
             if (res && (res.ok || res.reason === 'duplicate')) {
-                row.classList.add(HIDDEN_CLASS);
+                if (!paused) row.classList.add(HIDDEN_CLASS); // 暂停查看期间不立即隐藏
                 window.scChatBlockRefresh && window.scChatBlockRefresh();
             }
         };
@@ -525,12 +530,14 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
     function processContainer(container) {
         if (!isEnabled()) return;
+        const active = isBlockingActive();
         ensureObserved(container);
         const rows = container.querySelectorAll(':scope > div');
         for (const row of rows) {
             if (row.classList.contains(HIDDEN_CLASS)) continue;
             const info = resolveSender(row);
             if (info && typeof info.id === 'number' && blockedIds().has(info.id)) {
+                if (!active) continue; // 暂停期间：不隐藏，也不在其上放屏蔽按钮（供查看）
                 row.classList.add(HIDDEN_CLASS);
                 rememberRowSlug(row, info); // 记录最新 slug（改名自愈）
                 continue;
@@ -544,33 +551,51 @@ import { registerExportInfo } from '../core/exportInfo.js';
         updateQuickButtons();
     }
     function cleanupUI() {
+        paused = false;
         document.querySelectorAll(`.${BTN_CLASS}`).forEach(b => b.remove());
         document.querySelectorAll('.sc-chat-block-confirm').forEach(c => c.remove());
         document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach(el => el.classList.remove(HIDDEN_CLASS));
         syncCss(); // 关闭时移除 :has 预隐藏规则
-        updateQuickButtons(); // 标题快速开关保留，但状态切为 🔴（可一键再开）
+        updateQuickButtons(); // 功能关闭 → 移除标题按钮
     }
 
-    // ---------- 聊天室标题左侧快速开关（色弱模块同款风格；开启时才出现） ----------
-    function setEnabledState(v) {
-        try {
-            const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-            cfg[MODULE_KEY] = v;
-            localStorage.setItem('SC_PageActions_Settings', JSON.stringify(cfg));
-        } catch (e) { /* 忽略 */ }
-    }
+    // ---------- 标题"临时暂停屏蔽"按钮（仅功能开启时显示，紧挨标题文字左侧） ----------
+    // 目的：暂时解除屏蔽以便查看被屏蔽消息，不是功能总开关（总开关在功能开关设置里）
     function chatRoomHeaders() {
         return Array.from(document.querySelectorAll('div.well-header.text-uppercase'));
     }
+    function insertBeforeTitle(header, btn) {
+        // 紧挨标题文字左侧：插到第一个有内容的文本节点前（跳过图标/其它控件/空白）
+        let ref = header.firstChild;
+        while (ref) {
+            if (ref.nodeType === 3) {
+                if (ref.textContent && ref.textContent.trim()) break;
+            }
+            ref = ref.nextSibling;
+        }
+        header.insertBefore(btn, ref || header.firstChild);
+    }
+    // 暂停 = 解除隐藏 + 去掉 :has 规则 + 放行实时消息；恢复 = 重新隐藏
+    function setPaused(v) {
+        if (paused === v) return;
+        paused = v;
+        if (v) {
+            document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach(el => el.classList.remove(HIDDEN_CLASS));
+            syncCss(); // paused=true 时 syncCss 不注入 :has 规则
+        } else {
+            syncCss();
+            scanAll();
+        }
+        updateQuickButtons();
+    }
     function updateQuickButtons() {
         const on = isEnabled();
+        if (!on) {
+            document.querySelectorAll(`.${QUICK_CLASS}`).forEach(b => b.remove());
+            return;
+        }
         chatRoomHeaders().forEach(header => {
             let btn = header.querySelector(`.${QUICK_CLASS}`);
-            if (!on) {
-                // 功能关闭时不保留标题按钮（重新开启走功能开关设置）
-                if (btn) btn.remove();
-                return;
-            }
             if (!btn) {
                 btn = document.createElement('button');
                 btn.type = 'button';
@@ -579,14 +604,12 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 btn.addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     ev.preventDefault();
-                    setEnabledState(!isEnabled());
-                    updateQuickButtons();
-                    if (typeof window.scChatBlockRefresh === 'function') window.scChatBlockRefresh();
+                    setPaused(!paused);
                 });
-                header.insertBefore(btn, header.firstChild);
+                insertBeforeTitle(header, btn);
             }
-            btn.textContent = '🟢 全局屏蔽';
-            btn.title = '点击关闭聊天室全局屏蔽';
+            btn.textContent = paused ? '▶ 恢复屏蔽' : '⏸ 暂停屏蔽';
+            btn.title = paused ? '恢复屏蔽（再次隐藏被屏蔽消息）' : '暂时解除屏蔽，显示被屏蔽的消息（供查看）';
         });
     }
 
