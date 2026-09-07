@@ -945,14 +945,37 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     });
                 };
 
-                // 导入游戏内黑名单（占位，后续版本实现）
+                // 导入当前领域游戏内黑名单（/api/v2/contacts/ 的 ignoringCompanies）
                 const importBtn = document.createElement('button');
                 importBtn.type = 'button';
                 importBtn.className = 'SimcompaniesRetailCalculation-action-btn';
-                importBtn.textContent = '导入游戏内黑名单（开发中）';
-                importBtn.disabled = true;
-                importBtn.title = '后续版本开放';
-                importBtn.style.cssText = 'align-self:flex-start;background:#607D8B;color:#ccc;border:none;padding:4px 10px;border-radius:3px;cursor:not-allowed;font-size:12px;opacity:.6;';
+                importBtn.textContent = '导入当前领域黑名单';
+                importBtn.title = '把游戏内「当前领域已屏蔽的公司」合并进插件屏蔽名单（按公司唯一 ID）';
+                importBtn.style.cssText = 'align-self:flex-start;background:#607D8B;color:white;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px;';
+                importBtn.onclick = async () => {
+                    if (importBtn.dataset.busy) return;
+                    importBtn.dataset.busy = '1';
+                    importBtn.disabled = true;
+                    setStatus('正在读取游戏内黑名单...', true);
+                    try {
+                        const res = (typeof window.scChatBlockImportFromGame === 'function')
+                            ? await window.scChatBlockImportFromGame()
+                            : { ok: false, error: '导入函数未加载' };
+                        if (res && res.ok) {
+                            setStatus(`已导入 ${res.added} 人${res.duplicate ? `（${res.duplicate} 个已在名单中）` : ''}`, true);
+                            renderList();
+                            chatBlockRefreshEntryCount();
+                            if (typeof window.scChatBlockRefresh === 'function') window.scChatBlockRefresh();
+                        } else {
+                            setStatus((res && res.error) ? `导入失败：${res.error}` : '导入失败', false);
+                        }
+                    } catch (err) {
+                        setStatus('导入失败：' + ((err && err.message) ? err.message : err), false);
+                    } finally {
+                        delete importBtn.dataset.busy;
+                        importBtn.disabled = false;
+                    }
+                };
 
                 body.append(hint, listLabel, list, status, importBtn);
                 dialog.append(header, body);

@@ -33,6 +33,7 @@
 //   - 消息组"直接子级 = 公司链接"的结构若变化，:has 规则与按钮定位都要检查
 // ======================
 import { registerExportInfo } from '../core/exportInfo.js';
+import { getRealmIdFromLink } from '../core/storage.js';
 
 (function () {
     'use strict';
@@ -364,6 +365,36 @@ import { registerExportInfo } from '../core/exportInfo.js';
         init();
         if (isEnabled()) scanAll();
         else cleanupUI();
+    };
+    // 导入"当前领域"游戏内黑名单（/api/v2/contacts/ 的 ignoringCompanies，均为公司唯一 id）。
+    // 只有 id 也足以屏蔽（判定按 sender.id）；name/slug 留空，首次在聊天数据里见到该 id 会自动补齐。
+    window.scChatBlockImportFromGame = async () => {
+        const realmId = getRealmIdFromLink();
+        if (realmId === null || realmId === undefined) return { ok: false, error: '未识别当前领域' };
+        let ids;
+        try {
+            const resp = await fetch('/api/v2/contacts/', { credentials: 'same-origin' });
+            if (!resp.ok) return { ok: false, error: 'HTTP ' + resp.status };
+            const data = await resp.json();
+            ids = Array.isArray(data && data.ignoringCompanies) ? data.ignoringCompanies : [];
+        } catch (e) {
+            return { ok: false, error: (e && e.message) ? e.message : String(e) };
+        }
+        let added = 0;
+        let duplicate = 0;
+        const list = readList();
+        for (const raw of ids) {
+            const id = Number(raw);
+            if (!Number.isFinite(id)) continue;
+            if (list.some(e => Number(e.id) === id)) { duplicate++; continue; }
+            list.push({ id, name: '', realmId });
+            added++;
+        }
+        if (added > 0) {
+            writeList(list);
+            invalidateCache();
+        }
+        return { ok: true, added, duplicate };
     };
 
     // ---------- 聊天容器与消息组解析 ----------
