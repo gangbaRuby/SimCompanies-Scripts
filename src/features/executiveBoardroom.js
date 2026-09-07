@@ -14,6 +14,12 @@ export const executiveCustomButton = (function () {
         let draggedSlotId = null;
         let selectedSlotId = null;
 
+        const SLOT_LABELS = {
+            o: 'COO', f: 'CFO', m: 'CMO', t: 'CTO',
+            v: 'COO 学徒', x: 'CFO 学徒', y: 'CMO 学徒', z: 'CTO 学徒',
+            '1': '职员 1', '2': '职员 2', '3': '职员 3', '4': '职员 4', '5': '职员 5'
+        };
+
         // Map executives array from Sim Companies API to boardroomState
         function mapExecutivesToState(execList) {
             // Reset slots
@@ -84,47 +90,68 @@ export const executiveCustomButton = (function () {
             return 15;
         }
 
-        function calculateResults() {
-            const getSkill = (slotId, skillKey) => {
-                return (boardroomState[slotId] && boardroomState[slotId].skills)
-                    ? boardroomState[slotId].skills[skillKey]
-                    : 0;
-            };
+        // 读取当前领域真实的学院总等级（领域数据缓存里没有时返回 null）
+        function readRealmAcademyLevel() {
+            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            try {
+                const stored = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
+                const level = Number(stored && stored.academyActive);
+                if (Number.isFinite(level) && level >= 0) return level;
+            } catch (e) { /* 忽略读取失败 */ }
+            return null;
+        }
 
+        // 把弹窗的学院总等级单选同步到真实学院总等级所在区间
+        function syncAcademyRadioToRealm() {
+            const level = readRealmAcademyLevel();
+            if (level === null) return null;
+            const bucket = level >= 20 ? 20 : level >= 15 ? 15 : level >= 10 ? 10 : level >= 5 ? 5 : 0;
+            document.querySelectorAll('input[name="sc-aca-r"]').forEach(radio => {
+                radio.checked = Number(radio.value) === bucket;
+            });
+            return bucket;
+        }
+
+        // 读取当前选中的学院总等级（右侧模拟计算与最优摆放共用）
+        function getCheckedAcademyLevel() {
             const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
-            const academyLevel = selectedRadio ? parseInt(selectedRadio.value) : 15;
+            return selectedRadio ? parseInt(selectedRadio.value) : 15;
+        }
+
+        // 依据学院等级计算 4 个职位的原始/有效点数（与右侧模拟计算同一套公式）
+        function computeEffectivePoints(state, academyLevel) {
+            const getSkill = (slotId, skillKey) => {
+                const raw = state[slotId] && state[slotId].skills ? state[slotId].skills[skillKey] : 0;
+                const num = Number(raw);
+                return Number.isFinite(num) ? num : 0;
+            };
 
             const hasCooApp = academyLevel >= 5;
             const hasCfoApp = academyLevel >= 10;
             const hasCmoApp = academyLevel >= 15;
             const hasCtoApp = academyLevel >= 20;
 
-            // 1. Raw Sums
             const rawCoo = Math.floor(
                 getSkill('o', 'coo') +
                 (hasCooApp ? getSkill('v', 'coo') / 2 : 0) +
                 (getSkill('f', 'coo') + getSkill('m', 'coo') + getSkill('t', 'coo')) / 4
             );
-
             const rawCfo = Math.floor(
                 getSkill('f', 'cfo') +
                 (hasCfoApp ? getSkill('x', 'cfo') / 2 : 0) +
                 (getSkill('o', 'cfo') + getSkill('m', 'cfo') + getSkill('t', 'cfo')) / 4
             );
-
             const rawCmo = Math.floor(
                 getSkill('m', 'cmo') +
                 (hasCmoApp ? getSkill('y', 'cmo') / 2 : 0) +
                 (getSkill('o', 'cmo') + getSkill('f', 'cmo') + getSkill('t', 'cmo')) / 4
             );
-
             const rawCto = Math.floor(
                 getSkill('t', 'cto') +
                 (hasCtoApp ? getSkill('z', 'cto') / 2 : 0) +
                 (getSkill('o', 'cto') + getSkill('f', 'cto') + getSkill('m', 'cto')) / 4
             );
 
-            // 2. Decay Calculations
             const applyDecay = (raw) => {
                 let val = raw;
                 if (val > 80) val = 80 + (val - 80) / 2;
@@ -132,10 +159,25 @@ export const executiveCustomButton = (function () {
                 return Math.floor(val);
             };
 
-            const effCoo = applyDecay(rawCoo);
-            const effCfo = applyDecay(rawCfo);
-            const effCmo = applyDecay(rawCmo);
-            const effCto = applyDecay(rawCto);
+            return {
+                rawCoo: rawCoo, effCoo: applyDecay(rawCoo),
+                rawCfo: rawCfo, effCfo: applyDecay(rawCfo),
+                rawCmo: rawCmo, effCmo: applyDecay(rawCmo),
+                rawCto: rawCto, effCto: applyDecay(rawCto)
+            };
+        }
+
+        function calculateResults() {
+            const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
+            const academyLevel = selectedRadio ? parseInt(selectedRadio.value) : 15;
+
+            // 原始汇总点数与衰减有效点数（与「最优摆放建议」共用同一套公式）
+            const {
+                rawCoo, effCoo,
+                rawCfo, effCfo,
+                rawCmo, effCmo,
+                rawCto, effCto
+            } = computeEffectivePoints(boardroomState, academyLevel);
 
             // 3. Retrieve local storage cache
             const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
@@ -304,6 +346,293 @@ export const executiveCustomButton = (function () {
             }
 
             return { adminBonus: effCoo, saleBonus: Math.floor(effCmo / 3) };
+        }
+
+        // ===================== 最优摆放建议（精确求解） =====================
+        // 参与 COO/CMO 有效点数计算的席位：o/f/m/t 常驻，v/y 学徒按学院等级生效
+        const OPT_SEATS = ['o', 'f', 'm', 't', 'v', 'y'];
+        const OPT_BASE_COEF = {
+            o: { coo: 1, cmo: 0.25 },
+            f: { coo: 0.25, cmo: 0.25 },
+            m: { coo: 0.25, cmo: 1 },
+            t: { coo: 0.25, cmo: 0.25 },
+            v: { coo: 0, cmo: 0 },
+            y: { coo: 0, cmo: 0 }
+        };
+
+        // 该席位在当前学院等级下是否对 COO/CMO 产生贡献
+        function isOptSeatActive(seat, academyLevel) {
+            if (seat === 'o' || seat === 'f' || seat === 'm' || seat === 't') return true;
+            if (seat === 'v') return academyLevel >= 5;
+            if (seat === 'y') return academyLevel >= 15;
+            return false;
+        }
+
+        // 当前 13 个格子中所有非空高管作为候选池
+        function collectExecutivePool() {
+            const pool = [];
+            Object.keys(boardroomState).forEach(id => {
+                const emp = boardroomState[id];
+                if (emp && emp.skills) {
+                    pool.push({
+                        slotId: id,
+                        name: emp.name || '未命名',
+                        skills: {
+                            coo: Number(emp.skills.coo) || 0,
+                            cfo: Number(emp.skills.cfo) || 0,
+                            cmo: Number(emp.skills.cmo) || 0,
+                            cto: Number(emp.skills.cto) || 0
+                        },
+                        obj: emp
+                    });
+                }
+            });
+            return pool;
+        }
+
+        function decayEffective(raw) {
+            let val = raw;
+            if (val > 80) val = 80 + (val - 80) / 2;
+            if (val > 60) val = 60 + (val - 60) / 2;
+            return Math.floor(val);
+        }
+
+        // 精确枚举 o/f/m/t/v/y 的分配（候选不足时用空席占位），一趟求出三个目标的最优摆法
+        function findBestPlacements(pool, academyLevel) {
+            const coefs = OPT_SEATS.map(seat => {
+                if (seat === 'v') return { coo: academyLevel >= 5 ? 0.5 : 0, cmo: 0 };
+                if (seat === 'y') return { coo: 0, cmo: academyLevel >= 15 ? 0.5 : 0 };
+                return OPT_BASE_COEF[seat];
+            });
+
+            const cands = pool.slice();
+            while (cands.length < OPT_SEATS.length) {
+                cands.push({ slotId: null, name: null, obj: null, empty: true, skills: { coo: 0, cmo: 0 } });
+            }
+            const total = cands.length;
+            const cooVals = cands.map(c => c.skills.coo);
+            const cmoVals = cands.map(c => c.skills.cmo);
+
+            const idx = new Array(OPT_SEATS.length).fill(-1);
+            const used = new Array(total).fill(false);
+            const best = { admin: null, restaurant: null, sales: null };
+            const bestArr = { admin: null, restaurant: null, sales: null };
+
+            const isBetter = (cur, next) => cur === null || next[0] > cur[0] || (next[0] === cur[0] && next[1] > cur[1]);
+
+            const evaluate = () => {
+                let sCoo = 0;
+                let sCmo = 0;
+                for (let i = 0; i < OPT_SEATS.length; i++) {
+                    sCoo += coefs[i].coo * cooVals[idx[i]];
+                    sCmo += coefs[i].cmo * cmoVals[idx[i]];
+                }
+                const effCoo = decayEffective(Math.floor(sCoo));
+                const effCmo = decayEffective(Math.floor(sCmo));
+                // 目标①管理费用最低：effCoo 最大；平手取 effCmo 更大
+                // 目标②餐馆评级最高：effCmo 最大；平手取 effCoo 更大
+                // 目标③销售速度最高：floor(effCmo/3) 最大；同速取 effCoo 更大（管理费用更低）
+                const adminKey = [effCoo, effCmo];
+                const restaurantKey = [effCmo, effCoo];
+                const salesKey = [Math.floor(effCmo / 3), effCoo];
+                if (isBetter(best.admin, adminKey)) { best.admin = adminKey; bestArr.admin = idx.slice(); }
+                if (isBetter(best.restaurant, restaurantKey)) { best.restaurant = restaurantKey; bestArr.restaurant = idx.slice(); }
+                if (isBetter(best.sales, salesKey)) { best.sales = salesKey; bestArr.sales = idx.slice(); }
+            };
+
+            const search = (s) => {
+                if (s === OPT_SEATS.length) { evaluate(); return; }
+                for (let j = 0; j < total; j++) {
+                    if (used[j]) continue;
+                    used[j] = true;
+                    idx[s] = j;
+                    search(s + 1);
+                    used[j] = false;
+                }
+            };
+            search(0);
+
+            const toPlacement = (arrIdx) => OPT_SEATS.map((seat, i) => {
+                const c = cands[arrIdx[i]];
+                return { seat: seat, obj: c && !c.empty ? c.obj : null, name: c && !c.empty ? c.name : null };
+            });
+
+            // 按选定摆法重新计算 effCoo/effCmo（避免不同目标键顺序导致取值错位）
+            const calcVals = (arrIdx) => {
+                let sCoo = 0;
+                let sCmo = 0;
+                for (let i = 0; i < OPT_SEATS.length; i++) {
+                    sCoo += coefs[i].coo * cooVals[arrIdx[i]];
+                    sCmo += coefs[i].cmo * cmoVals[arrIdx[i]];
+                }
+                return [decayEffective(Math.floor(sCoo)), decayEffective(Math.floor(sCmo))];
+            };
+            const makeResult = (arrIdx) => {
+                const vals = calcVals(arrIdx);
+                return { placement: toPlacement(arrIdx), effCoo: vals[0], effCmo: vals[1] };
+            };
+
+            return {
+                admin: makeResult(bestArr.admin),
+                restaurant: makeResult(bestArr.restaurant),
+                sales: makeResult(bestArr.sales)
+            };
+        }
+
+        // 读取零售计算缓存里的基础值，用于换算展示
+        function readBaseNumbers() {
+            const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            let SRC = {};
+            try {
+                SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${rId}`)) || {};
+            } catch (e) { /* 忽略 */ }
+            return {
+                baseAdminVal: (SRC.administration || 1) - 1,
+                baseSalesVal: (SRC.salesModifier || 0) + (SRC.recreationBonus || 0)
+            };
+        }
+
+        function formatMetrics(effCoo, effCmo) {
+            const base = readBaseNumbers();
+            const adminPct = base.baseAdminVal * (1 - effCoo / 100) * 100;
+            const restaurant = base.baseSalesVal * 0.02 + effCmo * 0.01;
+            const salesPct = base.baseSalesVal + Math.floor(effCmo / 3);
+            return {
+                adminText: adminPct.toFixed(2) + '%',
+                restaurantText: '+' + restaurant.toFixed(3),
+                salesText: salesPct.toFixed(1) + '%'
+            };
+        }
+
+        // 当前摆法的三项指标（按真实学院等级）
+        function currentMetrics(academyLevel) {
+            const eff = computeEffectivePoints(boardroomState, academyLevel);
+            return { effCoo: eff.effCoo, effCmo: eff.effCmo, text: formatMetrics(eff.effCoo, eff.effCmo) };
+        }
+
+        // 写入已保存加成与董事会摆法（弹窗「保存」与「应用并保存」共用）
+        function saveBoardroom() {
+            const res = calculateResults();
+            const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            localStorage.setItem(`R${rId}-SC-Saved-Bonuses`, JSON.stringify({
+                adminBonus: res.adminBonus,
+                saleBonus: res.saleBonus,
+                timestamp: Date.now(),
+                source: 'manual'
+            }));
+            localStorage.setItem(`R${rId}-SC-Saved-Boardroom`, JSON.stringify(boardroomState));
+        }
+
+        // 把一套推荐摆法应用到 13 个格子并自动保存
+        function applyBestPlacement(targetKey) {
+            syncAcademyRadioToRealm();
+            const academyLevel = getCheckedAcademyLevel();
+            const pool = collectExecutivePool();
+            if (pool.length === 0) {
+                showToast('暂无可用的高管数据', 'error');
+                return;
+            }
+            const best = findBestPlacements(pool, academyLevel)[targetKey];
+            if (!best) return;
+
+            const original = Object.assign({}, boardroomState);
+            Object.keys(boardroomState).forEach(k => { boardroomState[k] = null; });
+
+            const used = new Set();
+            best.placement.forEach(item => {
+                if (isOptSeatActive(item.seat, academyLevel) && item.obj) {
+                    boardroomState[item.seat] = item.obj;
+                    used.add(item.obj);
+                }
+            });
+
+            // 未上榜高管尽量保留原席位（x/z/职员），其余顺位补空位
+            const leftover = pool.filter(c => !used.has(c.obj));
+            const restSeats = ['x', 'z', '1', '2', '3', '4', '5'];
+            if (academyLevel < 5) restSeats.push('v');
+            if (academyLevel < 15) restSeats.push('y');
+            const freeSeats = [];
+            restSeats.forEach(seatId => {
+                const cur = original[seatId];
+                if (cur && !used.has(cur)) {
+                    const li = leftover.findIndex(c => c.obj === cur);
+                    if (li >= 0) {
+                        boardroomState[seatId] = cur;
+                        used.add(cur);
+                        leftover.splice(li, 1);
+                        return;
+                    }
+                }
+                freeSeats.push(seatId);
+            });
+            freeSeats.forEach(seatId => {
+                const next = leftover.shift();
+                if (next) boardroomState[seatId] = next.obj;
+            });
+
+            renderBoardroom();
+            saveBoardroom();
+            renderOptimizerResults();
+            showToast('已应用最优摆放并保存', 'success');
+        }
+
+        // 渲染「最优摆放建议」结果区
+        function renderOptimizerResults() {
+            const container = document.getElementById('sc-boardroom-opt-results');
+            if (!container) return;
+
+            syncAcademyRadioToRealm();
+            const academyLevel = getCheckedAcademyLevel();
+            const pool = collectExecutivePool();
+            if (pool.length === 0) {
+                container.innerHTML = '<div style="font-size: 12px; color: var(--sc-fg3); padding: 4px 2px;">暂无高管数据：请先在下方格子录入，或点击「获取当前最新高管数据」。</div>';
+                return;
+            }
+
+            const bests = findBestPlacements(pool, academyLevel);
+            const cur = currentMetrics(academyLevel);
+            const realLevel = readRealmAcademyLevel();
+
+            const apps = [];
+            if (academyLevel >= 5) apps.push('COO');
+            if (academyLevel >= 10) apps.push('CFO');
+            if (academyLevel >= 15) apps.push('CMO');
+            if (academyLevel >= 20) apps.push('CTO');
+            const levelNote = realLevel !== null
+                ? '学院总等级 ' + realLevel + '，学徒生效：' + (apps.length ? apps.join('/') : '无')
+                : '学院等级未获取，按所选区间（学徒生效：' + (apps.length ? apps.join('/') : '无') + '）';
+
+            const cardDefs = [
+                { key: 'admin', title: '管理费用最低' },
+                { key: 'restaurant', title: '餐馆评级最高' },
+                { key: 'sales', title: '销售速度最高（同速时管理费用最低）' }
+            ];
+
+            let html = '';
+            html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg3); line-height: 1.7;">';
+            html += '<div style="font-weight: bold; color: var(--sc-fg);">最优摆放建议</div>';
+            html += '<div>' + levelNote + '，候选 ' + pool.length + ' 人</div>';
+            html += '<div>当前：管理费用 ' + cur.text.adminText + ' ｜ 餐馆评级 ' + cur.text.restaurantText + ' ｜ 销售速度 ' + cur.text.salesText + '</div>';
+            html += '</div>';
+
+            cardDefs.forEach((def, i) => {
+                const b = bests[def.key];
+                const m = formatMetrics(b.effCoo, b.effCmo);
+                const seatText = b.placement
+                    .filter(item => isOptSeatActive(item.seat, academyLevel) && item.obj && item.name)
+                    .map(item => SLOT_LABELS[item.seat] + '：' + item.name)
+                    .join(' ｜ ');
+                html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.8;">';
+                html += '<div style="font-weight: bold; color: var(--sc-fg2);">' + (i + 1) + '. ' + def.title + '</div>';
+                html += '<div style="color: var(--sc-fg);">' + seatText + '</div>';
+                html += '<div style="color: var(--sc-fg3);">预计：管理费用 <span style="color: var(--sc-successFg); font-weight: bold;">' + m.adminText + '</span> ｜ 餐馆评级 ' + m.restaurantText + ' ｜ 销售速度 ' + m.salesText + '</div>';
+                html += '<div style="margin-top: 6px;"><button data-opt-apply="' + def.key + '" style="padding: 5px 14px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">应用并保存</button></div>';
+                html += '</div>';
+            });
+            container.innerHTML = html;
+            container.querySelectorAll('button[data-opt-apply]').forEach(btn => {
+                btn.onclick = () => applyBestPlacement(btn.getAttribute('data-opt-apply'));
+            });
         }
 
         function renderBoardroom() {
@@ -511,6 +840,7 @@ export const executiveCustomButton = (function () {
                     width: 100%;
                     height: 100%;
                 }
+
                 .sc-boardroom-left {
                     flex: 7;
                     display: flex;
@@ -725,10 +1055,12 @@ export const executiveCustomButton = (function () {
                 <div class="sc-boardroom-layout">
                     <!-- Left slots panel -->
                     <div class="sc-boardroom-left">
-                        <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                             <button id="sc-boardroom-save-btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">保存</button>
                             <button id="sc-boardroom-fetch-btn" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">获取当前最新高管数据</button>
+                            <button id="sc-boardroom-opt-btn" style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">最优摆放建议</button>
                         </div>
+                        <div id="sc-boardroom-opt-results"></div>
                         <div style="font-size: 11px; color: var(--sc-fg3); margin-bottom: 15px;">* 拖拽高管卡片，或点击两个高管卡片进行切换。</div>
                         <div id="sc-slots-container"></div>
                     </div>
@@ -781,21 +1113,17 @@ export const executiveCustomButton = (function () {
 
             const btnSave = document.getElementById('sc-boardroom-save-btn');
             const btnFetch = document.getElementById('sc-boardroom-fetch-btn');
+            const btnOpt = document.getElementById('sc-boardroom-opt-btn');
+            if (btnOpt) {
+                btnOpt.onclick = (e) => {
+                    e.preventDefault();
+                    renderOptimizerResults();
+                };
+            }
 
             btnSave.onclick = (e) => {
                 e.preventDefault();
-                const res = calculateResults();
-                const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
-
-                localStorage.setItem(`R${rId}-SC-Saved-Bonuses`, JSON.stringify({
-                    adminBonus: res.adminBonus,
-                    saleBonus: res.saleBonus,
-                    timestamp: Date.now(),
-                    source: 'manual'
-                }));
-
-                localStorage.setItem(`R${rId}-SC-Saved-Boardroom`, JSON.stringify(boardroomState));
-
+                saveBoardroom();
                 showToast("数据保存成功", "success");
             };
 
