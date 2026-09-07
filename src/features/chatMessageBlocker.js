@@ -435,16 +435,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         btn.style.cssText = 'background:none;border:none;cursor:pointer;padding:0 4px;line-height:1;display:inline-flex;align-items:center;color:inherit;';
         // eye-off 图标（lucide），stroke=currentColor 由按钮颜色控制
         btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
-        btn.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            ev.preventDefault();
-            const rowInfo = resolveSender(row);
-            if (!rowInfo || typeof rowInfo.id !== 'number') {
-                btn.style.opacity = '0.35';
-                setTimeout(() => { btn.style.opacity = '0.85'; }, 1200);
-                return;
-            }
-            if (!window.confirm(`屏蔽后“${rowInfo.name}”的聊天消息将不再显示。确定屏蔽该用户吗？`)) return;
+        const doBlock = (rowInfo) => {
             const p = parseCompanyHref(link);
             const res = window.scChatBlockAddById
                 ? window.scChatBlockAddById({ id: rowInfo.id, name: rowInfo.name, realmId: p ? p.realmId : rowInfo.realmId, slug: p ? p.slug : undefined })
@@ -453,6 +444,51 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 row.classList.add(HIDDEN_CLASS);
                 window.scChatBlockRefresh && window.scChatBlockRefresh();
             }
+        };
+
+        btn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            ev.preventDefault();
+            const rowInfo = resolveSender(row);
+            if (!rowInfo || typeof rowInfo.id !== 'number') {
+                btn.style.opacity = '0.35';
+                setTimeout(() => { btn.style.opacity = '1'; }, 1200);
+                return;
+            }
+            // 已在旁边显示确认条时再次点击视为确认（两步点）
+            const existing = row.querySelector('.sc-chat-block-confirm');
+            if (existing) {
+                existing.remove();
+                doBlock(rowInfo);
+                return;
+            }
+            // 其它行残留的确认条先清理，避免同时出现多个
+            document.querySelectorAll('.sc-chat-block-confirm').forEach(c => c.remove());
+
+            const chip = document.createElement('span');
+            chip.className = 'sc-chat-block-confirm';
+            chip.style.cssText = 'display:inline-flex;align-items:center;gap:2px;margin-left:2px;font-size:11px;line-height:1;color:inherit;white-space:nowrap;';
+            const label = document.createElement('span');
+            label.textContent = `屏蔽“${rowInfo.name}”?`;
+            label.style.cssText = 'opacity:.85;';
+            const okBtn = document.createElement('button');
+            okBtn.type = 'button';
+            okBtn.textContent = '✓';
+            okBtn.title = '确认屏蔽';
+            okBtn.setAttribute('aria-label', '确认屏蔽');
+            okBtn.style.cssText = 'background:none;border:1px solid currentColor;border-radius:3px;cursor:pointer;font-size:10px;line-height:1;padding:1px 4px;color:#4CAF50;';
+            const noBtn = document.createElement('button');
+            noBtn.type = 'button';
+            noBtn.textContent = '✕';
+            noBtn.title = '取消';
+            noBtn.setAttribute('aria-label', '取消屏蔽');
+            noBtn.style.cssText = 'background:none;border:1px solid currentColor;border-radius:3px;cursor:pointer;font-size:10px;line-height:1;padding:1px 4px;color:inherit;opacity:.7;';
+            okBtn.onclick = (e) => { e.stopPropagation(); e.preventDefault(); chip.remove(); doBlock(rowInfo); };
+            noBtn.onclick = (e) => { e.stopPropagation(); e.preventDefault(); chip.remove(); };
+            chip.append(label, okBtn, noBtn);
+            btn.insertAdjacentElement('afterend', chip);
+            // 6 秒未操作自动取消
+            setTimeout(() => chip.remove(), 6000);
         });
         replyBtn.insertAdjacentElement('afterend', btn);
     }
@@ -478,6 +514,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
     }
     function cleanupUI() {
         document.querySelectorAll(`.${BTN_CLASS}`).forEach(b => b.remove());
+        document.querySelectorAll('.sc-chat-block-confirm').forEach(c => c.remove());
         document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach(el => el.classList.remove(HIDDEN_CLASS));
         syncCss(); // 关闭时移除 :has 预隐藏规则
     }
