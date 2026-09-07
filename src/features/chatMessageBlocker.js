@@ -429,17 +429,18 @@ import { registerExportInfo } from '../core/exportInfo.js';
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = BTN_CLASS;
-        btn.textContent = '屏蔽';
         btn.title = '屏蔽此人消息';
         btn.setAttribute('aria-label', '屏蔽此人');
-        btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;color:#f44336;padding:0 4px;line-height:1;opacity:.85;';
+        btn.style.cssText = 'background:none;border:none;cursor:pointer;padding:0 4px;line-height:1;display:inline-flex;align-items:center;color:#f44336;opacity:.85;';
+        // eye-off 图标（lucide），stroke=currentColor 由按钮颜色控制
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
         btn.addEventListener('click', (ev) => {
             ev.stopPropagation();
             ev.preventDefault();
             const rowInfo = resolveSender(row);
             if (!rowInfo || typeof rowInfo.id !== 'number') {
-                btn.textContent = '?';
-                setTimeout(() => { btn.textContent = '屏蔽'; }, 1200);
+                btn.style.opacity = '0.35';
+                setTimeout(() => { btn.style.opacity = '0.85'; }, 1200);
                 return;
             }
             const p = parseCompanyHref(link);
