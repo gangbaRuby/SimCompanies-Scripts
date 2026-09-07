@@ -25,6 +25,7 @@
 - `warehouseRetailProfit.js`：仓库零售利润。
 - `landscapeIdleBuildingHighlight.js`：地图空闲建筑高亮。
 - `restaurantStockReminder.js`：餐馆备货提醒（菜单库存、每日消耗、剩余天数预警）。
+- `chatMessageBlocker.js`：聊天室全局屏蔽（按公司名匹配，删除命中消息行；名单全局键 `SC_ChatBlock_Names`）。
 - `executiveBoardroom.js`：自定义高管数据面板和已保存加成。
 
 ## 高风险检查

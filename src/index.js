@@ -12,6 +12,7 @@ import './features/incomingContractsHandler.js';
 import './features/marketInterceptor.js';
 import './features/warehouseRetailProfit.js';
 import './features/chatAccessibility.js';
+import './features/chatMessageBlocker.js';
 import './features/chatEmojiPicker.js';
 import './features/executiveBoardroom.js';
 import { Network } from './core/network.js';
@@ -694,6 +695,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     if (typeof window.scChatAccessibilityRefresh === 'function') {
                         window.scChatAccessibilityRefresh();
                     }
+                    if (typeof window.scChatBlockRefresh === 'function') {
+                        window.scChatBlockRefresh();
+                    }
                 };
 
                 // 初始状态下手动更新一次文字，避免显示空白
@@ -810,6 +814,187 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 actionRow.append(applyBtn, resetBtn);
                 row.appendChild(actionRow);
                 return row;
+            };
+
+            // ---------- 聊天室全局屏蔽：名单管理入口 + 居中弹层 ----------
+            const chatBlockRefreshEntryCount = () => {
+                const el = document.getElementById('sc-chatblock-count');
+                if (!el) return;
+                const names = (typeof window.scChatBlockList === 'function') ? window.scChatBlockList() : [];
+                el.textContent = `已屏蔽 ${names.length} 人`;
+            };
+
+            const createChatBlockManageControls = () => {
+                const box = document.createElement('div');
+                box.className = 'sc-chatblock-entry';
+                box.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'SimcompaniesRetailCalculation-action-btn';
+                btn.textContent = '⚙️ 管理屏蔽名单';
+                btn.style.cssText = 'flex:1;background:#607D8B;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;white-space:nowrap;';
+                btn.onclick = (e) => { e.stopPropagation(); showChatBlockModal(); };
+                const count = document.createElement('span');
+                count.id = 'sc-chatblock-count';
+                count.style.cssText = 'font-size:12px;color:var(--sc-panel-fg,#efefef);white-space:nowrap;';
+                box.append(btn, count);
+                chatBlockRefreshEntryCount();
+                return box;
+            };
+
+            // 居中弹层（宽度/高度随视口收缩：width:min(420px, 100vw-24px)、max-height:min(600px, 100vh-32px)）
+            const showChatBlockModal = () => {
+                if (document.getElementById('sc-chatblock-modal')) return;
+
+                // 深浅色色板（与既有弹层一致）
+                const dark = DM();
+                const C = {
+                    bg: dark ? '#1e1e1e' : '#ffffff',
+                    bg2: dark ? '#2c2c2c' : '#f5f5f5',
+                    fg: dark ? '#efefef' : '#333333',
+                    fg2: dark ? '#cccccc' : '#555555',
+                    fg3: dark ? '#aaaaaa' : '#777777',
+                    border: dark ? '#555555' : '#cccccc',
+                    border2: dark ? '#444444' : '#dddddd',
+                    inputBg: dark ? '#222222' : '#ffffff',
+                    inputFg: dark ? '#efefef' : '#333333'
+                };
+
+                const prevBodyOverflow = document.body.style.overflow;
+                document.body.style.overflow = 'hidden';
+
+                const overlay = document.createElement('div');
+                overlay.id = 'sc-chatblock-modal';
+                overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.55);z-index:99999;display:flex;justify-content:center;align-items:center;';
+
+                const dialog = document.createElement('div');
+                dialog.style.cssText = `background:${C.bg};color:${C.fg};width:min(420px, calc(100vw - 24px));max-height:min(600px, calc(100vh - 32px));border:1px solid ${C.border};border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:hidden;font-family:sans-serif;box-sizing:border-box;`;
+
+                // 头部（标题 + 关闭）
+                const header = document.createElement('div');
+                header.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid ${C.border};flex:none;`;
+                const title = document.createElement('span');
+                title.textContent = '聊天室全局屏蔽名单';
+                title.style.cssText = 'font-size:14px;font-weight:bold;';
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.textContent = '✕';
+                closeBtn.setAttribute('aria-label', '关闭');
+                closeBtn.style.cssText = `background:none;border:none;color:${C.fg2};font-size:18px;cursor:pointer;line-height:1;padding:2px 8px;`;
+                header.append(title, closeBtn);
+
+                // 内容体（可滚动）
+                const body = document.createElement('div');
+                body.style.cssText = 'padding:12px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;';
+
+                const hint = document.createElement('div');
+                hint.style.cssText = `font-size:11px;color:${C.fg3};line-height:1.5;`;
+                hint.textContent = '按公司名屏蔽其聊天消息：忽略大小写、空格与连字符（super super poop 与 Super-Super-Poop 视为同一人）。';
+
+                const addRow = document.createElement('div');
+                addRow.style.cssText = 'display:flex;gap:6px;align-items:center;';
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.placeholder = '输入公司名，如 super super poop';
+                input.style.cssText = `flex:1;min-width:0;height:30px;box-sizing:border-box;padding:4px 8px;border:1px solid ${C.border};border-radius:4px;background:${C.inputBg};color:${C.inputFg};font-size:13px;`;
+                const addBtn = document.createElement('button');
+                addBtn.type = 'button';
+                addBtn.textContent = '添加屏蔽';
+                addBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+                addBtn.style.cssText = 'flex:none;background:#4CAF50;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:13px;white-space:nowrap;';
+                addRow.append(input, addBtn);
+
+                // 状态行（按钮下方反馈，不使用 toast）
+                const status = document.createElement('div');
+                status.style.cssText = 'font-size:12px;min-height:16px;line-height:1.4;';
+                const setStatus = (msg, ok) => {
+                    status.textContent = msg || '';
+                    status.style.color = ok ? '#4CAF50' : '#f44336';
+                };
+
+                const listLabel = document.createElement('div');
+                listLabel.textContent = '当前屏蔽名单';
+                listLabel.style.cssText = `font-size:12px;color:${C.fg2};font-weight:bold;`;
+
+                const list = document.createElement('div');
+                list.style.cssText = `max-height:280px;overflow-y:auto;border:1px solid ${C.border2};border-radius:6px;background:${C.bg2};padding:2px 8px;`;
+
+                const renderList = () => {
+                    const names = (typeof window.scChatBlockList === 'function') ? window.scChatBlockList() : [];
+                    list.innerHTML = '';
+                    if (names.length === 0) {
+                        const empty = document.createElement('div');
+                        empty.textContent = '暂无屏蔽名单：输入公司名后点击「添加屏蔽」。';
+                        empty.style.cssText = `font-size:12px;color:${C.fg3};padding:8px 2px;`;
+                        list.appendChild(empty);
+                        return;
+                    }
+                    names.forEach((name) => {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 2px;';
+                        if (name !== names[names.length - 1]) row.style.borderBottom = `1px solid ${C.border2}`;
+                        const nameEl = document.createElement('span');
+                        nameEl.textContent = name;
+                        nameEl.title = name;
+                        nameEl.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;';
+                        const delBtn = document.createElement('button');
+                        delBtn.type = 'button';
+                        delBtn.textContent = '删除';
+                        delBtn.className = 'SimcompaniesRetailCalculation-action-btn';
+                        delBtn.style.cssText = 'flex:none;background:#f44336;color:white;border:none;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:12px;white-space:nowrap;';
+                        delBtn.onclick = () => {
+                            if (typeof window.scChatBlockRemove === 'function') window.scChatBlockRemove(name);
+                            setStatus(`已解除屏蔽：${name}`, true);
+                            renderList();
+                            chatBlockRefreshEntryCount();
+                        };
+                        row.append(nameEl, delBtn);
+                        list.appendChild(row);
+                    });
+                };
+
+                body.append(hint, addRow, status, listLabel, list);
+                dialog.append(header, body);
+                overlay.appendChild(dialog);
+                document.body.appendChild(overlay);
+
+                const onKeyDown = (ev) => { if (ev.key === 'Escape') closeModal(); };
+                const closeModal = () => {
+                    document.body.style.overflow = prevBodyOverflow;
+                    document.removeEventListener('keydown', onKeyDown);
+                    overlay.remove();
+                    chatBlockRefreshEntryCount();
+                };
+
+                closeBtn.onclick = closeModal;
+                overlay.addEventListener('click', (ev) => { if (ev.target === overlay) closeModal(); });
+                document.addEventListener('keydown', onKeyDown);
+
+                const tryAdd = () => {
+                    const raw = input.value.trim();
+                    if (!raw) { setStatus('请输入公司名', false); return; }
+                    const res = (typeof window.scChatBlockAdd === 'function') ? window.scChatBlockAdd(raw) : { ok: false, reason: 'invalid' };
+                    if (res.ok) {
+                        input.value = '';
+                        setStatus(`已屏蔽：${res.name}`, true);
+                        renderList();
+                        chatBlockRefreshEntryCount();
+                        if (typeof window.scChatBlockRefresh === 'function') window.scChatBlockRefresh();
+                    } else if (res.reason === 'duplicate') {
+                        setStatus('该名称已在屏蔽名单中', false);
+                    } else if (res.reason === 'invalid') {
+                        setStatus('无法识别：名称需包含字母/数字/中文', false);
+                    } else {
+                        setStatus('请输入公司名', false);
+                    }
+                };
+
+                addBtn.onclick = tryAdd;
+                input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') tryAdd(); });
+
+                renderList();
+                chatBlockRefreshEntryCount();
+                setTimeout(() => input.focus(), 50);
             };
 
             mainMenu.append(
@@ -929,6 +1114,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 { type: 'toggle', key: 'autoSelectBestMarketRow', label: '交易所自动选中高亮行', defaultEnabled: false },
                 { type: 'toggle', key: 'warehouseProfit', label: '仓库时利润计算' },
                 { type: 'toggle', key: 'chatAccessibility', label: '聊天室色弱辅助', defaultEnabled: false },
+                { type: 'toggle', key: 'chatBlock', label: '聊天室全局屏蔽', defaultEnabled: false, subContent: createChatBlockManageControls },
                 { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
                 { type: 'toggle', key: 'restaurantStock', label: '餐馆备货提醒' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
