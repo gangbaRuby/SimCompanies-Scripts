@@ -566,8 +566,12 @@ import { registerExportInfo } from '../core/exportInfo.js';
         const on = isEnabled();
         chatRoomHeaders().forEach(header => {
             let btn = header.querySelector(`.${QUICK_CLASS}`);
+            if (!on) {
+                // 功能关闭时不保留标题按钮（重新开启走功能开关设置）
+                if (btn) btn.remove();
+                return;
+            }
             if (!btn) {
-                if (!on) return;
                 btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = QUICK_CLASS;
@@ -581,8 +585,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 });
                 header.insertBefore(btn, header.firstChild);
             }
-            btn.textContent = on ? '🟢 全局屏蔽' : '🔴 全局屏蔽';
-            btn.title = on ? '点击关闭聊天室全局屏蔽' : '点击开启聊天室全局屏蔽';
+            btn.textContent = '🟢 全局屏蔽';
+            btn.title = '点击关闭聊天室全局屏蔽';
         });
     }
 
