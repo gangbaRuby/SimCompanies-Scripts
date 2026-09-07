@@ -431,8 +431,14 @@ import { registerExportInfo } from '../core/exportInfo.js';
             for (const m of muts) {
                 for (const n of m.addedNodes) {
                     if (n.nodeType !== 1) continue;
-                    if (n.matches && n.matches(CHAT_CONTAINER_SEL_ALL)) { scheduleScan(); return; }
-                    if (n.closest && n.closest(CHAT_CONTAINER_SEL_ALL)) { scheduleScan(); return; }
+                    // 新出现的聊天容器 / 尚未被逐容器观察的新行：立即同步处理，避免空窗闪现
+                    const cont = (n.matches && n.matches(CHAT_CONTAINER_SEL_ALL))
+                        ? n
+                        : (n.closest ? n.closest(CHAT_CONTAINER_SEL_ALL) : null);
+                    if (cont && !observedContainers.has(cont)) {
+                        scanAll();
+                        return;
+                    }
                 }
             }
         });
@@ -448,9 +454,14 @@ import { registerExportInfo } from '../core/exportInfo.js';
         if (observer) { observer.disconnect(); observer = null; }
         observedContainers = new WeakSet();
         injectStyles();
+        if (!isEnabled()) {
+            detachBodyObserver();
+            return;
+        }
+        // 功能开启时 body 监听常驻：切房间/新容器出现的空窗也能第一时间处理
+        ensureBodyObserver();
         const containers = findChatContainers();
         if (containers.length === 0) {
-            detachBodyObserver();
             if (initAttempts < 8) {
                 initAttempts++;
                 containerWatchTimer = setTimeout(init, 1000);
@@ -460,12 +471,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         initAttempts = 0;
         observer = new MutationObserver(scheduleScan);
         containers.forEach(c => ensureObserved(c));
-        if (isEnabled()) {
-            scanAll();
-            ensureBodyObserver();
-        } else {
-            detachBodyObserver();
-        }
+        scanAll();
     }
 
     // SPA 路由变化监听
