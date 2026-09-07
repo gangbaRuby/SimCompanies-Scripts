@@ -1,38 +1,34 @@
 // ======================
-// 聊天室全局屏蔽（v2.2：WS 实时过滤 + DOM 占位隐藏，不修改 HTTP 响应）
+// 聊天室全局屏蔽（v2.3：CSS :has 预隐藏 + WS 实时过滤 + JS 兜底）
 // ----------------------
-// 屏蔽名单：SC_ChatBlock_List（全局键，backup:true）→ [{ id, name, realmId }]；
-//   id 为游戏内公司唯一 id（sender.id，跨领域唯一，来自网络数据），匹配以 id 为准。
+// 屏蔽名单：SC_ChatBlock_List（全局键，backup:true）→ [{ id, name, realmId, slug }]；
+//   id 为游戏内公司唯一 id（sender.id），匹配以 id 为准；slug 为 href 里的公司段，
+//   用于注入 CSS 预隐藏规则。
 //
 // 为什么不改 HTTP 响应：
-//   bundle :299934 fullHistory = r.length < 30 —— 游戏按"返回条数 < 30"判断历史已到底。
-//   若过滤掉被屏蔽消息把条数改少，会导致历史加载提前停止（曾复现"历史不能正常加载"）。
-//   因此 /api/v2/chatroom/<room>/ 与 from-id 的 GET 响应一律不改，仅登记 sender 用于解析 id。
+//   bundle :299934 fullHistory = r.length < 30 —— 游戏按"返回条数 < 30"判断历史已到底，
+//   过滤响应会误判并停载历史（曾复现）。因此聊天室 GET 一律不改，仅登记 sender。
 //
-// 实时消息（WebSocket）：
-//   帧样例：{routing:"NEW_MESSAGE"|"UPDATE_MESSAGE", data:{...sender:{id},...}}，
-//           {routing:"GROUP", messages:[{routing:..., data:...}, ...]}。
-//   拦截 WS 的 onmessage（属性赋值方式，bundle :70544-70567），命中名单 sender.id 的
-//   消息/组内消息直接丢弃，不让其进入 React 状态 → 实时消息完全不渲染。
+// CSS 预隐藏（核心，杜绝"先看到再隐藏"闪现）：
+//   每屏蔽一个 (realm, slug) 注入一条规则：
+//     div:has(> a[href*="/company/<realm>/<slug>/"]) { visibility:hidden; height:0; ... }
+//   消息组 div 的直接子级就是公司链接 a；浏览器在渲染/样式计算阶段即命中该规则，
+//   从缓存重绘/整列挂载时被屏蔽行天然不占空间、不显示 —— 无需等待 JS，不会闪现。
+//   （:has 由 Chrome105+/Safari15.4+/Firefox121+ 支持；旧浏览器回退到 JS 兜底。）
 //
-// 已渲染/缓存/历史中被屏蔽消息：不做 remove()（React 锚点/历史加载安全），
-//   加 .sc-chatblock-hidden：visibility:hidden 且高度压为 0（不占空间），
-//   在 MutationObserver 微任务里同帧执行，避免"先看到再隐藏"的闪现。
-//   节点保留在 DOM 中，避免 React insertBefore 锚点失效；历史消息仍随游戏分页正常加载。
+// 实时消息（WebSocket）：NEW_MESSAGE/UPDATE_MESSAGE/GROUP 帧命中名单 sender.id 直接丢弃。
+// JS 兜底：MutationObserver + body 常驻监听，对新挂载行补隐藏（同帧微任务）。
+// 屏蔽按钮：注入到组内回复按钮（svg[data-icon="reply"]）之后，点击按 id 加入名单。
 //
-// 消息组 DOM：聊天容器直接子级（div.css-mnxdu9 等），同发送者连续消息为一组；
-//   发送者 = 组的"直接子级"公司链接（头像区），正文里的 @提及/引用链接不算发送者。
-// 屏蔽按钮：注入到组内回复按钮（svg[data-icon="reply"]）之后；点击经登记表解析
-//   sender.id，按 id 加入名单并立即占位隐藏该组。
 // v1 遗留：旧键 SC_ChatBlock_Names（字符串名单）不再读写，用户自行清空。
 //
 // 未来失效检查点（对照 bundle index-CcG5yGSH.js）：
-//   - 端点路径变化 → :38472-38473（api_chatroom / api_chatroom_from_id）
-//   - 消息字段改名 → :71291-71301（MESSAGES_LOADED 消费 sender.id / sender.company）
-//   - fullHistory 判定 → :299934（r.length < 30；若改为服务端字段，可考虑恢复 HTTP 过滤）
-//   - WS 事件结构 → :71105-71195（NEW_MESSAGE/UPDATE_MESSAGE/GROUP/RESYNC_AFTER_RECONNECT）、
-//     WS 客户端 :70544-70567（onmessage 属性赋值方式；若改 addEventListener 需同步）
+//   - 端点路径变化 → :38472-38473
+//   - 消息字段改名 → :71291-71301（sender.id / sender.company）
+//   - fullHistory 判定 → :299934（r.length < 30）
+//   - WS 事件结构 → :71105-71195；WS 客户端 :70544-70567（onmessage 属性赋值方式）
 //   - 聊天 DOM：容器 :290732-290737（css-xo2rg1/e1llepen2）、消息组/按钮结构 :291485-291551
+//   - 消息组"直接子级 = 公司链接"的结构若变化，:has 规则与按钮定位都要检查
 // ======================
 import { registerExportInfo } from '../core/exportInfo.js';
 
@@ -41,10 +37,10 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
     const MODULE_KEY = 'chatBlock';
     const STORAGE_KEY = 'SC_ChatBlock_List';
-    // /api/v2/chatroom/<room>/ 或 /api/v2/chatroom/<room>/from-id/<id>/（GET）
     const CHATROOM_URL_RE = /\/api\/v2\/chatroom\/[^/?#]+(\/from-id\/\d+)?\/?(\?|$)/;
     const HIDDEN_CLASS = 'sc-chatblock-hidden';
     const BTN_CLASS = 'sc-chat-block-btn';
+    const CSS_ID = 'sc-chatblock-css';
     const CHAT_CONTAINER_SEL = 'div.css-xo2rg1.e1llepen2';
     const CHAT_CONTAINER_SEL_ALL = 'div.css-xo2rg1.e1llepen2, div[style*="column-reverse"][style*="overflow"]';
 
@@ -60,10 +56,9 @@ import { registerExportInfo } from '../core/exportInfo.js';
     let scanScheduled = false;
     let containerWatchTimer = null;
     let initAttempts = 0;
-    let styleInjected = false;
+    let cssReady = false;
     let blockedCache = null;
     let observedContainers = new WeakSet();
-    // (realmId|normalizeCompany) -> { id, name, realmId }，由 HTTP/WS 数据登记
     const senderIndex = new Map();
 
     // ---------- 开关与名单存储 ----------
@@ -94,6 +89,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
     }
     function invalidateCache() {
         blockedCache = null;
+        syncCss();
     }
     function normalizeName(raw) {
         let s = String(raw == null ? '' : raw).trim().toLowerCase();
@@ -104,7 +100,39 @@ import { registerExportInfo } from '../core/exportInfo.js';
         return String(realmId == null ? '?' : realmId) + '|' + normalizeName(company);
     }
 
-    // ---------- 数据登记（不改动任何响应/帧的内容） ----------
+    // ---------- CSS：基础隐藏类 + 每条屏蔽的 :has 预隐藏规则 ----------
+    const HIDE_BASE = `.${HIDDEN_CLASS}{visibility:hidden !important;height:0 !important;min-height:0 !important;max-height:0 !important;padding-top:0 !important;padding-bottom:0 !important;margin-top:0 !important;margin-bottom:0 !important;border-width:0 !important;overflow:hidden !important;}`;
+    function cssEscapeStr(s) {
+        return String(s).replace(/["\\]/g, (m) => '\\' + m);
+    }
+    function syncCss() {
+        let el = document.getElementById(CSS_ID);
+        if (!el) {
+            el = document.createElement('style');
+            el.id = CSS_ID;
+            document.head.appendChild(el);
+        }
+        let css = HIDE_BASE;
+        if (isEnabled()) {
+            // 只作用于聊天容器内部的消息组（组直接子级 = 公司链接 a），避免误伤页面其它公司链接
+            for (const e of readList()) {
+                if (typeof e.realmId === 'number' && e.slug) {
+                    const hrefPart = '/company/' + e.realmId + '/' + e.slug + '/';
+                    const rule = `visibility:hidden !important;height:0 !important;min-height:0 !important;max-height:0 !important;padding-top:0 !important;padding-bottom:0 !important;margin-top:0 !important;margin-bottom:0 !important;border-width:0 !important;overflow:hidden !important;`;
+                    css += `div.css-xo2rg1.e1llepen2 div:has(> a[href*="${cssEscapeStr(hrefPart)}"]){${rule}}`;
+                    css += `div[style*="column-reverse"][style*="overflow"] div:has(> a[href*="${cssEscapeStr(hrefPart)}"]){${rule}}`;
+                }
+            }
+        }
+        el.textContent = css;
+        cssReady = true;
+    }
+    function ensureCss() {
+        if (!cssReady || !document.getElementById(CSS_ID)) syncCss();
+        else syncCss();
+    }
+
+    // ---------- 数据登记（不改动任何响应/帧内容） ----------
     function indexSender(sender) {
         if (sender && typeof sender.id === 'number' && sender.company) {
             senderIndex.set(entryKey(sender.realmId, sender.company), {
@@ -122,7 +150,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         return typeof sid === 'number' && blockedIds().has(sid);
     }
 
-    // ---------- HTTP 钩子：仅登记 sender，绝不改响应（fullHistory=r.length<30 限制） ----------
+    // ---------- HTTP 钩子：仅登记 sender ----------
     const origFetch = window.fetch;
     window.fetch = async function (...args) {
         const res = await origFetch.apply(this, args);
@@ -187,7 +215,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         return prevSend.apply(this, arguments);
     };
 
-    // ---------- WebSocket 钩子：实时消息按名单过滤，不让其进入状态 ----------
+    // ---------- WebSocket 钩子：实时消息按名单过滤 ----------
     function filterWsFrame(frame) {
         if (!frame || typeof frame !== 'object') return { keep: true, data: null };
         if (frame.routing === 'NEW_MESSAGE' || frame.routing === 'UPDATE_MESSAGE') {
@@ -226,7 +254,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 try {
                     const frame = JSON.parse(ev.data);
                     const r = filterWsFrame(frame);
-                    if (!r.keep) return; // 丢弃整帧
+                    if (!r.keep) return;
                     if (r.data) out = new MessageEvent('message', { data: JSON.stringify(r.data) });
                 } catch (e) { /* 原样放行 */ }
             }
@@ -253,7 +281,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
                     return ws;
                 }
             });
-        } catch (e) { /* 忽略：不支持则退化为 DOM 兜底 */ }
+        } catch (e) { /* 忽略 */ }
     }
 
     // ---------- 供设置面板/按钮调用 ----------
@@ -267,10 +295,11 @@ import { registerExportInfo } from '../core/exportInfo.js';
         list.push({
             id,
             name,
-            realmId: (entry && entry.realmId != null) ? Number(entry.realmId) : null
+            realmId: (entry && entry.realmId != null) ? Number(entry.realmId) : null,
+            slug: (entry && entry.slug) ? String(entry.slug) : undefined
         });
         writeList(list);
-        invalidateCache();
+        invalidateCache(); // 同步重建 CSS 预隐藏规则
         return { ok: true, id, name };
     };
     window.scChatBlockRemoveById = (id) => {
@@ -279,9 +308,10 @@ import { registerExportInfo } from '../core/exportInfo.js';
         invalidateCache();
         return { ok: true };
     };
-    // 开关切换/名单变更后调用：开启→立即扫描占位隐藏+补按钮；关闭→清理
+    // 开关切换/名单变更后调用
     window.scChatBlockRefresh = () => {
         initAttempts = 0;
+        syncCss();
         init();
         if (isEnabled()) scanAll();
         else cleanupUI();
@@ -309,19 +339,20 @@ import { registerExportInfo } from '../core/exportInfo.js';
     function parseCompanyHref(a) {
         const href = a.getAttribute('href') || '';
         const m = href.match(/\/company\/(\d+)\/([^/?#]+)/);
-        return m ? { realmId: Number(m[1]), name: m[2] } : null;
+        return m ? { realmId: Number(m[1]), slug: m[2] } : null;
     }
     function resolveSender(row) {
         const link = senderCompanyLink(row);
         if (!link) return null;
         const p = parseCompanyHref(link);
         if (!p) return null;
-        const idxInfo = senderIndex.get(entryKey(p.realmId, p.name));
+        const idxInfo = senderIndex.get(entryKey(p.realmId, p.slug));
         if (idxInfo) return idxInfo;
-        const nameNorm = normalizeName(p.name);
+        const slugNorm = normalizeName(p.slug);
         for (const e of readList()) {
-            if (typeof e.id === 'number' && Number(e.realmId) === p.realmId && normalizeName(e.name) === nameNorm) {
-                return { id: e.id, name: e.name, realmId: p.realmId };
+            if (typeof e.id === 'number' && Number(e.realmId) === p.realmId &&
+                normalizeName(e.name || e.slug) === slugNorm) {
+                return { id: e.id, name: e.name || e.slug, realmId: p.realmId, slug: e.slug || p.slug };
             }
         }
         return null;
@@ -335,22 +366,14 @@ import { registerExportInfo } from '../core/exportInfo.js';
         return null;
     }
 
-    // ---------- DOM 兜底：占位隐藏 + 屏蔽按钮注入 ----------
-    function injectStyles() {
-        if (styleInjected) return;
-        styleInjected = true;
-        const style = document.createElement('style');
-        // 隐藏且高度归零：不占视觉空间；保留 DOM 节点（不做 remove()/display:none），
-        // 避免 React 以该节点为 insertBefore 锚点时失效。
-        style.textContent = `.${HIDDEN_CLASS}{visibility:hidden !important;height:0 !important;min-height:0 !important;max-height:0 !important;padding-top:0 !important;padding-bottom:0 !important;margin-top:0 !important;margin-bottom:0 !important;border-width:0 !important;overflow:hidden !important;}`;
-        document.head.appendChild(style);
-    }
-
+    // ---------- JS 兜底：隐藏 + 屏蔽按钮注入 ----------
     function injectBlockButton(row) {
         if (row.classList.contains(HIDDEN_CLASS)) return;
         if (row.querySelector(`.${BTN_CLASS}`)) return;
-        const info = resolveSender(row);
-        if (!info || typeof info.id !== 'number') return; // 未解析到唯一 id 不提供按钮
+        const link = senderCompanyLink(row);
+        if (!link) return;
+        const cur = resolveSender(row);
+        if (!cur || typeof cur.id !== 'number') return; // 未解析到唯一 id 不提供按钮
         const replyBtn = findReplyButton(row);
         if (!replyBtn) return;
 
@@ -364,18 +387,19 @@ import { registerExportInfo } from '../core/exportInfo.js';
         btn.addEventListener('click', (ev) => {
             ev.stopPropagation();
             ev.preventDefault();
-            const cur = resolveSender(row);
-            if (!cur || typeof cur.id !== 'number') {
+            const rowInfo = resolveSender(row);
+            if (!rowInfo || typeof rowInfo.id !== 'number') {
                 btn.textContent = '?';
                 setTimeout(() => { btn.textContent = '屏蔽'; }, 1200);
                 return;
             }
-            const res = window.scChatBlockAddById ? window.scChatBlockAddById(cur) : { ok: false };
-            if (res && res.ok) {
+            const p = parseCompanyHref(link);
+            const res = window.scChatBlockAddById
+                ? window.scChatBlockAddById({ id: rowInfo.id, name: rowInfo.name, realmId: p ? p.realmId : rowInfo.realmId, slug: p ? p.slug : undefined })
+                : { ok: false };
+            if (res && (res.ok || res.reason === 'duplicate')) {
                 row.classList.add(HIDDEN_CLASS);
                 window.scChatBlockRefresh && window.scChatBlockRefresh();
-            } else if (res && res.reason === 'duplicate') {
-                row.classList.add(HIDDEN_CLASS);
             }
         });
         replyBtn.insertAdjacentElement('afterend', btn);
@@ -405,9 +429,10 @@ import { registerExportInfo } from '../core/exportInfo.js';
     function cleanupUI() {
         document.querySelectorAll(`.${BTN_CLASS}`).forEach(b => b.remove());
         document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach(el => el.classList.remove(HIDDEN_CLASS));
+        syncCss(); // 关闭时移除 :has 预隐藏规则
     }
 
-    // MutationObserver 触发后立即重扫：微任务在浏览器绘制前执行，避免"先看到再隐藏"闪现
+    // 微任务同帧重扫（兜底）
     const enqueueMicro = typeof queueMicrotask === 'function' ? queueMicrotask : (fn) => setTimeout(fn, 0);
     function scheduleScan() {
         if (!isEnabled()) return;
@@ -431,7 +456,6 @@ import { registerExportInfo } from '../core/exportInfo.js';
             for (const m of muts) {
                 for (const n of m.addedNodes) {
                     if (n.nodeType !== 1) continue;
-                    // 新出现的聊天容器 / 尚未被逐容器观察的新行：立即同步处理，避免空窗闪现
                     const cont = (n.matches && n.matches(CHAT_CONTAINER_SEL_ALL))
                         ? n
                         : (n.closest ? n.closest(CHAT_CONTAINER_SEL_ALL) : null);
@@ -442,7 +466,6 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 }
             }
         });
-        // 容器元素可能被 React 整体重建，观察 body 以尽快覆盖新容器
         bodyObserver.observe(document.body, { childList: true, subtree: true });
     }
     function detachBodyObserver() {
@@ -453,12 +476,11 @@ import { registerExportInfo } from '../core/exportInfo.js';
     function init() {
         if (observer) { observer.disconnect(); observer = null; }
         observedContainers = new WeakSet();
-        injectStyles();
+        ensureCss();
         if (!isEnabled()) {
             detachBodyObserver();
             return;
         }
-        // 功能开启时 body 监听常驻：切房间/新容器出现的空窗也能第一时间处理
         ensureBodyObserver();
         const containers = findChatContainers();
         if (containers.length === 0) {
@@ -485,5 +507,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
         }
     }).observe(document, { subtree: true, childList: true });
 
-    setTimeout(init, 500);
+    setTimeout(() => {
+        ensureCss();
+        init();
+    }, 500);
 })();
