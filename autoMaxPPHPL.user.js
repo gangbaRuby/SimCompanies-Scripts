@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.8
+// @version      1.33.9
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -4734,7 +4734,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.8",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.9",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -4862,6 +4862,21 @@
     };
     let draggedSlotId = null;
     let selectedSlotId = null;
+    const SLOT_LABELS = {
+      o: "COO",
+      f: "CFO",
+      m: "CMO",
+      t: "CTO",
+      v: "COO \u5B66\u5F92",
+      x: "CFO \u5B66\u5F92",
+      y: "CMO \u5B66\u5F92",
+      z: "CTO \u5B66\u5F92",
+      "1": "\u804C\u5458 1",
+      "2": "\u804C\u5458 2",
+      "3": "\u804C\u5458 3",
+      "4": "\u804C\u5458 4",
+      "5": "\u804C\u5458 5"
+    };
     function mapExecutivesToState(execList) {
       Object.keys(boardroomState).forEach((k) => boardroomState[k] = null);
       let staffIdx = 1;
@@ -4924,12 +4939,35 @@
       }
       return 15;
     }
-    function calculateResults() {
-      const getSkill = (slotId, skillKey) => {
-        return boardroomState[slotId] && boardroomState[slotId].skills ? boardroomState[slotId].skills[skillKey] : 0;
-      };
+    function readRealmAcademyLevel() {
+      const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
+      try {
+        const stored = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
+        const level = Number(stored && stored.academyActive);
+        if (Number.isFinite(level) && level >= 0) return level;
+      } catch (e) {
+      }
+      return null;
+    }
+    function syncAcademyRadioToRealm() {
+      const level = readRealmAcademyLevel();
+      if (level === null) return null;
+      const bucket = level >= 20 ? 20 : level >= 15 ? 15 : level >= 10 ? 10 : level >= 5 ? 5 : 0;
+      document.querySelectorAll('input[name="sc-aca-r"]').forEach((radio) => {
+        radio.checked = Number(radio.value) === bucket;
+      });
+      return bucket;
+    }
+    function getCheckedAcademyLevel() {
       const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
-      const academyLevel = selectedRadio ? parseInt(selectedRadio.value) : 15;
+      return selectedRadio ? parseInt(selectedRadio.value) : 15;
+    }
+    function computeEffectivePoints(state2, academyLevel) {
+      const getSkill = (slotId, skillKey) => {
+        const raw = state2[slotId] && state2[slotId].skills ? state2[slotId].skills[skillKey] : 0;
+        const num = Number(raw);
+        return Number.isFinite(num) ? num : 0;
+      };
       const hasCooApp = academyLevel >= 5;
       const hasCfoApp = academyLevel >= 10;
       const hasCmoApp = academyLevel >= 15;
@@ -4952,10 +4990,30 @@
         if (val > 60) val = 60 + (val - 60) / 2;
         return Math.floor(val);
       };
-      const effCoo = applyDecay(rawCoo);
-      const effCfo = applyDecay(rawCfo);
-      const effCmo = applyDecay(rawCmo);
-      const effCto = applyDecay(rawCto);
+      return {
+        rawCoo,
+        effCoo: applyDecay(rawCoo),
+        rawCfo,
+        effCfo: applyDecay(rawCfo),
+        rawCmo,
+        effCmo: applyDecay(rawCmo),
+        rawCto,
+        effCto: applyDecay(rawCto)
+      };
+    }
+    function calculateResults() {
+      const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
+      const academyLevel = selectedRadio ? parseInt(selectedRadio.value) : 15;
+      const {
+        rawCoo,
+        effCoo,
+        rawCfo,
+        effCfo,
+        rawCmo,
+        effCmo,
+        rawCto,
+        effCto
+      } = computeEffectivePoints(boardroomState, academyLevel);
       const rId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
       let SRC = {};
       try {
@@ -5107,6 +5165,423 @@
         });
       }
       return { adminBonus: effCoo, saleBonus: Math.floor(effCmo / 3) };
+    }
+    const OPT_SEATS = ["o", "f", "m", "t", "v", "y"];
+    const OPT_BASE_COEF = {
+      o: { coo: 1, cmo: 0.25 },
+      f: { coo: 0.25, cmo: 0.25 },
+      m: { coo: 0.25, cmo: 1 },
+      t: { coo: 0.25, cmo: 0.25 },
+      v: { coo: 0, cmo: 0 },
+      y: { coo: 0, cmo: 0 }
+    };
+    function isOptSeatActive(seat, academyLevel) {
+      if (seat === "o" || seat === "f" || seat === "m" || seat === "t") return true;
+      if (seat === "v") return academyLevel >= 5;
+      if (seat === "y") return academyLevel >= 15;
+      return false;
+    }
+    function collectExecutivePool() {
+      const pool = [];
+      Object.keys(boardroomState).forEach((id) => {
+        const emp = boardroomState[id];
+        if (emp && emp.skills) {
+          pool.push({
+            slotId: id,
+            name: emp.name || "\u672A\u547D\u540D",
+            skills: {
+              coo: Number(emp.skills.coo) || 0,
+              cfo: Number(emp.skills.cfo) || 0,
+              cmo: Number(emp.skills.cmo) || 0,
+              cto: Number(emp.skills.cto) || 0
+            },
+            obj: emp
+          });
+        }
+      });
+      return pool;
+    }
+    function decayEffective(raw) {
+      let val = raw;
+      if (val > 80) val = 80 + (val - 80) / 2;
+      if (val > 60) val = 60 + (val - 60) / 2;
+      return Math.floor(val);
+    }
+    function createAssignEnumerator(seatCount, candCount) {
+      const used = new Array(candCount).fill(false);
+      const idx = new Array(seatCount).fill(-1);
+      let d = 0;
+      let j = 0;
+      let finished = false;
+      return {
+        idx,
+        step: function(budget, onLeaf) {
+          let processed = 0;
+          while (processed < budget && !finished) {
+            let placed = false;
+            while (j < candCount) {
+              if (!used[j]) {
+                used[j] = true;
+                idx[d] = j;
+                placed = true;
+                j++;
+                break;
+              }
+              j++;
+            }
+            if (placed) {
+              if (d === seatCount - 1) {
+                onLeaf();
+                processed++;
+                used[idx[d]] = false;
+                idx[d] = -1;
+              } else {
+                d++;
+                j = 0;
+              }
+            } else {
+              if (d === 0) {
+                finished = true;
+                break;
+              }
+              d--;
+              used[idx[d]] = false;
+              j = idx[d] + 1;
+              idx[d] = -1;
+            }
+          }
+          return finished;
+        }
+      };
+    }
+    function findBestPlacements(pool, academyLevel, kMin, tokenId) {
+      return new Promise((resolve) => {
+        const coefs = OPT_SEATS.map((seat) => {
+          if (seat === "v") return { coo: academyLevel >= 5 ? 0.5 : 0, cmo: 0 };
+          if (seat === "y") return { coo: 0, cmo: academyLevel >= 15 ? 0.5 : 0 };
+          return OPT_BASE_COEF[seat];
+        });
+        const cands = pool.slice();
+        while (cands.length < OPT_SEATS.length) {
+          cands.push({ slotId: null, name: null, obj: null, empty: true, skills: { coo: 0, cmo: 0 } });
+        }
+        const total = cands.length;
+        const cooVals = cands.map((c) => c.skills.coo);
+        const cmoVals = cands.map((c) => c.skills.cmo);
+        const best = { admin: null, restaurant: null, targetSales: null };
+        const bestArr = { admin: null, restaurant: null, targetSales: null };
+        const isBetter = (cur, next) => cur === null || next[0] > cur[0] || next[0] === cur[0] && next[1] > cur[1];
+        const en = createAssignEnumerator(OPT_SEATS.length, total);
+        const evaluate = () => {
+          const idx = en.idx;
+          let sCoo = 0;
+          let sCmo = 0;
+          for (let i = 0; i < OPT_SEATS.length; i++) {
+            sCoo += coefs[i].coo * cooVals[idx[i]];
+            sCmo += coefs[i].cmo * cmoVals[idx[i]];
+          }
+          const effCoo = decayEffective(Math.floor(sCoo));
+          const effCmo = decayEffective(Math.floor(sCmo));
+          const adminKey = [effCoo, effCmo];
+          const restaurantKey = [effCmo, effCoo];
+          if (isBetter(best.admin, adminKey)) {
+            best.admin = adminKey;
+            bestArr.admin = idx.slice();
+          }
+          if (isBetter(best.restaurant, restaurantKey)) {
+            best.restaurant = restaurantKey;
+            bestArr.restaurant = idx.slice();
+          }
+          if (kMin !== null && effCmo >= 3 * kMin) {
+            const targetKey = [effCoo, effCmo];
+            if (isBetter(best.targetSales, targetKey)) {
+              best.targetSales = targetKey;
+              bestArr.targetSales = idx.slice();
+            }
+          }
+        };
+        const makeResult = (arrIdx) => {
+          if (!arrIdx) return null;
+          let sCoo = 0;
+          let sCmo = 0;
+          for (let i = 0; i < OPT_SEATS.length; i++) {
+            sCoo += coefs[i].coo * cooVals[arrIdx[i]];
+            sCmo += coefs[i].cmo * cmoVals[arrIdx[i]];
+          }
+          const placement = OPT_SEATS.map((seat, i) => {
+            const c = cands[arrIdx[i]];
+            return { seat, obj: c && !c.empty ? c.obj : null, name: c && !c.empty ? c.name : null };
+          });
+          return {
+            placement,
+            effCoo: decayEffective(Math.floor(sCoo)),
+            effCmo: decayEffective(Math.floor(sCmo))
+          };
+        };
+        const CHUNK = 3e4;
+        const tick = () => {
+          if (tokenId !== optRunId) {
+            resolve(null);
+            return;
+          }
+          const finished = en.step(CHUNK, evaluate);
+          if (!finished) {
+            setTimeout(tick, 0);
+            return;
+          }
+          resolve({
+            admin: makeResult(bestArr.admin),
+            restaurant: makeResult(bestArr.restaurant),
+            targetSales: makeResult(bestArr.targetSales)
+          });
+        };
+        tick();
+      });
+    }
+    function readBaseNumbers() {
+      const rId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
+      let SRC = {};
+      try {
+        SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${rId}`)) || {};
+      } catch (e) {
+      }
+      return {
+        baseAdminVal: (SRC.administration || 1) - 1,
+        baseSalesVal: (SRC.salesModifier || 0) + (SRC.recreationBonus || 0)
+      };
+    }
+    function formatMetrics(effCoo, effCmo) {
+      const base = readBaseNumbers();
+      const adminPct = base.baseAdminVal * (1 - effCoo / 100) * 100;
+      const restaurant = base.baseSalesVal * 0.02 + effCmo * 0.01;
+      const salesPct = base.baseSalesVal + Math.floor(effCmo / 3);
+      return {
+        adminText: adminPct.toFixed(2) + "%",
+        restaurantText: "+" + restaurant.toFixed(3),
+        salesText: salesPct.toFixed(1) + "%"
+      };
+    }
+    function currentMetrics(academyLevel) {
+      const eff = computeEffectivePoints(boardroomState, academyLevel);
+      return { effCoo: eff.effCoo, effCmo: eff.effCmo, text: formatMetrics(eff.effCoo, eff.effCmo) };
+    }
+    function saveBoardroom() {
+      const res = calculateResults();
+      const rId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
+      localStorage.setItem(`R${rId}-SC-Saved-Bonuses`, JSON.stringify({
+        adminBonus: res.adminBonus,
+        saleBonus: res.saleBonus,
+        timestamp: Date.now(),
+        source: "manual"
+      }));
+      localStorage.setItem(`R${rId}-SC-Saved-Boardroom`, JSON.stringify(boardroomState));
+    }
+    function applyBestPlacement(targetKey, btn) {
+      syncAcademyRadioToRealm();
+      const academyLevel = getCheckedAcademyLevel();
+      const pool = collectExecutivePool();
+      if (pool.length === 0) {
+        showToast("\u6682\u65E0\u53EF\u7528\u7684\u9AD8\u7BA1\u6570\u636E", "error");
+        return;
+      }
+      let kMin = null;
+      if (targetKey === "target") {
+        kMin = optTargetK();
+        if (kMin === null) {
+          showToast("\u8BF7\u5148\u8F93\u5165\u6709\u6548\u7684\u76EE\u6807\u9500\u552E\u901F\u5EA6", "error");
+          return;
+        }
+      }
+      const token = ++optRunId;
+      optBusy = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "\u8BA1\u7B97\u4E2D\u2026";
+      }
+      findBestPlacements(pool, academyLevel, kMin, token).then((bests) => {
+        optBusy = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "\u5E94\u7528\u5230\u81EA\u5B9A\u4E49\u6570\u636E\u5E76\u4FDD\u5B58";
+        }
+        if (!bests) return;
+        const best = targetKey === "target" ? bests.targetSales : bests[targetKey];
+        if (!best) {
+          showToast("\u5F53\u524D\u76EE\u6807\u65E0\u6CD5\u8FBE\u5230\uFF0C\u8BF7\u8C03\u6574\u76EE\u6807\u9500\u552E\u901F\u5EA6", "error");
+          return;
+        }
+        const original = Object.assign({}, boardroomState);
+        Object.keys(boardroomState).forEach((k) => {
+          boardroomState[k] = null;
+        });
+        const used = /* @__PURE__ */ new Set();
+        best.placement.forEach((item) => {
+          if (isOptSeatActive(item.seat, academyLevel) && item.obj) {
+            boardroomState[item.seat] = item.obj;
+            used.add(item.obj);
+          }
+        });
+        const leftover = pool.filter((c) => !used.has(c.obj));
+        const restSeats = ["x", "z", "1", "2", "3", "4", "5"];
+        if (academyLevel < 5) restSeats.push("v");
+        if (academyLevel < 15) restSeats.push("y");
+        const freeSeats = [];
+        restSeats.forEach((seatId) => {
+          const cur = original[seatId];
+          if (cur && !used.has(cur)) {
+            const li = leftover.findIndex((c) => c.obj === cur);
+            if (li >= 0) {
+              boardroomState[seatId] = cur;
+              used.add(cur);
+              leftover.splice(li, 1);
+              return;
+            }
+          }
+          freeSeats.push(seatId);
+        });
+        freeSeats.forEach((seatId) => {
+          const next = leftover.shift();
+          if (next) boardroomState[seatId] = next.obj;
+        });
+        renderBoardroom();
+        saveBoardroom();
+        renderOptimizerResults();
+        computeAndShowOptResult();
+        showToast("\u5DF2\u5E94\u7528\u6700\u4F18\u6446\u653E\u5E76\u4FDD\u5B58", "success");
+      });
+    }
+    let optMode = "admin";
+    let optTargetInput = "";
+    let optRunId = 0;
+    let optBusy = false;
+    const OPT_MODE_LABELS = {
+      admin: "\u7BA1\u7406\u8D39\u7528\u6700\u4F4E",
+      restaurant: "\u9910\u9986\u8BC4\u7EA7\u6700\u9AD8",
+      target: "\u6307\u5B9A\u9500\u552E\u901F\u5EA6\u65F6\u7BA1\u7406\u8D39\u7528\u6700\u4F4E"
+    };
+    function optTargetK() {
+      const value = parseInt(optTargetInput, 10);
+      if (!Number.isFinite(value) || value < 0) return null;
+      const base = readBaseNumbers();
+      return Math.max(0, Math.ceil(value - base.baseSalesVal - 1e-9));
+    }
+    function computeAndShowOptResult() {
+      const resultBox = document.getElementById("sc-opt-result");
+      if (!resultBox || optBusy) return;
+      syncAcademyRadioToRealm();
+      const academyLevel = getCheckedAcademyLevel();
+      const pool = collectExecutivePool();
+      if (pool.length === 0) {
+        resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-fg3); padding: 4px 2px;">\u6682\u65E0\u9AD8\u7BA1\u6570\u636E\uFF1A\u8BF7\u5148\u5F55\u5165\u6216\u70B9\u51FB\u300C\u83B7\u53D6\u5F53\u524D\u6700\u65B0\u9AD8\u7BA1\u6570\u636E\u300D\u3002</div>';
+        return;
+      }
+      let kMin = null;
+      let targetValue = null;
+      if (optMode === "target") {
+        targetValue = parseInt(optTargetInput, 10);
+        if (!Number.isFinite(targetValue) || targetValue < 0) {
+          resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); padding: 4px 2px;">\u8BF7\u8F93\u5165\u6709\u6548\u7684\u76EE\u6807\u9500\u552E\u901F\u5EA6\uFF08%\uFF09\u540E\u518D\u8BA1\u7B97\u3002</div>';
+          return;
+        }
+        kMin = optTargetK();
+      }
+      const token = ++optRunId;
+      optBusy = true;
+      const calcBtn = document.getElementById("sc-opt-calc-btn");
+      if (calcBtn) {
+        calcBtn.disabled = true;
+        calcBtn.textContent = "\u8BA1\u7B97\u4E2D\u2026";
+      }
+      resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-fg3); padding: 4px 2px;">\u6B63\u5728\u540E\u53F0\u8BA1\u7B97\u2026</div>';
+      findBestPlacements(pool, academyLevel, kMin, token).then((bests) => {
+        optBusy = false;
+        if (calcBtn) {
+          calcBtn.disabled = false;
+          calcBtn.textContent = "\u8BA1\u7B97\u6446\u6CD5";
+        }
+        if (!bests) return;
+        if (optMode === "target" && !bests.targetSales) {
+          const base = readBaseNumbers();
+          const maxK = Math.floor(bests.restaurant.effCmo / 3);
+          const reachable = (base.baseSalesVal + maxK).toFixed(1);
+          resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); line-height: 1.7; padding: 6px 2px;">\u76EE\u6807\u9500\u552E\u901F\u5EA6 ' + targetValue + "% \u65E0\u6CD5\u8FBE\u5230\uFF1A\u81F3\u5C11\u9700\u8981\u9AD8\u7BA1\u9500\u552E\u52A0\u6210 +" + kMin + "%\uFF0C\u5F53\u524D\u9AD8\u7BA1\u6700\u9AD8\u53EA\u80FD\u5230 +" + maxK + "%\uFF08\u9500\u552E\u901F\u5EA6\u6700\u9AD8\u7EA6 " + reachable + "%\uFF09\u3002\u8BF7\u8C03\u4F4E\u76EE\u6807\uFF0C\u6216\u63D0\u5347 CMO \u6280\u80FD\u540E\u518D\u8BD5\u3002</div>";
+          return;
+        }
+        const best = optMode === "target" ? bests.targetSales : bests[optMode];
+        if (!best) {
+          resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); padding: 4px 2px;">\u8BE5\u76EE\u6807\u65E0\u53EF\u884C\u89E3\uFF0C\u8BF7\u8C03\u6574\u540E\u91CD\u8BD5\u3002</div>';
+          return;
+        }
+        const m = formatMetrics(best.effCoo, best.effCmo);
+        const seatText = best.placement.filter((item) => isOptSeatActive(item.seat, academyLevel) && item.obj && item.name).map((item) => SLOT_LABELS[item.seat] + "\uFF1A" + item.name).join(" \uFF5C ");
+        let html = "";
+        if (optMode === "target") {
+          const maxK = Math.floor(bests.restaurant.effCmo / 3);
+          html += '<div style="font-size: 11px; color: var(--sc-fg3); margin: 2px 0 6px;">\u76EE\u6807\uFF1A\u9500\u552E\u901F\u5EA6 \u2265 ' + targetValue + "%\uFF08\u9700 CMO \u52A0\u6210 \u2265 +" + kMin + "%\uFF0C\u5F53\u524D\u4E0A\u9650 +" + maxK + "%\uFF09</div>";
+        }
+        html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.8;">';
+        html += '<div style="font-weight: bold; color: var(--sc-fg2);">' + OPT_MODE_LABELS[optMode] + "</div>";
+        html += '<div style="color: var(--sc-fg);">' + seatText + "</div>";
+        html += '<div style="color: var(--sc-fg3);">\u9884\u8BA1\uFF1A\u7BA1\u7406\u8D39\u7528 <span style="color: var(--sc-successFg); font-weight: bold;">' + m.adminText + "</span> \uFF5C \u9910\u9986\u8BC4\u7EA7 " + m.restaurantText + " \uFF5C \u9500\u552E\u901F\u5EA6 " + m.salesText + "</div>";
+        html += '<div style="margin-top: 6px;"><button data-opt-apply="' + optMode + '" style="padding: 5px 14px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">\u5E94\u7528\u5230\u81EA\u5B9A\u4E49\u6570\u636E\u5E76\u4FDD\u5B58</button></div>';
+        html += "</div>";
+        resultBox.innerHTML = html;
+        const applyBtn = resultBox.querySelector("button[data-opt-apply]");
+        if (applyBtn) {
+          applyBtn.onclick = () => applyBestPlacement(applyBtn.getAttribute("data-opt-apply"), applyBtn);
+        }
+      });
+    }
+    function renderOptimizerResults() {
+      const container = document.getElementById("sc-boardroom-opt-results");
+      if (!container) return;
+      if (optBusy) {
+        optRunId++;
+        optBusy = false;
+      }
+      syncAcademyRadioToRealm();
+      const academyLevel = getCheckedAcademyLevel();
+      const pool = collectExecutivePool();
+      if (pool.length === 0) {
+        container.innerHTML = '<div style="font-size: 12px; color: var(--sc-fg3); padding: 4px 2px;">\u6682\u65E0\u9AD8\u7BA1\u6570\u636E\uFF1A\u8BF7\u5148\u5728\u4E0B\u65B9\u683C\u5B50\u5F55\u5165\uFF0C\u6216\u70B9\u51FB\u300C\u83B7\u53D6\u5F53\u524D\u6700\u65B0\u9AD8\u7BA1\u6570\u636E\u300D\u3002</div>';
+        return;
+      }
+      const cur = currentMetrics(academyLevel);
+      let html = "";
+      html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg3);">\u6D4B\u8BD5\u4E2D\uFF0C\u6B22\u8FCE\u53CD\u9988</div>';
+      html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.9;">';
+      html += '<div style="margin-bottom: 4px;"><label for="sc-opt-mode" style="color: var(--sc-fg2); font-weight: bold;">\u4F18\u5316\u76EE\u6807\uFF1A</label>';
+      html += '<select id="sc-opt-mode" style="max-width: 100%; padding: 4px 6px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 12px;">';
+      html += '<option value="admin">\u7BA1\u7406\u8D39\u7528\u6700\u4F4E</option>';
+      html += '<option value="restaurant">\u9910\u9986\u8BC4\u7EA7\u6700\u9AD8</option>';
+      html += '<option value="target">\u6307\u5B9A\u9500\u552E\u901F\u5EA6\u65F6\u7BA1\u7406\u8D39\u7528\u6700\u4F4E</option>';
+      html += "</select></div>";
+      if (optMode === "target") {
+        html += '<div style="margin-bottom: 4px;">\u76EE\u6807\u6700\u7EC8\u9500\u552E\u901F\u5EA6\uFF08%\uFF09\uFF1A';
+        html += '<input id="sc-opt-target" type="number" min="0" step="1" placeholder="\u5982 ' + cur.text.salesText.replace("%", "") + '" style="width: 90px; padding: 3px 6px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 12px;">';
+        html += '<div style="font-size: 11px; color: var(--sc-fg3);">\u6700\u7EC8\u9500\u552E\u901F\u5EA6 = \u57FA\u7840\u9500\u552E\u901F\u5EA6 + CMO \u52A0\u6210\uFF08\u6574\u6570 %\uFF09\u3002</div></div>';
+      }
+      html += '<div style="margin-top: 2px;"><button id="sc-opt-calc-btn" style="padding: 5px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">\u8BA1\u7B97\u6446\u6CD5</button></div>';
+      html += "</div>";
+      html += '<div id="sc-opt-result" style="font-size: 12px; color: var(--sc-fg3); padding: 2px 2px 4px;">\u9009\u62E9\u4E0A\u65B9\u4F18\u5316\u76EE\u6807\u540E\u70B9\u51FB\u300C\u8BA1\u7B97\u6446\u6CD5\u300D\u3002</div>';
+      container.innerHTML = html;
+      const modeSel = document.getElementById("sc-opt-mode");
+      modeSel.value = optMode;
+      modeSel.onchange = () => {
+        optMode = modeSel.value;
+        renderOptimizerResults();
+      };
+      const targetInput = document.getElementById("sc-opt-target");
+      if (targetInput) {
+        targetInput.value = optTargetInput;
+        targetInput.oninput = () => {
+          optTargetInput = targetInput.value;
+        };
+      }
+      const calcBtn = document.getElementById("sc-opt-calc-btn");
+      if (calcBtn) {
+        calcBtn.onclick = () => computeAndShowOptResult();
+      }
     }
     function renderBoardroom() {
       const leftContainer = document.getElementById("sc-slots-container");
@@ -5288,6 +5763,7 @@
                     width: 100%;
                     height: 100%;
                 }
+
                 .sc-boardroom-left {
                     flex: 7;
                     display: flex;
@@ -5497,10 +5973,12 @@
                 <div class="sc-boardroom-layout">
                     <!-- Left slots panel -->
                     <div class="sc-boardroom-left">
-                        <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                             <button id="sc-boardroom-save-btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">\u4FDD\u5B58</button>
                             <button id="sc-boardroom-fetch-btn" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">\u83B7\u53D6\u5F53\u524D\u6700\u65B0\u9AD8\u7BA1\u6570\u636E</button>
+                            <button id="sc-boardroom-opt-btn" style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">\u6700\u4F18\u6446\u653E\u5EFA\u8BAE</button>
                         </div>
+                        <div id="sc-boardroom-opt-results"></div>
                         <div style="font-size: 11px; color: var(--sc-fg3); margin-bottom: 15px;">* \u62D6\u62FD\u9AD8\u7BA1\u5361\u7247\uFF0C\u6216\u70B9\u51FB\u4E24\u4E2A\u9AD8\u7BA1\u5361\u7247\u8FDB\u884C\u5207\u6362\u3002</div>
                         <div id="sc-slots-container"></div>
                     </div>
@@ -5540,22 +6018,22 @@
       observer.observe(document.body, { attributes: true, attributeFilter: ["class", "style"] });
       const closeX = document.getElementById("sc-calc-close-x");
       closeX.onclick = () => {
+        optRunId++;
         observer.disconnect();
         modal.remove();
       };
       const btnSave = document.getElementById("sc-boardroom-save-btn");
       const btnFetch = document.getElementById("sc-boardroom-fetch-btn");
+      const btnOpt = document.getElementById("sc-boardroom-opt-btn");
+      if (btnOpt) {
+        btnOpt.onclick = (e) => {
+          e.preventDefault();
+          renderOptimizerResults();
+        };
+      }
       btnSave.onclick = (e) => {
         e.preventDefault();
-        const res = calculateResults();
-        const rId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
-        localStorage.setItem(`R${rId}-SC-Saved-Bonuses`, JSON.stringify({
-          adminBonus: res.adminBonus,
-          saleBonus: res.saleBonus,
-          timestamp: Date.now(),
-          source: "manual"
-        }));
-        localStorage.setItem(`R${rId}-SC-Saved-Boardroom`, JSON.stringify(boardroomState));
+        saveBoardroom();
         showToast("\u6570\u636E\u4FDD\u5B58\u6210\u529F", "success");
       };
       btnFetch.onclick = async (e) => {
@@ -15180,4 +15658,4 @@
   })();
 })();
 
-// @changelog 1.33.8：新增聊天室全局屏蔽（消息旁一键按玩家 ID 屏蔽、可导入账号已屏蔽公司、支持临时暂停查看）；功能开关的详细设置仅在开启时展示。
+// @changelog 1.33.9：自定义高管数据新增「最优摆放建议」（按真实学院总等级计算最优高管摆法，可指定目标销售速度，后台计算不卡页面，支持应用到自定义数据并保存）；新增聊天室全局屏蔽（默认关闭，功能开关设置中开启）。
