@@ -780,21 +780,11 @@ export const executiveCustomButton = (function () {
             }
 
             const cur = currentMetrics(academyLevel);
-            const realLevel = readRealmAcademyLevel();
-
-            const apps = [];
-            if (academyLevel >= 5) apps.push('COO');
-            if (academyLevel >= 10) apps.push('CFO');
-            if (academyLevel >= 15) apps.push('CMO');
-            if (academyLevel >= 20) apps.push('CTO');
-            const levelNote = realLevel !== null
-                ? '学院总等级 ' + realLevel + '，学徒生效：' + (apps.length ? apps.join('/') : '无')
-                : '学院等级未获取，按所选区间（学徒生效：' + (apps.length ? apps.join('/') : '无') + '）';
 
             let html = '';
             html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg3); line-height: 1.7;">';
             html += '<div style="font-weight: bold; color: var(--sc-fg);">最优摆放建议</div>';
-            html += '<div>' + levelNote + '，候选 ' + pool.length + ' 人</div>';
+            html += '<div>测试中，欢迎反馈</div>';
             html += '</div>';
 
             html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.9;">';
