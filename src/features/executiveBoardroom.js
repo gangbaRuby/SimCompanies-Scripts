@@ -567,7 +567,7 @@ export const executiveCustomButton = (function () {
             return { effCoo: eff.effCoo, effCmo: eff.effCmo, text: formatMetrics(eff.effCoo, eff.effCmo) };
         }
 
-        // 写入已保存加成与董事会摆法（弹窗「保存」与「应用并保存」共用）
+        // 写入已保存加成与董事会摆法（弹窗「保存」与「应用到自定义数据并保存」共用）
         function saveBoardroom() {
             const res = calculateResults();
             const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
@@ -609,7 +609,7 @@ export const executiveCustomButton = (function () {
                 optBusy = false;
                 if (btn) {
                     btn.disabled = false;
-                    btn.textContent = '应用并保存';
+                    btn.textContent = '应用到自定义数据并保存';
                 }
                 if (!bests) return; // 已取消
                 const best = targetKey === 'target' ? bests.targetSales : bests[targetKey];
@@ -750,7 +750,7 @@ export const executiveCustomButton = (function () {
                 html += '<div style="font-weight: bold; color: var(--sc-fg2);">' + OPT_MODE_LABELS[optMode] + '</div>';
                 html += '<div style="color: var(--sc-fg);">' + seatText + '</div>';
                 html += '<div style="color: var(--sc-fg3);">预计：管理费用 <span style="color: var(--sc-successFg); font-weight: bold;">' + m.adminText + '</span> ｜ 餐馆评级 ' + m.restaurantText + ' ｜ 销售速度 ' + m.salesText + '</div>';
-                html += '<div style="margin-top: 6px;"><button data-opt-apply="' + optMode + '" style="padding: 5px 14px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">应用并保存</button></div>';
+                html += '<div style="margin-top: 6px;"><button data-opt-apply="' + optMode + '" style="padding: 5px 14px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">应用到自定义数据并保存</button></div>';
                 html += '</div>';
                 resultBox.innerHTML = html;
                 const applyBtn = resultBox.querySelector('button[data-opt-apply]');
