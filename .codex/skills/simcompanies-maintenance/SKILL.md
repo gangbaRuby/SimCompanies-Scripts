@@ -52,6 +52,8 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 - **开关面板子设置**：功能开关设置面板里带详细设置的开关，用 `subContent` 提供子设置内容、CSS 类 `sc-collapsed` 控制显隐；子设置**仅在功能开启时展示**（关闭即收起，省空间），点击开关时同步显隐。
 - **游戏分页/列表接口拦截**：对游戏 HTTP 列表或分页接口做"响应过滤"前，先确认客户端判定"是否还有更多"的方式（例：聊天历史用 `fullHistory = r.length < 30`，见 `chatMessageBlocker.js` 模块头失效检查点）。过滤会减少返回条数，可能让客户端误判到底并提前停止加载。
 - **React 动态列表的隐藏/删除**：不要直接 `remove()` React 管理的列表节点（会被 React 用作 `insertBefore` 锚点，删除后抛 `NotFoundError`），也不要简单 `display:none`（可能让"滚动加载更多"的触发元素失去可观察性）。优先在数据层过滤；确需 DOM 处理时保留节点（如按稳定属性匹配的 CSS `:has()` 渲染期隐藏 + 零高占位），并补齐清理/重建路径。
+- **大组合枚举/寻优（1.33.9 最优摆放 13 人 × 6 席 ≈ 124 万组合）**：不要在页面主线程一次算完；用分片后台执行（每批固定叶子数后让出主线程）+ 令牌取消（切换目标/重算/关闭时自增令牌，过期结果直接丢弃，避免旧结果覆盖新选择）。
+- **多目标字典序求解返回值**：返回给调用方的 eff/结果字段按最终选定的摆法重算，不要直接解包目标键数组——键序与字段序不一致会串位（曾导致 restaurant/sales 结果字段错位）。
 
 ### 5. 正式发布
 
@@ -75,6 +77,7 @@ npm run release -- "<changelog>"
 - **分支保护**：`main` 有必需状态检查时，CI 未绿会拒绝合并；本仓库**未启用 auto-merge**（`gh pr merge --auto` 会报 `enablePullRequestAutoMerge` 错误），正确做法是等 CI 变绿（轮询 `gh pr checks`）后再执行 `gh pr merge`。
 - **release 后检查 CHANGELOG 格式**：新版本条目与下一节之间应保留空行（条目通常为"更新说明 + 原未发布明细"）。
 - **中文 PR 载荷**：`gh pr create` 没有 `--title-file`（只有 `--body-file`）；标题与正文统一用 UTF-8 JSON 文件 + `gh api ... --input` 提交，创建后到 GitHub 核对中文（配合第 6 节编码规则）。
+- **更新提示先审阅**：正式发布前，把拟推送的游戏内更新提示（发布说明 / `@changelog` 文案）发给项目负责人审阅确认，确认后再执行 `npm run release`、发布 PR 与标签推送。
 
 ### 5.2 发布后沉淀
 
