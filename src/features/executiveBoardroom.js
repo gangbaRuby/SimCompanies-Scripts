@@ -782,10 +782,7 @@ export const executiveCustomButton = (function () {
             const cur = currentMetrics(academyLevel);
 
             let html = '';
-            html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg3); line-height: 1.7;">';
-            html += '<div style="font-weight: bold; color: var(--sc-fg);">最优摆放建议</div>';
-            html += '<div>测试中，欢迎反馈</div>';
-            html += '</div>';
+            html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg3);">测试中，欢迎反馈</div>';
 
             html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.9;">';
             html += '<div style="margin-bottom: 4px;"><label for="sc-opt-mode" style="color: var(--sc-fg2); font-weight: bold;">优化目标：</label>';
