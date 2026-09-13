@@ -62,129 +62,45 @@ export const executiveCustomButton = (function () {
             Object.keys(boardroomState).forEach(k => { boardroomState[k] = mapped[k] || null; });
         }
 
-        // 比对：游戏当前摆放（只读获取）vs 自定义数据摆放，标出需要调整位置的高管
-        // 比对：游戏当前摆放（只读获取）vs 自定义数据摆放，展示席位对照与建议操作步骤
+        // 比对：游戏当前摆放（只读获取）vs 自定义数据摆放；只列出「谁 → 目标席位」
         function renderCompareResults(currentState) {
             const container = document.getElementById('sc-boardroom-compare-results');
             if (!container) return;
 
-            const ids = Object.keys(boardroomState);
+            const seatOrder = ['o', 'f', 'm', 't', 'v', 'x', 'y', 'z', '1', '2', '3', '4', '5'];
             const gameSlots = {};
             const customSlots = {};
-            ids.forEach(id => {
+            Object.keys(boardroomState).forEach(id => {
                 const g = currentState[id] && currentState[id].name;
                 const c = boardroomState[id] && boardroomState[id].name;
                 if (g && gameSlots[g] === undefined) gameSlots[g] = id;
                 if (c && customSlots[c] === undefined) customSlots[c] = id;
             });
 
-            const moves = [];
-            const onlyGame = [];
-            const onlyCustom = [];
-            Object.keys(customSlots).forEach(name => {
-                const target = customSlots[name];
-                if (gameSlots[name] === undefined) {
-                    onlyCustom.push({ name: name, slot: target });
-                    return;
-                }
-                if (gameSlots[name] !== target) moves.push({ name: name, from: gameSlots[name], to: target });
+            const rows = [];
+            seatOrder.forEach(seat => {
+                const name = boardroomState[seat] && boardroomState[seat].name;
+                if (!name) return;
+                if (gameSlots[name] === seat) return; // 已在目标席位
+                rows.push({ name: name, seat: seat, missingInGame: gameSlots[name] === undefined });
             });
-            Object.keys(gameSlots).forEach(name => {
-                if (customSlots[name] === undefined) onlyGame.push({ name: name, slot: gameSlots[name] });
-            });
+
+            const unassigned = Object.keys(gameSlots).filter(name => customSlots[name] === undefined);
 
             const label = id => SLOT_LABELS[id] || id;
-            const seatGroups = [
-                { seats: ['o', 'f', 'm', 't'] },
-                { seats: ['v', 'x', 'y', 'z'] },
-                { seats: ['1', '2', '3', '4', '5'] }
-            ];
-
-            let sameCount = 0;
-            let diffHtml = '';
-            seatGroups.forEach(group => {
-                group.seats.forEach(seat => {
-                    const g = (currentState[seat] && currentState[seat].name) || '';
-                    const c = (boardroomState[seat] && boardroomState[seat].name) || '';
-                    if (g === c) { sameCount++; return; }
-                    diffHtml += '<tr style="border-top: 1px solid var(--sc-border2);">'
-                        + '<td style="padding: 3px 2px; color: var(--sc-fg2); white-space: nowrap;">' + label(seat) + '</td>'
-                        + '<td style="padding: 3px 2px; color: var(--sc-dangerFg);">' + (g || '（空）') + '</td>'
-                        + '<td style="padding: 3px 2px; color: var(--sc-successFg);">' + (c || '（空）') + '</td>'
-                        + '</tr>';
-                });
-            });
-
-            const total = moves.length + onlyGame.length + onlyCustom.length;
             let html = '';
-            html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg); line-height: 1.8;">';
-            if (total === 0) {
+            html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg); line-height: 1.9;">';
+            if (rows.length === 0 && unassigned.length === 0) {
                 html += '<div style="color: var(--sc-successFg);">与当前游戏摆放一致，无需调整。</div>';
-                html += '<div style="font-size: 11px; color: var(--sc-fg3); margin-top: 4px;">* 本次比对只读取游戏当前高管数据，不会改写自定义数据。</div>';
-                html += '</div>';
-                container.innerHTML = html;
-                return;
-            }
-
-            html += '<div style="font-weight: bold;">比对结果：<span style="color: var(--sc-dangerFg);">' + total + '</span> 处不同（按自定义数据摆放需要调整）</div>';
-
-            // ① 席位对照表
-            html += '<div style="margin-top: 6px; font-weight: bold; color: var(--sc-fg2);">① 席位对照</div>';
-            html += '<table style="width: 100%; border-collapse: collapse; font-size: 12px; margin: 4px 0;">';
-            html += '<thead><tr style="color: var(--sc-fg3); font-size: 11px;"><th align="left" style="padding: 2px;">席位</th><th align="left" style="padding: 2px;">游戏当前</th><th align="left" style="padding: 2px;">→ 自定义目标</th></tr></thead>';
-            html += '<tbody>' + diffHtml + '</tbody></table>';
-            if (sameCount > 0) {
-                html += '<div style="font-size: 11px; color: var(--sc-fg3);">其余 ' + sameCount + ' 个席位一致，无需调整。</div>';
-            }
-
-            // ② 建议操作步骤（按置换环归纳：两两交换 / 轮换 / 链式移动）
-            const fromSeat = {};
-            const toSeat = {};
-            moves.forEach(mv => { fromSeat[mv.name] = mv.from; toSeat[mv.name] = mv.to; });
-            const visited = new Set();
-            const steps = [];
-            moves.forEach(mv => {
-                if (visited.has(mv.name)) return;
-                const cycle = [];
-                let name = mv.name;
-                while (name && !visited.has(name)) {
-                    visited.add(name);
-                    cycle.push(name);
-                    const next = moves.find(x => x.from === toSeat[name]);
-                    name = next ? next.name : null;
+            } else {
+                html += '<div style="font-weight: bold;">需要调整位置的 ' + rows.length + ' 位高管：</div>';
+                rows.forEach((row, i) => {
+                    html += '<div>' + (i + 1) + '. ' + row.name + ' → <span style="color: var(--sc-successFg); font-weight: bold;">' + label(row.seat) + '</span>' + (row.missingInGame ? '<span style="color: var(--sc-fg3);">（游戏当前没有，需先安排）</span>' : '') + '</div>';
+                });
+                if (unassigned.length > 0) {
+                    html += '<div style="margin-top: 4px; font-size: 11px; color: var(--sc-fg3);">游戏里有 ' + unassigned.join('、') + '，自定义数据未安排。</div>';
                 }
-                const closed = !!name && cycle.indexOf(name) === 0;
-                if (closed && cycle.length === 2) {
-                    const a = cycle[0];
-                    const b = cycle[1];
-                    steps.push('交换 <b>' + a + '</b> 与 <b>' + b + '</b>：' + a + '（' + label(fromSeat[a]) + '）⇄ ' + b + '（' + label(fromSeat[b]) + '）');
-                } else if (closed && cycle.length > 2) {
-                    const parts = cycle.map(item => {
-                        const next = cycle[(cycle.indexOf(item) + 1) % cycle.length];
-                        return item + ' → ' + next + ' 当前席位（' + label(fromSeat[next]) + '）';
-                    });
-                    steps.push('轮换：' + parts.join('；'));
-                } else {
-                    cycle.forEach(item => {
-                        const seat = toSeat[item];
-                        const occupant = currentState[seat] && currentState[seat].name;
-                        const note = occupant ? '当前由 ' + occupant + ' 占着' : '当前为空';
-                        steps.push(item + ' → ' + label(seat) + '（' + note + '）');
-                    });
-                }
-            });
-            onlyCustom.forEach(it => {
-                steps.push(it.name + '：自定义目标 ' + label(it.slot) + '，游戏当前没有 → 在游戏里安排，或从自定义数据移除');
-            });
-            onlyGame.forEach(it => {
-                steps.push(it.name + ' 当前在 ' + label(it.slot) + '，自定义数据没有 → 在游戏里换下，或加入自定义数据');
-            });
-
-            html += '<div style="margin-top: 8px; font-weight: bold; color: var(--sc-fg2);">② 建议操作步骤</div>';
-            html += '<div style="font-size: 12px; line-height: 1.9;">';
-            steps.forEach((step, i) => { html += '<div>' + (i + 1) + '. ' + step + '</div>'; });
-            if (steps.length === 0) html += '<div>无需调整。</div>';
-            html += '</div>';
+            }
             html += '<div style="font-size: 11px; color: var(--sc-fg3); margin-top: 6px;">* 本次比对只读取游戏当前高管数据，不会改写自定义数据。</div>';
             html += '</div>';
             container.innerHTML = html;
