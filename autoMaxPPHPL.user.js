@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.9
+// @version      1.33.10
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -4734,7 +4734,7 @@
   var state = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.9",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.10",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -5166,20 +5166,27 @@
       }
       return { adminBonus: effCoo, saleBonus: Math.floor(effCmo / 3) };
     }
-    const OPT_SEATS = ["o", "f", "m", "t", "v", "y"];
-    const OPT_BASE_COEF = {
-      o: { coo: 1, cmo: 0.25 },
-      f: { coo: 0.25, cmo: 0.25 },
-      m: { coo: 0.25, cmo: 1 },
-      t: { coo: 0.25, cmo: 0.25 },
-      v: { coo: 0, cmo: 0 },
-      y: { coo: 0, cmo: 0 }
+    const OPT_SEAT_COEF = {
+      o: { coo: 1, cmo: 0.25, cto: 0.25 },
+      f: { coo: 0.25, cmo: 0.25, cto: 0.25 },
+      m: { coo: 0.25, cmo: 1, cto: 0.25 },
+      t: { coo: 0.25, cmo: 0.25, cto: 1 },
+      v: { coo: 0.5, cmo: 0, cto: 0 },
+      y: { coo: 0, cmo: 0.5, cto: 0 },
+      z: { coo: 0, cmo: 0, cto: 0.5 }
     };
     function isOptSeatActive(seat, academyLevel) {
       if (seat === "o" || seat === "f" || seat === "m" || seat === "t") return true;
       if (seat === "v") return academyLevel >= 5;
       if (seat === "y") return academyLevel >= 15;
+      if (seat === "z") return academyLevel >= 20;
       return false;
+    }
+    function optSeatsForMode(mode, academyLevel) {
+      if (mode === "research") {
+        return ["o", "f", "m", "t"].concat(academyLevel >= 5 ? ["v"] : []).concat(academyLevel >= 20 ? ["z"] : []);
+      }
+      return ["o", "f", "m", "t"].concat(academyLevel >= 5 ? ["v"] : []).concat(academyLevel >= 15 ? ["y"] : []);
     }
     function collectExecutivePool() {
       const pool = [];
@@ -5254,36 +5261,38 @@
         }
       };
     }
-    function findBestPlacements(pool, academyLevel, kMin, tokenId) {
+    function findBestPlacements(pool, academyLevel, mode, kMin, ctoMin, tokenId) {
       return new Promise((resolve) => {
-        const coefs = OPT_SEATS.map((seat) => {
-          if (seat === "v") return { coo: academyLevel >= 5 ? 0.5 : 0, cmo: 0 };
-          if (seat === "y") return { coo: 0, cmo: academyLevel >= 15 ? 0.5 : 0 };
-          return OPT_BASE_COEF[seat];
-        });
+        const seats = optSeatsForMode(mode, academyLevel);
+        const coefs = seats.map((seat) => OPT_SEAT_COEF[seat]);
         const cands = pool.slice();
-        while (cands.length < OPT_SEATS.length) {
-          cands.push({ slotId: null, name: null, obj: null, empty: true, skills: { coo: 0, cmo: 0 } });
+        while (cands.length < seats.length) {
+          cands.push({ slotId: null, name: null, obj: null, empty: true, skills: { coo: 0, cmo: 0, cto: 0 } });
         }
         const total = cands.length;
         const cooVals = cands.map((c) => c.skills.coo);
         const cmoVals = cands.map((c) => c.skills.cmo);
-        const best = { admin: null, restaurant: null, targetSales: null };
-        const bestArr = { admin: null, restaurant: null, targetSales: null };
+        const ctoVals = cands.map((c) => c.skills.cto);
+        const best = { admin: null, restaurant: null, targetSales: null, targetResearch: null, ctoMax: null };
+        const bestArr = { admin: null, restaurant: null, targetSales: null, targetResearch: null, ctoMax: null };
         const isBetter = (cur, next) => cur === null || next[0] > cur[0] || next[0] === cur[0] && next[1] > cur[1];
-        const en = createAssignEnumerator(OPT_SEATS.length, total);
+        const en = createAssignEnumerator(seats.length, total);
         const evaluate = () => {
           const idx = en.idx;
           let sCoo = 0;
           let sCmo = 0;
-          for (let i = 0; i < OPT_SEATS.length; i++) {
+          let sCto = 0;
+          for (let i = 0; i < seats.length; i++) {
             sCoo += coefs[i].coo * cooVals[idx[i]];
             sCmo += coefs[i].cmo * cmoVals[idx[i]];
+            sCto += coefs[i].cto * ctoVals[idx[i]];
           }
           const effCoo = decayEffective(Math.floor(sCoo));
           const effCmo = decayEffective(Math.floor(sCmo));
+          const effCto = decayEffective(Math.floor(sCto));
           const adminKey = [effCoo, effCmo];
           const restaurantKey = [effCmo, effCoo];
+          const ctoMaxKey = [effCto, effCoo];
           if (isBetter(best.admin, adminKey)) {
             best.admin = adminKey;
             bestArr.admin = idx.slice();
@@ -5292,11 +5301,22 @@
             best.restaurant = restaurantKey;
             bestArr.restaurant = idx.slice();
           }
+          if (isBetter(best.ctoMax, ctoMaxKey)) {
+            best.ctoMax = ctoMaxKey;
+            bestArr.ctoMax = idx.slice();
+          }
           if (kMin !== null && effCmo >= 3 * kMin) {
-            const targetKey = [effCoo, effCmo];
-            if (isBetter(best.targetSales, targetKey)) {
-              best.targetSales = targetKey;
+            const key = [effCoo, effCmo];
+            if (isBetter(best.targetSales, key)) {
+              best.targetSales = key;
               bestArr.targetSales = idx.slice();
+            }
+          }
+          if (ctoMin !== null && effCto >= ctoMin) {
+            const key = [effCoo, effCto];
+            if (isBetter(best.targetResearch, key)) {
+              best.targetResearch = key;
+              bestArr.targetResearch = idx.slice();
             }
           }
         };
@@ -5304,18 +5324,21 @@
           if (!arrIdx) return null;
           let sCoo = 0;
           let sCmo = 0;
-          for (let i = 0; i < OPT_SEATS.length; i++) {
+          let sCto = 0;
+          for (let i = 0; i < seats.length; i++) {
             sCoo += coefs[i].coo * cooVals[arrIdx[i]];
             sCmo += coefs[i].cmo * cmoVals[arrIdx[i]];
+            sCto += coefs[i].cto * ctoVals[arrIdx[i]];
           }
-          const placement = OPT_SEATS.map((seat, i) => {
+          const placement = seats.map((seat, i) => {
             const c = cands[arrIdx[i]];
             return { seat, obj: c && !c.empty ? c.obj : null, name: c && !c.empty ? c.name : null };
           });
           return {
             placement,
             effCoo: decayEffective(Math.floor(sCoo)),
-            effCmo: decayEffective(Math.floor(sCmo))
+            effCmo: decayEffective(Math.floor(sCmo)),
+            effCto: decayEffective(Math.floor(sCto))
           };
         };
         const CHUNK = 3e4;
@@ -5332,7 +5355,9 @@
           resolve({
             admin: makeResult(bestArr.admin),
             restaurant: makeResult(bestArr.restaurant),
-            targetSales: makeResult(bestArr.targetSales)
+            targetSales: makeResult(bestArr.targetSales),
+            targetResearch: makeResult(bestArr.targetResearch),
+            ctoMax: makeResult(bestArr.ctoMax)
           });
         };
         tick();
@@ -5350,20 +5375,27 @@
         baseSalesVal: (SRC.salesModifier || 0) + (SRC.recreationBonus || 0)
       };
     }
-    function formatMetrics(effCoo, effCmo) {
+    function formatMetrics(effCoo, effCmo, effCto) {
       const base = readBaseNumbers();
       const adminPct = base.baseAdminVal * (1 - effCoo / 100) * 100;
       const restaurant = base.baseSalesVal * 0.02 + effCmo * 0.01;
       const salesPct = base.baseSalesVal + Math.floor(effCmo / 3);
+      const researchPct = effCto * 2;
       return {
         adminText: adminPct.toFixed(2) + "%",
         restaurantText: "+" + restaurant.toFixed(3),
-        salesText: salesPct.toFixed(1) + "%"
+        salesText: salesPct.toFixed(1) + "%",
+        researchText: researchPct.toFixed(1) + "%"
       };
     }
     function currentMetrics(academyLevel) {
       const eff = computeEffectivePoints(boardroomState, academyLevel);
-      return { effCoo: eff.effCoo, effCmo: eff.effCmo, text: formatMetrics(eff.effCoo, eff.effCmo) };
+      return {
+        effCoo: eff.effCoo,
+        effCmo: eff.effCmo,
+        effCto: eff.effCto,
+        text: formatMetrics(eff.effCoo, eff.effCmo, eff.effCto)
+      };
     }
     function saveBoardroom() {
       const res = calculateResults();
@@ -5385,10 +5417,18 @@
         return;
       }
       let kMin = null;
+      let ctoMin = null;
       if (targetKey === "target") {
         kMin = optTargetK();
         if (kMin === null) {
           showToast("\u8BF7\u5148\u8F93\u5165\u6709\u6548\u7684\u76EE\u6807\u9500\u552E\u901F\u5EA6", "error");
+          return;
+        }
+      }
+      if (targetKey === "research") {
+        ctoMin = optResearchCto();
+        if (ctoMin === null) {
+          showToast("\u8BF7\u5148\u8F93\u5165\u6709\u6548\u7684\u7814\u7A76\u7C7B\u751F\u4EA7\u63D0\u5347\u76EE\u6807", "error");
           return;
         }
       }
@@ -5398,16 +5438,16 @@
         btn.disabled = true;
         btn.textContent = "\u8BA1\u7B97\u4E2D\u2026";
       }
-      findBestPlacements(pool, academyLevel, kMin, token).then((bests) => {
+      findBestPlacements(pool, academyLevel, targetKey, kMin, ctoMin, token).then((bests) => {
         optBusy = false;
         if (btn) {
           btn.disabled = false;
           btn.textContent = "\u5E94\u7528\u5230\u81EA\u5B9A\u4E49\u6570\u636E\u5E76\u4FDD\u5B58";
         }
         if (!bests) return;
-        const best = targetKey === "target" ? bests.targetSales : bests[targetKey];
+        const best = targetKey === "target" ? bests.targetSales : targetKey === "research" ? bests.targetResearch : bests[targetKey];
         if (!best) {
-          showToast("\u5F53\u524D\u76EE\u6807\u65E0\u6CD5\u8FBE\u5230\uFF0C\u8BF7\u8C03\u6574\u76EE\u6807\u9500\u552E\u901F\u5EA6", "error");
+          showToast("\u5F53\u524D\u76EE\u6807\u65E0\u6CD5\u8FBE\u5230\uFF0C\u8BF7\u8C03\u6574\u76EE\u6807\u540E\u91CD\u8BD5", "error");
           return;
         }
         const original = Object.assign({}, boardroomState);
@@ -5422,9 +5462,8 @@
           }
         });
         const leftover = pool.filter((c) => !used.has(c.obj));
-        const restSeats = ["x", "z", "1", "2", "3", "4", "5"];
-        if (academyLevel < 5) restSeats.push("v");
-        if (academyLevel < 15) restSeats.push("y");
+        const committedSeats = new Set(best.placement.filter((item) => isOptSeatActive(item.seat, academyLevel) && item.obj).map((item) => item.seat));
+        const restSeats = ["x", "1", "2", "3", "4", "5"].concat(["v", "y", "z"].filter((seat) => !committedSeats.has(seat)));
         const freeSeats = [];
         restSeats.forEach((seatId) => {
           const cur = original[seatId];
@@ -5452,18 +5491,32 @@
     }
     let optMode = "admin";
     let optTargetInput = "";
+    let optResearchInput = "";
     let optRunId = 0;
     let optBusy = false;
     const OPT_MODE_LABELS = {
       admin: "\u7BA1\u7406\u8D39\u7528\u6700\u4F4E",
       restaurant: "\u9910\u9986\u8BC4\u7EA7\u6700\u9AD8",
-      target: "\u6307\u5B9A\u9500\u552E\u901F\u5EA6\u65F6\u7BA1\u7406\u8D39\u7528\u6700\u4F4E"
+      target: "\u6307\u5B9A\u9500\u552E\u901F\u5EA6\u65F6\u7BA1\u7406\u8D39\u7528\u6700\u4F4E",
+      research: "\u6307\u5B9A\u7814\u7A76\u7C7B\u751F\u4EA7\u63D0\u5347\u65F6\u7BA1\u7406\u8D39\u7528\u6700\u4F4E"
     };
     function optTargetK() {
       const value = parseInt(optTargetInput, 10);
       if (!Number.isFinite(value) || value < 0) return null;
       const base = readBaseNumbers();
       return Math.max(0, Math.ceil(value - base.baseSalesVal - 1e-9));
+    }
+    function optResearchCto() {
+      const value = parseInt(optResearchInput, 10);
+      if (!Number.isFinite(value) || value < 0) return null;
+      return Math.max(0, Math.ceil(value / 2 - 1e-9));
+    }
+    function optFindBest(pool, academyLevel, mode, tokenId) {
+      let kMin = null;
+      let ctoMin = null;
+      if (mode === "target") kMin = optTargetK();
+      if (mode === "research") ctoMin = optResearchCto();
+      return findBestPlacements(pool, academyLevel, mode, kMin, ctoMin, tokenId);
     }
     function computeAndShowOptResult() {
       const resultBox = document.getElementById("sc-opt-result");
@@ -5475,15 +5528,19 @@
         resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-fg3); padding: 4px 2px;">\u6682\u65E0\u9AD8\u7BA1\u6570\u636E\uFF1A\u8BF7\u5148\u5F55\u5165\u6216\u70B9\u51FB\u300C\u83B7\u53D6\u5F53\u524D\u6700\u65B0\u9AD8\u7BA1\u6570\u636E\u300D\u3002</div>';
         return;
       }
-      let kMin = null;
-      let targetValue = null;
       if (optMode === "target") {
-        targetValue = parseInt(optTargetInput, 10);
+        const targetValue = parseInt(optTargetInput, 10);
         if (!Number.isFinite(targetValue) || targetValue < 0) {
           resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); padding: 4px 2px;">\u8BF7\u8F93\u5165\u6709\u6548\u7684\u76EE\u6807\u9500\u552E\u901F\u5EA6\uFF08%\uFF09\u540E\u518D\u8BA1\u7B97\u3002</div>';
           return;
         }
-        kMin = optTargetK();
+      }
+      if (optMode === "research") {
+        const targetValue = parseInt(optResearchInput, 10);
+        if (!Number.isFinite(targetValue) || targetValue < 0) {
+          resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); padding: 4px 2px;">\u8BF7\u8F93\u5165\u6709\u6548\u7684\u7814\u7A76\u7C7B\u751F\u4EA7\u63D0\u5347\u76EE\u6807\uFF08%\uFF09\u540E\u518D\u8BA1\u7B97\u3002</div>';
+          return;
+        }
       }
       const token = ++optRunId;
       optBusy = true;
@@ -5493,7 +5550,7 @@
         calcBtn.textContent = "\u8BA1\u7B97\u4E2D\u2026";
       }
       resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-fg3); padding: 4px 2px;">\u6B63\u5728\u540E\u53F0\u8BA1\u7B97\u2026</div>';
-      findBestPlacements(pool, academyLevel, kMin, token).then((bests) => {
+      optFindBest(pool, academyLevel, optMode, token).then((bests) => {
         optBusy = false;
         if (calcBtn) {
           calcBtn.disabled = false;
@@ -5501,28 +5558,47 @@
         }
         if (!bests) return;
         if (optMode === "target" && !bests.targetSales) {
+          const targetValue = parseInt(optTargetInput, 10);
+          const kMin = optTargetK();
           const base = readBaseNumbers();
           const maxK = Math.floor(bests.restaurant.effCmo / 3);
           const reachable = (base.baseSalesVal + maxK).toFixed(1);
           resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); line-height: 1.7; padding: 6px 2px;">\u76EE\u6807\u9500\u552E\u901F\u5EA6 ' + targetValue + "% \u65E0\u6CD5\u8FBE\u5230\uFF1A\u81F3\u5C11\u9700\u8981\u9AD8\u7BA1\u9500\u552E\u52A0\u6210 +" + kMin + "%\uFF0C\u5F53\u524D\u9AD8\u7BA1\u6700\u9AD8\u53EA\u80FD\u5230 +" + maxK + "%\uFF08\u9500\u552E\u901F\u5EA6\u6700\u9AD8\u7EA6 " + reachable + "%\uFF09\u3002\u8BF7\u8C03\u4F4E\u76EE\u6807\uFF0C\u6216\u63D0\u5347 CMO \u6280\u80FD\u540E\u518D\u8BD5\u3002</div>";
           return;
         }
-        const best = optMode === "target" ? bests.targetSales : bests[optMode];
+        if (optMode === "research" && !bests.targetResearch) {
+          const targetValue = parseInt(optResearchInput, 10);
+          const needCto = optResearchCto();
+          const maxEffCto = bests.ctoMax ? bests.ctoMax.effCto : 0;
+          const reachable = (maxEffCto * 2).toFixed(1);
+          resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); line-height: 1.7; padding: 6px 2px;">\u76EE\u6807\u7814\u7A76\u7C7B\u751F\u4EA7\u63D0\u5347 ' + targetValue + "% \u65E0\u6CD5\u8FBE\u5230\uFF1A\u81F3\u5C11\u9700\u8981 CTO \u6709\u6548\u70B9\u6570 " + needCto + "\uFF0C\u5F53\u524D\u9AD8\u7BA1\u6700\u9AD8 " + maxEffCto + "\uFF08\u7814\u7A76\u63D0\u5347\u6700\u9AD8\u7EA6 " + reachable + "%\uFF09\u3002\u8BF7\u8C03\u4F4E\u76EE\u6807\uFF0C\u6216\u63D0\u5347 CTO \u6280\u80FD\u540E\u518D\u8BD5\u3002</div>";
+          return;
+        }
+        const best = optMode === "target" ? bests.targetSales : optMode === "research" ? bests.targetResearch : bests[optMode];
         if (!best) {
           resultBox.innerHTML = '<div style="font-size: 12px; color: var(--sc-dangerFg); padding: 4px 2px;">\u8BE5\u76EE\u6807\u65E0\u53EF\u884C\u89E3\uFF0C\u8BF7\u8C03\u6574\u540E\u91CD\u8BD5\u3002</div>';
           return;
         }
-        const m = formatMetrics(best.effCoo, best.effCmo);
+        const m = formatMetrics(best.effCoo, best.effCmo, best.effCto);
         const seatText = best.placement.filter((item) => isOptSeatActive(item.seat, academyLevel) && item.obj && item.name).map((item) => SLOT_LABELS[item.seat] + "\uFF1A" + item.name).join(" \uFF5C ");
         let html = "";
         if (optMode === "target") {
+          const targetValue = parseInt(optTargetInput, 10);
+          const kMin = optTargetK();
           const maxK = Math.floor(bests.restaurant.effCmo / 3);
           html += '<div style="font-size: 11px; color: var(--sc-fg3); margin: 2px 0 6px;">\u76EE\u6807\uFF1A\u9500\u552E\u901F\u5EA6 \u2265 ' + targetValue + "%\uFF08\u9700 CMO \u52A0\u6210 \u2265 +" + kMin + "%\uFF0C\u5F53\u524D\u4E0A\u9650 +" + maxK + "%\uFF09</div>";
+        }
+        if (optMode === "research") {
+          const targetValue = parseInt(optResearchInput, 10);
+          const needCto = optResearchCto();
+          const maxEffCto = bests.ctoMax ? bests.ctoMax.effCto : 0;
+          html += '<div style="font-size: 11px; color: var(--sc-fg3); margin: 2px 0 6px;">\u76EE\u6807\uFF1A\u7814\u7A76\u7C7B\u751F\u4EA7\u63D0\u5347 \u2265 ' + targetValue + "%\uFF08\u9700 CTO \u6709\u6548\u70B9\u6570 \u2265 " + needCto + "\uFF0C\u5F53\u524D\u4E0A\u9650 " + maxEffCto + "\uFF09</div>";
         }
         html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.8;">';
         html += '<div style="font-weight: bold; color: var(--sc-fg2);">' + OPT_MODE_LABELS[optMode] + "</div>";
         html += '<div style="color: var(--sc-fg);">' + seatText + "</div>";
-        html += '<div style="color: var(--sc-fg3);">\u9884\u8BA1\uFF1A\u7BA1\u7406\u8D39\u7528 <span style="color: var(--sc-successFg); font-weight: bold;">' + m.adminText + "</span> \uFF5C \u9910\u9986\u8BC4\u7EA7 " + m.restaurantText + " \uFF5C \u9500\u552E\u901F\u5EA6 " + m.salesText + "</div>";
+        const metricsText = optMode === "research" ? '\u7BA1\u7406\u8D39\u7528 <span style="color: var(--sc-successFg); font-weight: bold;">' + m.adminText + "</span> \uFF5C \u7814\u7A76\u7C7B\u751F\u4EA7\u63D0\u5347 " + m.researchText : '\u7BA1\u7406\u8D39\u7528 <span style="color: var(--sc-successFg); font-weight: bold;">' + m.adminText + "</span> \uFF5C \u9910\u9986\u8BC4\u7EA7 " + m.restaurantText + " \uFF5C \u9500\u552E\u901F\u5EA6 " + m.salesText;
+        html += '<div style="color: var(--sc-fg3);">\u9884\u8BA1\uFF1A' + metricsText + "</div>";
         html += '<div style="margin-top: 6px;"><button data-opt-apply="' + optMode + '" style="padding: 5px 14px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">\u5E94\u7528\u5230\u81EA\u5B9A\u4E49\u6570\u636E\u5E76\u4FDD\u5B58</button></div>';
         html += "</div>";
         resultBox.innerHTML = html;
@@ -5548,18 +5624,23 @@
       }
       const cur = currentMetrics(academyLevel);
       let html = "";
-      html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg3);">\u6D4B\u8BD5\u4E2D\uFF0C\u6B22\u8FCE\u53CD\u9988</div>';
       html += '<div style="border: 1px solid var(--sc-border2); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.9;">';
       html += '<div style="margin-bottom: 4px;"><label for="sc-opt-mode" style="color: var(--sc-fg2); font-weight: bold;">\u4F18\u5316\u76EE\u6807\uFF1A</label>';
       html += '<select id="sc-opt-mode" style="max-width: 100%; padding: 4px 6px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 12px;">';
       html += '<option value="admin">\u7BA1\u7406\u8D39\u7528\u6700\u4F4E</option>';
       html += '<option value="restaurant">\u9910\u9986\u8BC4\u7EA7\u6700\u9AD8</option>';
       html += '<option value="target">\u6307\u5B9A\u9500\u552E\u901F\u5EA6\u65F6\u7BA1\u7406\u8D39\u7528\u6700\u4F4E</option>';
+      html += '<option value="research">\u6307\u5B9A\u7814\u7A76\u7C7B\u751F\u4EA7\u63D0\u5347\u65F6\u7BA1\u7406\u8D39\u7528\u6700\u4F4E</option>';
       html += "</select></div>";
       if (optMode === "target") {
         html += '<div style="margin-bottom: 4px;">\u76EE\u6807\u6700\u7EC8\u9500\u552E\u901F\u5EA6\uFF08%\uFF09\uFF1A';
         html += '<input id="sc-opt-target" type="number" min="0" step="1" placeholder="\u5982 ' + cur.text.salesText.replace("%", "") + '" style="width: 90px; padding: 3px 6px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 12px;">';
         html += '<div style="font-size: 11px; color: var(--sc-fg3);">\u6700\u7EC8\u9500\u552E\u901F\u5EA6 = \u57FA\u7840\u9500\u552E\u901F\u5EA6 + CMO \u52A0\u6210\uFF08\u6574\u6570 %\uFF09\u3002</div></div>';
+      }
+      if (optMode === "research") {
+        html += '<div style="margin-bottom: 4px;">\u76EE\u6807\u7814\u7A76\u7C7B\u751F\u4EA7\u63D0\u5347\uFF08%\uFF09\uFF1A';
+        html += '<input id="sc-opt-research" type="number" min="0" step="2" placeholder="\u5982 ' + cur.text.researchText.replace("%", "") + '" style="width: 90px; padding: 3px 6px; border: 1px solid var(--sc-border); border-radius: 4px; background: var(--sc-input-bg); color: var(--sc-input-fg); font-size: 12px;">';
+        html += '<div style="font-size: 11px; color: var(--sc-fg3);">\u7814\u7A76\u63D0\u5347 = CTO \u6709\u6548\u70B9\u6570 \xD7 2%\uFF08\u5373 2 \u7684\u500D\u6570\uFF09\u3002</div></div>';
       }
       html += '<div style="margin-top: 2px;"><button id="sc-opt-calc-btn" style="padding: 5px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">\u8BA1\u7B97\u6446\u6CD5</button></div>';
       html += "</div>";
@@ -5576,6 +5657,13 @@
         targetInput.value = optTargetInput;
         targetInput.oninput = () => {
           optTargetInput = targetInput.value;
+        };
+      }
+      const researchInput = document.getElementById("sc-opt-research");
+      if (researchInput) {
+        researchInput.value = optResearchInput;
+        researchInput.oninput = () => {
+          optResearchInput = researchInput.value;
         };
       }
       const calcBtn = document.getElementById("sc-opt-calc-btn");
@@ -15658,4 +15746,4 @@
   })();
 })();
 
-// @changelog 1.33.9：自定义高管数据新增「最优摆放建议」（按真实学院总等级计算最优高管摆法，可指定目标销售速度，后台计算不卡页面，支持应用到自定义数据并保存）；新增聊天室全局屏蔽（默认关闭，功能开关设置中开启）。
+// @changelog 自定义高管数据「最优摆放建议」新增「指定研究类生产提升时管理费用最低」目标
