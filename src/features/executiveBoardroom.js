@@ -20,16 +20,13 @@ export const executiveCustomButton = (function () {
             '1': '职员 1', '2': '职员 2', '3': '职员 3', '4': '职员 4', '5': '职员 5'
         };
 
-        // 依据高管 API 列表生成一份席位表（纯函数，不修改 boardroomState）
-        function buildStateFromExecList(execList) {
-            const state = {
-                'o': null, 'f': null, 'm': null, 't': null,
-                'v': null, 'x': null, 'y': null, 'z': null,
-                '1': null, '2': null, '3': null, '4': null, '5': null
-            };
+        // Map executives array from Sim Companies API to boardroomState
+        function mapExecutivesToState(execList) {
+            // Reset slots
+            Object.keys(boardroomState).forEach(k => boardroomState[k] = null);
 
             let staffIdx = 1;
-            (Array.isArray(execList) ? execList : []).forEach(exec => {
+            execList.forEach(exec => {
                 const pos = exec.currentWorkHistory?.position;
                 const posStr = pos ? String(pos) : null;
                 const emp = {
@@ -41,96 +38,18 @@ export const executiveCustomButton = (function () {
                         cto: exec.skills?.cto || 0
                     }
                 };
-                if (posStr && Object.prototype.hasOwnProperty.call(state, posStr)) {
-                    state[posStr] = emp;
+                if (posStr && boardroomState.hasOwnProperty(posStr)) {
+                    boardroomState[posStr] = emp;
                 } else {
-                    while (staffIdx <= 5 && state[String(staffIdx)] !== null) {
+                    while (staffIdx <= 5 && boardroomState[String(staffIdx)] !== null) {
                         staffIdx++;
                     }
                     if (staffIdx <= 5) {
-                        state[String(staffIdx)] = emp;
+                        boardroomState[String(staffIdx)] = emp;
                         staffIdx++;
                     }
                 }
             });
-            return state;
-        }
-
-        // Map executives array from Sim Companies API to boardroomState（写入自定义数据）
-        function mapExecutivesToState(execList) {
-            const mapped = buildStateFromExecList(execList);
-            Object.keys(boardroomState).forEach(k => { boardroomState[k] = mapped[k] || null; });
-        }
-
-        // 比对：游戏当前摆放（只读获取）vs 自定义数据摆放；只列出「谁 → 目标席位」
-        function renderCompareResults(currentState) {
-            const container = document.getElementById('sc-boardroom-compare-results');
-            if (!container) return;
-
-            const seatOrder = ['o', 'f', 'm', 't', 'v', 'x', 'y', 'z', '1', '2', '3', '4', '5'];
-            const gameSlots = {};
-            const customSlots = {};
-            Object.keys(boardroomState).forEach(id => {
-                const g = currentState[id] && currentState[id].name;
-                const c = boardroomState[id] && boardroomState[id].name;
-                if (g && gameSlots[g] === undefined) gameSlots[g] = id;
-                if (c && customSlots[c] === undefined) customSlots[c] = id;
-            });
-
-            const rows = [];
-            seatOrder.forEach(seat => {
-                const name = boardroomState[seat] && boardroomState[seat].name;
-                if (!name) return;
-                if (gameSlots[name] === seat) return; // 已在目标席位
-                rows.push({ name: name, seat: seat, missingInGame: gameSlots[name] === undefined });
-            });
-
-            const unassigned = Object.keys(gameSlots).filter(name => customSlots[name] === undefined);
-
-            const label = id => SLOT_LABELS[id] || id;
-            let html = '';
-            html += '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg); line-height: 1.9;">';
-            if (rows.length === 0 && unassigned.length === 0) {
-                html += '<div style="color: var(--sc-successFg);">与当前游戏摆放一致，无需调整。</div>';
-            } else {
-                html += '<div style="font-weight: bold;">需要调整位置的 ' + rows.length + ' 位高管：</div>';
-                rows.forEach((row, i) => {
-                    html += '<div>' + (i + 1) + '. ' + row.name + ' → <span style="color: var(--sc-successFg); font-weight: bold;">' + label(row.seat) + '</span>' + (row.missingInGame ? '<span style="color: var(--sc-fg3);">（游戏当前没有，需先安排）</span>' : '') + '</div>';
-                });
-                if (unassigned.length > 0) {
-                    html += '<div style="margin-top: 4px; font-size: 11px; color: var(--sc-fg3);">游戏里有 ' + unassigned.join('、') + '，自定义数据未安排。</div>';
-                }
-            }
-            html += '<div style="font-size: 11px; color: var(--sc-fg3); margin-top: 6px;">* 本次比对只读取游戏当前高管数据，不会改写自定义数据。</div>';
-            html += '</div>';
-            container.innerHTML = html;
-        }
-
-        // 点击「比对当前游戏摆放」：只读获取当前高管数据并比对（不写入自定义数据）
-        function compareWithGame(btn) {
-            const container = document.getElementById('sc-boardroom-compare-results');
-            if (!container || !btn || btn.disabled) return;
-            const originalText = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = '获取中…';
-            container.innerHTML = '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-fg3);">正在获取游戏当前高管数据…</div>';
-            Network.requestJson('https://www.simcompanies.com/api/v3/companies/me/executives/')
-                .then(res => {
-                    const data = res && res.executives;
-                    if (data && data.length > 0) {
-                        renderCompareResults(buildStateFromExecList(data));
-                    } else {
-                        container.innerHTML = '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-dangerFg);">未获取到高管数据。</div>';
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    container.innerHTML = '<div style="font-size: 12px; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--sc-border); border-radius: 6px; background: var(--sc-aca-bg); color: var(--sc-dangerFg);">网络请求失败，请稍后重试。</div>';
-                })
-                .finally(() => {
-                    btn.disabled = false;
-                    btn.textContent = originalText;
-                });
         }
 
         // Load boardroomState from localStorage
@@ -1424,9 +1343,7 @@ export const executiveCustomButton = (function () {
                             <button id="sc-boardroom-save-btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">保存</button>
                             <button id="sc-boardroom-fetch-btn" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">获取当前最新高管数据</button>
                             <button id="sc-boardroom-opt-btn" style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">最优摆放建议</button>
-                            <button id="sc-boardroom-compare-btn" style="padding: 8px 16px; background: #607d8b; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">比对当前游戏摆放</button>
                         </div>
-                        <div id="sc-boardroom-compare-results"></div>
                         <div id="sc-boardroom-opt-results"></div>
                         <div style="font-size: 11px; color: var(--sc-fg3); margin-bottom: 15px;">* 拖拽高管卡片，或点击两个高管卡片进行切换。</div>
                         <div id="sc-slots-container"></div>
@@ -1486,13 +1403,6 @@ export const executiveCustomButton = (function () {
                 btnOpt.onclick = (e) => {
                     e.preventDefault();
                     renderOptimizerResults();
-                };
-            }
-            const btnCompare = document.getElementById('sc-boardroom-compare-btn');
-            if (btnCompare) {
-                btnCompare.onclick = (e) => {
-                    e.preventDefault();
-                    compareWithGame(btnCompare);
                 };
             }
 
