@@ -6,6 +6,7 @@ const FormerExecutivesModule = { forceInject: (...args) => window.SC_Modules?.Fo
 const LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.LandscapeIdleBuildingHighlight?.init(...args) };
 const RestaurantStockReminder = { init: (...args) => window.SC_Modules?.RestaurantStockReminder?.init(...args) };
 const BuildingUpgradeMaterialCopy = { init: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.init(...args) };
+const BuildingUpgradeMaterialCopyLifecycle = { destroy: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.destroy(...args) };
     // 模块9：判断当前页面
     // ======================
     (function () {
@@ -117,6 +118,9 @@ const BuildingUpgradeMaterialCopy = { init: (...args) => window.SC_Modules?.buil
 
         function handlePage() {
             const url = location.href;
+            if (!/\/b\/\d+\/?$/.test(url)) {
+                BuildingUpgradeMaterialCopyLifecycle.destroy();
+            }
             for (const { pattern, action } of Object.values(PAGE_ACTIONS)) {
                 if (pattern.test(url)) {
                     action(url);

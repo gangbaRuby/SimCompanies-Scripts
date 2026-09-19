@@ -44,21 +44,37 @@ function findBuyMissingButton(dialog) {
         .find(button => button.querySelector('svg[data-icon="right-left"]'));
 }
 
+function fallbackCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch (error) {
+        // Ignore unsupported document.execCommand environments.
+    }
+    textarea.remove();
+    return copied;
+}
+
+function copyText(text) {
+    if (navigator.clipboard?.writeText) {
+        return navigator.clipboard.writeText(text).then(() => true).catch(() => fallbackCopy(text));
+    }
+    return Promise.resolve(fallbackCopy(text));
+}
+
 function copyMaterials(button, dialog, prefix) {
     const materials = getMaterials(dialog);
     if (materials.length === 0) return;
 
     const text = `${prefix}\n${materials.join('\n')}`;
-    const copyPromise = navigator.clipboard?.writeText(text);
-    if (!copyPromise) {
-        button.textContent = '复制失败';
-        setTimeout(() => {
-            if (button.isConnected) button.textContent = button.dataset.label;
-        }, 1200);
-        return;
-    }
-
-    copyPromise.then(() => {
+    copyText(text).then(copied => {
+        if (!copied) throw new Error('Copy failed');
         const originalText = button.textContent;
         button.textContent = '已复制';
         setTimeout(() => {
@@ -132,5 +148,13 @@ function init() {
     scan();
 }
 
+function destroy() {
+    observer?.disconnect();
+    observer = null;
+    clearTimeout(timer);
+    timer = null;
+    removeButtons();
+}
+
 window.SC_Modules = window.SC_Modules || {};
-window.SC_Modules.buildingUpgradeMaterialCopy = { init };
+window.SC_Modules.buildingUpgradeMaterialCopy = { init, destroy };
