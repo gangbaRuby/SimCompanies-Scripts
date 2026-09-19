@@ -698,7 +698,6 @@ export const executiveCustomButton = (function () {
                 renderBoardroom();
                 saveBoardroom();
                 renderOptimizerResults();
-                computeAndShowOptResult();
                 showToast('已应用最优摆放并保存', 'success');
             });
         }
