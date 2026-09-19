@@ -5,6 +5,8 @@ const ExecutiveTrainingModule = { init: (...args) => window.SC_Modules?.Executiv
 const FormerExecutivesModule = { forceInject: (...args) => window.SC_Modules?.FormerExecutivesModule?.forceInject(...args) };
 const LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.LandscapeIdleBuildingHighlight?.init(...args) };
 const RestaurantStockReminder = { init: (...args) => window.SC_Modules?.RestaurantStockReminder?.init(...args) };
+const BuildingUpgradeMaterialCopy = { init: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.init(...args) };
+const BuildingUpgradeMaterialCopyLifecycle = { destroy: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.destroy(...args) };
     // 模块9：判断当前页面
     // ======================
     (function () {
@@ -75,6 +77,9 @@ const RestaurantStockReminder = { init: (...args) => window.SC_Modules?.Restaura
                 pattern: /\/b\/\d+\/?$/,
                 action: () => {
                     RestaurantStockReminder.init();
+                    if (isPageModuleEnabled('buildingUpgradeMaterialCopy')) {
+                        BuildingUpgradeMaterialCopy.init();
+                    }
                     // 多级重试：确保在 SPA 页面切换后 DOM 完全渲染时能注入按钮
                     // 单次 300ms 延迟有时不足以等待 React 渲染完成
                     const tryInit = (delay, retriesLeft) => {
@@ -113,6 +118,9 @@ const RestaurantStockReminder = { init: (...args) => window.SC_Modules?.Restaura
 
         function handlePage() {
             const url = location.href;
+            if (!/\/b\/\d+\/?$/.test(url)) {
+                BuildingUpgradeMaterialCopyLifecycle.destroy();
+            }
             for (const { pattern, action } of Object.values(PAGE_ACTIONS)) {
                 if (pattern.test(url)) {
                     action(url);

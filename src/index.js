@@ -4,6 +4,7 @@ import './features/paQuestAnswers.js';
 import './features/pageObserver.js';
 import './features/landscapeIdleBuildingHighlight.js';
 import './features/restaurantStockReminder.js';
+import './features/buildingUpgradeMaterialCopy.js';
 import './features/formerExecutivesModule.js';
 import './features/executiveTrainingModule.js';
 import './features/outgoingContractMPHandler.js';
@@ -1117,6 +1118,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 { type: 'toggle', key: 'chatBlock', label: '聊天室全局屏蔽', defaultEnabled: false, subContent: createChatBlockManageControls },
                 { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
                 { type: 'toggle', key: 'restaurantStock', label: '餐馆备货提醒' },
+                { type: 'toggle', key: 'buildingUpgradeMaterialCopy', label: '复制升级所需建材' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
                 { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
                 { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true, subContent: createChatInputHeightControls },
