@@ -5,6 +5,7 @@ import './features/pageObserver.js';
 import './features/landscapeIdleBuildingHighlight.js';
 import './features/restaurantStockReminder.js';
 import './features/buildingUpgradeMaterialCopy.js';
+import './features/buildingAuctionLevelFilter.js';
 import './features/formerExecutivesModule.js';
 import './features/executiveTrainingModule.js';
 import './features/outgoingContractMPHandler.js';
