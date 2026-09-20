@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.10
+// @version      1.33.11
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1035,8 +1035,8 @@
       }
       return stored === "true";
     }
-    function saveAutoAmountEnabled(isEnabled) {
-      localStorage.setItem(ENABLED_STORAGE_KEY, isEnabled ? "true" : "false");
+    function saveAutoAmountEnabled(isEnabled2) {
+      localStorage.setItem(ENABLED_STORAGE_KEY, isEnabled2 ? "true" : "false");
     }
     function loadCustomAmounts() {
       const stored = localStorage.getItem(CUSTOM_AMOUNTS_STORAGE_KEY);
@@ -1330,7 +1330,7 @@
         'div[style="overflow: visible;"]',
         CARD_SELECTOR.split(",").map((s) => s.trim()).join(",")
       ];
-      const observer = new MutationObserver((mutationsList) => {
+      const observer2 = new MutationObserver((mutationsList) => {
         clearTimeout(debounceTimer);
         clearTimeout(lateCheckTimer);
         debounceTimer = setTimeout(() => {
@@ -1349,17 +1349,17 @@
           }
         }, 100);
       });
-      observer.observe(targetNode, {
+      observer2.observe(targetNode, {
         childList: true,
         subtree: true
       });
       function ensureInputsLoaded() {
         let tries = 0;
         const maxTries = 50;
-        const timer = setInterval(() => {
+        const timer2 = setInterval(() => {
           const inputs = document.querySelectorAll('input[name="amount"], input[name="quantity"]');
           if (inputs.length > 0 || tries >= maxTries) {
-            clearInterval(timer);
+            clearInterval(timer2);
             if (inputs.length > 0) {
               initAutoAmountButtons();
             }
@@ -1386,9 +1386,9 @@
     let questData = null;
     let dataLoadAttempted = false;
     let initAttempted = false;
-    let observer = null;
+    let observer2 = null;
     let cleanupTimer = null;
-    function isEnabled() {
+    function isEnabled2() {
       return window.isPageModuleEnabled ? window.isPageModuleEnabled("paQuestAnswers") : true;
     }
     async function loadData() {
@@ -1755,30 +1755,30 @@
         cleanupStaleAnswers();
       }, 300);
     }
-    async function init2() {
+    async function init4() {
       if (!/\/messages(\/|$)/.test(location.href)) {
-        if (observer) {
-          observer.disconnect();
-          observer = null;
+        if (observer2) {
+          observer2.disconnect();
+          observer2 = null;
         }
         initAttempted = false;
         dataLoadAttempted = false;
         return;
       }
-      if (!isEnabled()) return;
+      if (!isEnabled2()) return;
       await loadData();
       if (!questData || questData.length === 0) {
         dataLoadAttempted = false;
-        setTimeout(init2, 3e3);
+        setTimeout(init4, 3e3);
         return;
       }
       if (initAttempted) return;
       initAttempted = true;
       scanPage();
       cleanupStaleAnswers();
-      if (observer) observer.disconnect();
-      observer = new MutationObserver(function(mutations) {
-        if (!isEnabled()) return;
+      if (observer2) observer2.disconnect();
+      observer2 = new MutationObserver(function(mutations) {
+        if (!isEnabled2()) return;
         for (var mi = 0; mi < mutations.length; mi++) {
           var m = mutations[mi];
           for (var ni = 0; ni < m.addedNodes.length; ni++) {
@@ -1791,9 +1791,9 @@
         scheduleCleanup();
       });
       findChatContainers().forEach(function(c) {
-        observer.observe(c, { childList: true, subtree: true });
+        observer2.observe(c, { childList: true, subtree: true });
       });
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer2.observe(document.body, { childList: true, subtree: true });
     }
     function scanElement(element) {
       if (!questData || questData.length === 0) return;
@@ -1843,15 +1843,15 @@
         lastUrl = location.href;
         initAttempted = false;
         dataLoadAttempted = false;
-        if (observer) {
-          observer.disconnect();
-          observer = null;
+        if (observer2) {
+          observer2.disconnect();
+          observer2 = null;
         }
-        setTimeout(init2, 300);
+        setTimeout(init4, 300);
       }
     }).observe(document, { subtree: true, childList: true });
-    setTimeout(init2, 500);
-    return { init: init2 };
+    setTimeout(init4, 500);
+    return { init: init4 };
   })();
 
   // src/features/pageObserver.js
@@ -1862,6 +1862,10 @@
   var FormerExecutivesModule = { forceInject: (...args) => window.SC_Modules?.FormerExecutivesModule?.forceInject(...args) };
   var LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.LandscapeIdleBuildingHighlight?.init(...args) };
   var RestaurantStockReminder = { init: (...args) => window.SC_Modules?.RestaurantStockReminder?.init(...args) };
+  var BuildingUpgradeMaterialCopy = { init: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.init(...args) };
+  var BuildingUpgradeMaterialCopyLifecycle = { destroy: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.destroy(...args) };
+  var BuildingAuctionLevelFilter = { init: (...args) => window.SC_Modules?.BuildingAuctionLevelFilter?.init(...args) };
+  var BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Modules?.BuildingAuctionLevelFilter?.destroy(...args) };
   (function() {
     const PAGE_ACTIONS = {
       marketPage: {
@@ -1929,6 +1933,9 @@
         pattern: /\/b\/\d+\/?$/,
         action: () => {
           RestaurantStockReminder.init();
+          if (isPageModuleEnabled("buildingUpgradeMaterialCopy")) {
+            BuildingUpgradeMaterialCopy.init();
+          }
           const tryInit = (delay, retriesLeft) => {
             setTimeout(() => {
               if (!/\/b\/\d+\/?$/.test(location.href)) return;
@@ -1960,10 +1967,21 @@
             LandscapeIdleBuildingHighlight.init();
           }, 500);
         }
+      },
+      buildingAuctionsPage: {
+        //建筑拍卖本地等级范围筛选
+        pattern: /\/market\/building-auctions\/?$/,
+        action: () => BuildingAuctionLevelFilter.init()
       }
     };
     function handlePage() {
       const url = location.href;
+      if (!/\/b\/\d+\/?$/.test(url)) {
+        BuildingUpgradeMaterialCopyLifecycle.destroy();
+      }
+      if (!/\/market\/building-auctions\/?$/.test(url)) {
+        BuildingAuctionLevelFilterLifecycle.destroy();
+      }
       for (const { pattern, action } of Object.values(PAGE_ACTIONS)) {
         if (pattern.test(url)) {
           action(url);
@@ -1972,13 +1990,13 @@
       }
     }
     let lastUrl = "";
-    const observer = new MutationObserver(() => {
+    const observer2 = new MutationObserver(() => {
       if (lastUrl !== location.href) {
         lastUrl = location.href;
         handlePage();
       }
     });
-    observer.observe(document, { subtree: true, childList: true });
+    observer2.observe(document, { subtree: true, childList: true });
     setTimeout(handlePage, 0);
   })();
 
@@ -2061,11 +2079,11 @@
         delete el.dataset.scLandscapeHighlight;
       });
     }
-    function init2() {
+    function init4() {
       if (!/\/landscape\/?$/.test(location.href)) return;
       setTimeout(processBuildings, 500);
     }
-    return { init: init2 };
+    return { init: init4 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.LandscapeIdleBuildingHighlight = LandscapeIdleBuildingHighlight2;
@@ -2102,7 +2120,7 @@
       { key: "mains", title: "\u4E3B\u83DC" },
       { key: "drinks", title: "\u996E\u6599" }
     ];
-    const state2 = {
+    const state3 = {
       watchTimer: null,
       blockNode: null,
       containerNode: null,
@@ -2204,21 +2222,21 @@
       if (min !== null) return `(Q${min}+)`;
       return `(\u2264Q${max})`;
     }
-    function isEnabled() {
+    function isEnabled2() {
       return typeof window.isPageModuleEnabled !== "function" || window.isPageModuleEnabled("restaurantStock");
     }
-    function init2() {
+    function init4() {
       startWatch();
     }
     function startWatch() {
-      if (state2.watchTimer) return;
-      state2.watchTimer = setInterval(mainFunc, 1200);
+      if (state3.watchTimer) return;
+      state3.watchTimer = setInterval(mainFunc, 1200);
       mainFunc();
     }
     function stopWatch() {
-      if (state2.watchTimer) {
-        clearInterval(state2.watchTimer);
-        state2.watchTimer = null;
+      if (state3.watchTimer) {
+        clearInterval(state3.watchTimer);
+        state3.watchTimer = null;
       }
     }
     function getBuildingIdFromUrl() {
@@ -2575,9 +2593,9 @@
     }
     function renderIntoBlock(block, restaurant, allRestaurants) {
       const settings = loadSettings();
-      const view = state2.view;
+      const view = state3.view;
       const body = view === "all" ? buildAllTable(allRestaurants, settings) : view === "quality" ? buildQualityDetailTable(allRestaurants, settings) : buildCurrentTable(restaurant, allRestaurants, settings);
-      const settingsArea = state2.showSettings ? buildSettingsHtml(settings, restaurant, allRestaurants) : "";
+      const settingsArea = state3.showSettings ? buildSettingsHtml(settings, restaurant, allRestaurants) : "";
       const modeText = view === "all" ? "\u5168\u90E8\u9910\u9986" : view === "quality" ? "\u54C1\u8D28\u660E\u7EC6" : "\u5F53\u524D\u9910\u9986";
       const viewBtnText = view === "all" ? "\u663E\u793A\u5F53\u524D\u9910\u9986" : "\u663E\u793A\u5168\u90E8\u9910\u9986";
       const detailBtnText = view === "quality" ? "\u5173\u95ED\u660E\u7EC6" : "\u54C1\u8D28\u660E\u7EC6";
@@ -2595,7 +2613,7 @@
             <div style="opacity:.55;margin-top:4px;font-size:11px;">* \u9875\u9762\u5185\u4FEE\u6539\u83DC\u5355\u540E\uFF0C\u672C\u63D0\u9192\u9700\u91CD\u65B0\u8FDB\u5165\u9910\u9986\u9875\u624D\u4F1A\u66F4\u65B0</div>`;
     }
     function refreshStocks() {
-      const block = state2.blockNode;
+      const block = state3.blockNode;
       if (!block || !block.isConnected) return;
       const region = loadRegionData();
       const resources = region ? region.warehouseResources : null;
@@ -2646,7 +2664,7 @@
         }
       });
     }
-    function fallbackCopy(text) {
+    function fallbackCopy2(text) {
       const ta = document.createElement("textarea");
       ta.value = text;
       ta.style.position = "fixed";
@@ -2659,33 +2677,33 @@
       }
       ta.remove();
     }
-    function copyText(text) {
+    function copyText2(text) {
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+        navigator.clipboard.writeText(text).catch(() => fallbackCopy2(text));
       } else {
-        fallbackCopy(text);
+        fallbackCopy2(text);
       }
     }
     function removeBlock() {
-      if (state2.blockNode && state2.blockNode.isConnected) {
-        state2.blockNode.remove();
+      if (state3.blockNode && state3.blockNode.isConnected) {
+        state3.blockNode.remove();
       }
-      state2.blockNode = null;
-      state2.containerNode = null;
-      state2.lastMenuJson = "";
-      state2.lastBuildingId = "";
-      state2.restaurant = null;
-      state2.allRestaurants = [];
+      state3.blockNode = null;
+      state3.containerNode = null;
+      state3.lastMenuJson = "";
+      state3.lastBuildingId = "";
+      state3.restaurant = null;
+      state3.allRestaurants = [];
     }
     function currentMenuJson(restaurant, allRestaurants) {
-      return state2.view === "all" || state2.view === "quality" ? JSON.stringify((allRestaurants || []).map((r) => r.restaurantProperties || {})) : JSON.stringify(restaurant.restaurantProperties || {});
+      return state3.view === "all" || state3.view === "quality" ? JSON.stringify((allRestaurants || []).map((r) => r.restaurantProperties || {})) : JSON.stringify(restaurant.restaurantProperties || {});
     }
     function ensureBlock(container, restaurant, allRestaurants, buildingId) {
       const menuJson = currentMenuJson(restaurant, allRestaurants);
-      if (state2.blockNode && state2.blockNode.isConnected && state2.containerNode === container && state2.lastBuildingId === buildingId && state2.lastMenuJson === menuJson) {
+      if (state3.blockNode && state3.blockNode.isConnected && state3.containerNode === container && state3.lastBuildingId === buildingId && state3.lastMenuJson === menuJson) {
         return;
       }
-      const block = state2.blockNode && state2.blockNode.isConnected ? state2.blockNode : document.createElement("div");
+      const block = state3.blockNode && state3.blockNode.isConnected ? state3.blockNode : document.createElement("div");
       if (!block.isConnected) {
         block.setAttribute(BLOCK_ATTR, String(restaurant.id));
         block.style.cssText = [
@@ -2699,24 +2717,24 @@
         block.addEventListener("click", (e) => {
           const toggle = e.target.closest("[data-sc-view-toggle]");
           if (toggle) {
-            state2.view = state2.view === "all" ? "current" : "all";
-            renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
-            state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+            state3.view = state3.view === "all" ? "current" : "all";
+            renderIntoBlock(block, state3.restaurant, state3.allRestaurants);
+            state3.lastMenuJson = currentMenuJson(state3.restaurant, state3.allRestaurants);
             refreshStocks();
             return;
           }
           const detailBtn = e.target.closest("[data-sc-detail-toggle]");
           if (detailBtn) {
-            state2.view = state2.view === "quality" ? "current" : "quality";
-            renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
-            state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+            state3.view = state3.view === "quality" ? "current" : "quality";
+            renderIntoBlock(block, state3.restaurant, state3.allRestaurants);
+            state3.lastMenuJson = currentMenuJson(state3.restaurant, state3.allRestaurants);
             refreshStocks();
             return;
           }
           const settingsBtn = e.target.closest("[data-sc-settings-toggle]");
           if (settingsBtn) {
-            state2.showSettings = !state2.showSettings;
-            renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
+            state3.showSettings = !state3.showSettings;
+            renderIntoBlock(block, state3.restaurant, state3.allRestaurants);
             refreshStocks();
             return;
           }
@@ -2724,13 +2742,13 @@
           if (copyBtn) {
             const copySettings = loadSettings();
             const sourceId = block.querySelector("[data-sc-copy-source]")?.value;
-            if (sourceId && state2.restaurant) {
+            if (sourceId && state3.restaurant) {
               if (!copySettings.qualities) copySettings.qualities = {};
               const src = copySettings.qualities[sourceId];
-              copySettings.qualities[String(state2.restaurant.id)] = src ? JSON.parse(JSON.stringify(src)) : {};
+              copySettings.qualities[String(state3.restaurant.id)] = src ? JSON.parse(JSON.stringify(src)) : {};
               saveSettings(copySettings);
-              renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
-              state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+              renderIntoBlock(block, state3.restaurant, state3.allRestaurants);
+              state3.lastMenuJson = currentMenuJson(state3.restaurant, state3.allRestaurants);
               refreshStocks();
             }
             return;
@@ -2739,7 +2757,7 @@
           if (shortfall) {
             const raw = shortfall.getAttribute("data-sc-shortfall-raw");
             if (raw !== null && raw !== "") {
-              copyText(raw);
+              copyText2(raw);
               shortfall.dataset.scCopied = "1";
               shortfall.textContent = `\u2713 ${Number(raw).toLocaleString()}`;
               setTimeout(() => {
@@ -2784,24 +2802,24 @@
             if (!settings.qualities[restId]) settings.qualities[restId] = {};
             settings.qualities[restId][kind] = range;
             saveSettings(settings);
-            renderIntoBlock(block, state2.restaurant, state2.allRestaurants);
-            state2.lastMenuJson = currentMenuJson(state2.restaurant, state2.allRestaurants);
+            renderIntoBlock(block, state3.restaurant, state3.allRestaurants);
+            state3.lastMenuJson = currentMenuJson(state3.restaurant, state3.allRestaurants);
             refreshStocks();
             return;
           }
         });
         container.appendChild(block);
       }
-      state2.blockNode = block;
-      state2.containerNode = container;
-      state2.restaurant = restaurant;
-      state2.allRestaurants = allRestaurants || [];
-      state2.lastBuildingId = buildingId;
-      state2.lastMenuJson = menuJson;
-      renderIntoBlock(block, restaurant, state2.allRestaurants);
+      state3.blockNode = block;
+      state3.containerNode = container;
+      state3.restaurant = restaurant;
+      state3.allRestaurants = allRestaurants || [];
+      state3.lastBuildingId = buildingId;
+      state3.lastMenuJson = menuJson;
+      renderIntoBlock(block, restaurant, state3.allRestaurants);
     }
     function mainFunc() {
-      if (!isEnabled()) {
+      if (!isEnabled2()) {
         removeBlock();
         return;
       }
@@ -2810,9 +2828,9 @@
         removeBlock();
         return;
       }
-      if (state2.lastBuildingId && state2.lastBuildingId !== buildingId) {
-        state2.view = "current";
-        state2.showSettings = false;
+      if (state3.lastBuildingId && state3.lastBuildingId !== buildingId) {
+        state3.view = "current";
+        state3.showSettings = false;
       }
       const region = loadRegionData();
       const buildings = region ? region.buildings : null;
@@ -2842,10 +2860,470 @@
       ensureBlock(container, restaurant, allRestaurants, buildingId);
       refreshStocks();
     }
-    return { init: init2 };
+    return { init: init4 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.RestaurantStockReminder = RestaurantStockReminder2;
+
+  // src/features/buildingUpgradeMaterialCopy.js
+  var MODULE_KEY = "buildingUpgradeMaterialCopy";
+  var BUTTON_ATTRIBUTE = "data-sc-building-upgrade-copy";
+  var COPY_BUTTON_LABEL = "\u590D\u5236";
+  var MP_BUTTON_LABEL = "MP-4%";
+  var RESOURCE_CODES = {
+    "reinforced-concrete": "re-101",
+    bricks: "re-102",
+    planks: "re-108",
+    "construction-units": "re-111"
+  };
+  var observer = null;
+  var timer = null;
+  function isEnabled() {
+    return typeof window.isPageModuleEnabled !== "function" || window.isPageModuleEnabled(MODULE_KEY);
+  }
+  function getResourceCode(row) {
+    const image = row.querySelector('td:first-child img[src*="/static/images/resources/"]');
+    if (!image) return null;
+    const match2 = image.src.match(/\/resources\/([^./]+)(?:\.[^./]+)?\.[^./]+$/);
+    return match2 ? RESOURCE_CODES[match2[1]] ?? null : null;
+  }
+  function getMaterials(dialog) {
+    return [...dialog.querySelectorAll("table tbody tr")].map((row) => {
+      const code = getResourceCode(row);
+      const requiredText = row.querySelector("td:nth-child(2) b")?.textContent.trim();
+      const warehouseText = row.querySelector("td:nth-child(3)")?.textContent.trim();
+      const required = Number.parseInt(requiredText?.replace(/[^\d-]/g, ""), 10);
+      const warehouse = Number.parseInt(warehouseText?.replace(/[^\d-]/g, ""), 10);
+      const missing = Math.max(0, required - warehouse);
+      return code && Number.isFinite(missing) && missing > 0 ? `:${code}: x${missing.toLocaleString("en-US")}` : null;
+    }).filter(Boolean);
+  }
+  function findBuyMissingButton(dialog) {
+    return [...dialog.querySelectorAll("button")].find((button) => button.querySelector('svg[data-icon="right-left"]'));
+  }
+  function fallbackCopy(text) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch (error) {
+    }
+    textarea.remove();
+    return copied;
+  }
+  function copyText(text) {
+    if (navigator.clipboard?.writeText) {
+      return navigator.clipboard.writeText(text).then(() => true).catch(() => fallbackCopy(text));
+    }
+    return Promise.resolve(fallbackCopy(text));
+  }
+  function copyMaterials(button, dialog, prefix) {
+    const materials = getMaterials(dialog);
+    if (materials.length === 0) return;
+    const text = `${prefix}
+${materials.join("\n")}`;
+    copyText(text).then((copied) => {
+      if (!copied) throw new Error("Copy failed");
+      const originalText = button.textContent;
+      button.textContent = "\u5DF2\u590D\u5236";
+      setTimeout(() => {
+        if (button.isConnected) button.textContent = originalText;
+      }, 1200);
+    }).catch(() => {
+      button.textContent = "\u590D\u5236\u5931\u8D25";
+      setTimeout(() => {
+        if (button.isConnected) button.textContent = button.dataset.label;
+      }, 1200);
+    });
+  }
+  function removeButtons() {
+    document.querySelectorAll(`[${BUTTON_ATTRIBUTE}]`).forEach((button) => button.remove());
+  }
+  function inject(dialog) {
+    if (!isEnabled()) {
+      removeButtons();
+      return;
+    }
+    if (dialog.querySelector(`[${BUTTON_ATTRIBUTE}]`)) return;
+    if (getMaterials(dialog).length === 0) return;
+    const buyMissingButton = findBuyMissingButton(dialog);
+    if (!buyMissingButton?.parentElement) return;
+    const createCopyButton = (label, prefix) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = buyMissingButton.className;
+      button.setAttribute(BUTTON_ATTRIBUTE, "true");
+      button.dataset.label = label;
+      button.textContent = label;
+      button.style.padding = "6px 10px";
+      button.style.marginRight = "4px";
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        copyMaterials(button, dialog, prefix);
+      });
+      return button;
+    };
+    const buttonContainer = buyMissingButton.parentElement;
+    buttonContainer.insertBefore(createCopyButton(COPY_BUTTON_LABEL, "BUYING"), buyMissingButton);
+    buttonContainer.insertBefore(createCopyButton(MP_BUTTON_LABEL, "BUYING MP-4%"), buyMissingButton);
+  }
+  function init2() {
+    const scan = () => {
+      timer = null;
+      if (!isEnabled()) {
+        removeButtons();
+        return;
+      }
+      document.querySelectorAll('[role="dialog"]').forEach(inject);
+    };
+    if (observer) {
+      scan();
+      return;
+    }
+    observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(scan, 100);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    scan();
+  }
+  function destroy() {
+    observer?.disconnect();
+    observer = null;
+    clearTimeout(timer);
+    timer = null;
+    removeButtons();
+  }
+  window.SC_Modules = window.SC_Modules || {};
+  window.SC_Modules.buildingUpgradeMaterialCopy = { init: init2, destroy };
+
+  // src/features/buildingAuctionLevelFilter.js
+  var AUCTIONS_URL = "/api/v2/building-auctions/";
+  var PANEL_ID = "sc-building-auction-level-filter";
+  var MIN_ID = "sc-building-auction-min-level";
+  var MAX_ID = "sc-building-auction-max-level";
+  var ROBOTS_ID = "sc-building-auction-robots";
+  var BIDS_ID = "sc-building-auction-hide-bids";
+  var HIDDEN_ATTR = "data-sc-building-auction-hidden";
+  var RANGE_KEY = "SC_BuildingAuctionLevelRange";
+  registerExportInfo({
+    name: "\u5EFA\u7B51\u62CD\u5356\u7B5B\u9009\u8BBE\u7F6E",
+    scope: "global",
+    backup: true,
+    keys: [RANGE_KEY]
+  });
+  var state = {
+    auctions: /* @__PURE__ */ new Map(),
+    observer: null,
+    renderTimer: null,
+    min: null,
+    max: null,
+    robotsOnly: false,
+    hideBids: false,
+    viewMode: null,
+    viewListener: null
+  };
+  function isAuctionListPage() {
+    return /\/market\/building-auctions\/?$/.test(location.pathname);
+  }
+  function isAllView() {
+    if (state.viewMode !== null) return state.viewMode === 0;
+    const selectedRadio = document.querySelector('input[type="radio"][value="0"]:checked');
+    if (selectedRadio) return true;
+    const checked = document.querySelector('[role="radio"][aria-checked="true"]');
+    return !!checked && /\ball\b|全部|所有/i.test(checked.textContent || "");
+  }
+  function updateViewModeFromDom() {
+    const selectedRadio = document.querySelector('input[type="radio"]:checked');
+    if (selectedRadio && ["0", "1", "2"].includes(selectedRadio.value)) {
+      state.viewMode = Number(selectedRadio.value);
+      return;
+    }
+    const checked = document.querySelector('[role="radio"][aria-checked="true"]');
+    const text = checked?.textContent || "";
+    if (/my\s+bids|我的出价|我的竞标|我的投标/i.test(text)) state.viewMode = 2;
+    else if (/my\s+auctions|我的拍卖/i.test(text)) state.viewMode = 1;
+    else if (/\ball\b|全部|所有/i.test(text)) state.viewMode = 0;
+  }
+  function handleViewClick(event) {
+    const target = event.target.closest?.('button, label, [role="radio"], [role="tab"]') || event.target.parentElement;
+    if (!target) return;
+    const text = `${target.textContent || ""} ${target.getAttribute?.("aria-label") || ""}`;
+    if (/my\s+bids|我的出价|我的竞标|我的投标/i.test(text)) state.viewMode = 2;
+    else if (/my\s+auctions|我的拍卖/i.test(text)) state.viewMode = 1;
+    else if (/\ball\b|全部|所有/i.test(text)) state.viewMode = 0;
+    scheduleRender();
+  }
+  function auctionIdFromHref(href) {
+    const match2 = String(href || "").match(/\/market\/building-auction\/(\d+)\/?(?:[?#].*)?$/);
+    return match2 ? match2[1] : null;
+  }
+  function hasBuildingRobots(auction) {
+    return auction && Object.prototype.hasOwnProperty.call(auction, "buildingRobots") && typeof auction.buildingRobots === "number" && Number.isFinite(auction.buildingRobots);
+  }
+  function cardHasBid(card) {
+    return /你出的最高價|你的最高出价|Your max bid/i.test(card.textContent || "");
+  }
+  function rememberAuctions(data2) {
+    if (data2 && !Array.isArray(data2)) {
+      data2 = data2.buildingAuctions;
+    }
+    if (!Array.isArray(data2)) return;
+    for (const auction of data2) {
+      const id = auction && auction.id;
+      const level = Number(auction && auction.buildingSize);
+      if (id != null && Number.isInteger(level) && level > 0) {
+        state.auctions.set(String(id), {
+          level,
+          robots: hasBuildingRobots(auction)
+        });
+      }
+    }
+    scheduleRender();
+  }
+  function readStoredRange() {
+    try {
+      const value = JSON.parse(localStorage.getItem(RANGE_KEY) || "{}");
+      state.min = readLevel(String(value.min ?? ""));
+      state.max = readLevel(String(value.max ?? ""));
+      state.robotsOnly = value.robotsOnly === true;
+      state.hideBids = value.hideBids === true;
+      if (state.min !== null && state.max !== null && state.min > state.max) {
+        [state.min, state.max] = [state.max, state.min];
+      }
+    } catch (_) {
+      state.min = null;
+      state.max = null;
+    }
+  }
+  function storeRange() {
+    localStorage.setItem(RANGE_KEY, JSON.stringify({ min: state.min, max: state.max, robotsOnly: state.robotsOnly, hideBids: state.hideBids }));
+  }
+  function hasActiveFilters() {
+    return state.min !== null || state.max !== null || state.robotsOnly;
+  }
+  function getFilterAuctionsText() {
+    const link = document.querySelector('a[href*="/market/building-auctions/filter-settings/"]');
+    return link?.textContent?.trim() || "Filter Auctions";
+  }
+  function getBuildingAuctionsText() {
+    const heading = Array.from(document.querySelectorAll("h1, h2, h3")).find((element) => {
+      const text2 = element.textContent?.trim() || "";
+      return /building auctions|建築拍賣|建筑拍卖/i.test(text2);
+    });
+    const text = heading?.textContent?.trim() || "Building auctions";
+    const parts = text.split(/\s+/);
+    if (parts.length % 2 === 0) {
+      const half = parts.length / 2;
+      if (parts.slice(0, half).join(" ") === parts.slice(half).join(" ")) {
+        return parts.slice(0, half).join(" ");
+      }
+    }
+    return text;
+  }
+  function updatePanelHint(allView) {
+    const hint = document.querySelector(`#${PANEL_ID} [data-sc-auction-refresh-hint]`);
+    if (!hint) return;
+    const buttonText = getFilterAuctionsText();
+    const pageText = getBuildingAuctionsText();
+    hint.textContent = `\u8BBE\u7F6E\u540E\u9700\u70B9\u51FB\u201C${buttonText}\u201D\u6309\u94AE\uFF0C\u518D\u8FD4\u56DE\u751F\u6548\uFF1B\u5207\u6362\u5230\u201C${pageText}\u201D\u7684\u5176\u5B83\u89C6\u56FE\u9700\u8981\u53D6\u6D88\u52FE\u9009\uFF0C\u5426\u5219\u4F1A\u663E\u793A\u4E0D\u5168`;
+  }
+  function filterAuctionPayload(data2) {
+    if (!isAllView()) return data2;
+    if (!data2 || typeof data2 !== "object" || !Array.isArray(data2.buildingAuctions)) return data2;
+    return {
+      ...data2,
+      buildingAuctions: data2.buildingAuctions.filter((auction) => {
+        const level = Number(auction && auction.buildingSize);
+        return Number.isInteger(level) && matchesRange(level) && (!state.robotsOnly || hasBuildingRobots(auction));
+      })
+    };
+  }
+  function captureResponse(response) {
+    try {
+      response.clone().json().then(rememberAuctions).catch(() => {
+      });
+    } catch (_) {
+    }
+  }
+  async function filteredFetchResponse(response) {
+    if (!hasActiveFilters()) return response;
+    try {
+      const payload = await response.clone().json();
+      const filtered = filterAuctionPayload(payload);
+      return new Response(JSON.stringify(filtered), {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      });
+    } catch (_) {
+      return response;
+    }
+  }
+  function installNetworkCapture() {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      const url = typeof args[0] === "string" ? args[0] : args[0]?.url;
+      if (!url) return response;
+      if (!url.includes(AUCTIONS_URL)) return response;
+      captureResponse(response);
+      return filteredFetchResponse(response);
+    };
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      this.__scAuctionUrl = url;
+      if (String(url).includes(AUCTIONS_URL)) {
+        try {
+          const textDescriptor = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "responseText");
+          const responseDescriptor = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "response");
+          if (textDescriptor?.get) {
+            Object.defineProperty(this, "responseText", {
+              configurable: true,
+              get: () => transformXhrValue(textDescriptor.get.call(this), true)
+            });
+          }
+          if (responseDescriptor?.get) {
+            Object.defineProperty(this, "response", {
+              configurable: true,
+              get: () => transformXhrValue(responseDescriptor.get.call(this), false)
+            });
+          }
+        } catch (_) {
+        }
+      }
+      return originalOpen.call(this, method, url, ...rest);
+    };
+    XMLHttpRequest.prototype.send = function(...args) {
+      if (this.__scAuctionUrl && String(this.__scAuctionUrl).includes(AUCTIONS_URL)) {
+        this.addEventListener("load", () => {
+          try {
+            rememberAuctions(JSON.parse(this.responseText));
+          } catch (_) {
+          }
+        }, { once: true });
+      }
+      return originalSend.apply(this, args);
+    };
+  }
+  function transformXhrValue(value, textResponse) {
+    if (!hasActiveFilters()) return value;
+    try {
+      const payload = textResponse ? JSON.parse(value) : value;
+      const filtered = filterAuctionPayload(payload);
+      return textResponse ? JSON.stringify(filtered) : filtered;
+    } catch (_) {
+      return value;
+    }
+  }
+  function readLevel(value) {
+    if (value === "") return null;
+    const number = Number(value);
+    return Number.isInteger(number) && number > 0 ? number : null;
+  }
+  function normalizeRange() {
+    const minInput = document.getElementById(MIN_ID);
+    const maxInput = document.getElementById(MAX_ID);
+    if (!minInput || !maxInput) return;
+    let min = readLevel(minInput.value);
+    let max = readLevel(maxInput.value);
+    if (min !== null && max !== null && min > max) [min, max] = [max, min];
+    state.min = min;
+    state.max = max;
+    storeRange();
+    if (min !== null) minInput.value = String(min);
+    if (max !== null) maxInput.value = String(max);
+    scheduleRender();
+  }
+  function matchesRange(level) {
+    return (state.min === null || level >= state.min) && (state.max === null || level <= state.max);
+  }
+  function filterAuctionCards() {
+    if (!isAuctionListPage()) return;
+    const allView = isAllView();
+    const panel = document.getElementById(PANEL_ID);
+    if (panel) {
+      panel.style.display = "inline-flex";
+    }
+    document.querySelectorAll('a[href*="/market/building-auction/"]').forEach((card) => {
+      const id = auctionIdFromHref(card.getAttribute("href"));
+      const info = id ? state.auctions.get(id) : null;
+      const hidden = allView && (info !== void 0 && info !== null && (!matchesRange(info.level) || state.robotsOnly && !info.robots) || state.hideBids && cardHasBid(card));
+      if (hidden) {
+        card.setAttribute(HIDDEN_ATTR, "true");
+        card.style.display = "none";
+      } else {
+        card.removeAttribute(HIDDEN_ATTR);
+        card.style.removeProperty("display");
+      }
+    });
+  }
+  function scheduleRender() {
+    clearTimeout(state.renderTimer);
+    state.renderTimer = setTimeout(filterAuctionCards, 0);
+  }
+  function createPanel() {
+    if (!isAuctionListPage() || document.getElementById(PANEL_ID)) return;
+    const panel = document.createElement("div");
+    panel.id = PANEL_ID;
+    panel.style.cssText = "display:inline-flex;gap:7px;align-items:center;flex-wrap:wrap;max-width:100%;margin-left:8px;color:inherit;font-size:13px;line-height:1;vertical-align:middle;";
+    panel.innerHTML = '<span style="display:inline-flex;align-items:center;height:26px;white-space:nowrap;">\u7B49\u7EA7</span><input id="' + MIN_ID + '" aria-label="\u6700\u4F4E\u7B49\u7EA7" type="number" min="1" step="1" inputmode="numeric" placeholder="\u4ECE" value="' + (state.min ?? "") + '" style="box-sizing:border-box;width:52px;height:26px;margin:0;padding:2px 5px;border:1px solid currentColor;border-radius:2px;background:transparent;color:inherit;line-height:20px;"><span style="display:inline-flex;align-items:center;height:26px;">\u2013</span><input id="' + MAX_ID + '" aria-label="\u6700\u9AD8\u7B49\u7EA7" type="number" min="1" step="1" inputmode="numeric" placeholder="\u5230" value="' + (state.max ?? "") + '" style="box-sizing:border-box;width:52px;height:26px;margin:0;padding:2px 5px;border:1px solid currentColor;border-radius:2px;background:transparent;color:inherit;line-height:20px;"><label style="display:inline-flex;align-items:center;height:26px;margin:0;white-space:nowrap;"><input id="' + ROBOTS_ID + '" type="checkbox" style="margin:0 4px 0 0;" ' + (state.robotsOnly ? "checked" : "") + '>\u673A\u5668\u4EBA\u5EFA\u7B51</label><label style="display:inline-flex;align-items:center;height:26px;margin:0;white-space:nowrap;"><input id="' + BIDS_ID + '" type="checkbox" style="margin:0 4px 0 0;" ' + (state.hideBids ? "checked" : "") + '>\u9690\u85CF\u5DF2\u6295\u6807</label><span data-sc-auction-refresh-hint style="display:inline-flex;align-items:center;min-height:26px;max-width:100%;opacity:.75;white-space:normal;line-height:18px;"></span>';
+    const filterLink = document.querySelector('a[href*="/market/building-auctions/filter-settings/"]');
+    if (!filterLink) return;
+    filterLink.insertAdjacentElement("afterend", panel);
+    panel.querySelectorAll('input[type="number"]').forEach((input) => input.addEventListener("change", normalizeRange));
+    panel.querySelector("#" + ROBOTS_ID).addEventListener("change", (event) => {
+      state.robotsOnly = event.target.checked;
+      storeRange();
+      scheduleRender();
+    });
+    panel.querySelector("#" + BIDS_ID).addEventListener("change", (event) => {
+      state.hideBids = event.target.checked;
+      storeRange();
+      scheduleRender();
+    });
+    updatePanelHint(true);
+  }
+  function init3() {
+    if (!isAuctionListPage()) return;
+    readStoredRange();
+    updateViewModeFromDom();
+    document.removeEventListener("click", handleViewClick, true);
+    document.addEventListener("click", handleViewClick, true);
+    state.viewListener = handleViewClick;
+    createPanel();
+    state.observer?.disconnect();
+    state.observer = new MutationObserver(() => {
+      updateViewModeFromDom();
+      createPanel();
+      scheduleRender();
+    });
+    state.observer.observe(document.body, { childList: true, subtree: true });
+    scheduleRender();
+  }
+  function destroy2() {
+    state.observer?.disconnect();
+    state.observer = null;
+    if (state.viewListener) document.removeEventListener("click", state.viewListener, true);
+    state.viewListener = null;
+    state.viewMode = null;
+    clearTimeout(state.renderTimer);
+    document.querySelectorAll("[" + HIDDEN_ATTR + "]").forEach((card) => {
+      card.removeAttribute(HIDDEN_ATTR);
+      card.style.removeProperty("display");
+    });
+    document.getElementById(PANEL_ID)?.remove();
+  }
+  installNetworkCapture();
+  window.SC_Modules = window.SC_Modules || {};
+  window.SC_Modules.BuildingAuctionLevelFilter = { init: init3, destroy: destroy2 };
 
   // src/utils/ui.js
   var isDarkMode = () => {
@@ -3230,7 +3708,7 @@
         }
       });
     }
-    const observer = new MutationObserver((mutations) => {
+    const observer2 = new MutationObserver((mutations) => {
       let shouldCheck = false;
       for (let mutation of mutations) {
         if (mutation.addedNodes.length > 0) {
@@ -3246,11 +3724,11 @@
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", () => {
         injectStyles();
-        observer.observe(document.body, { childList: true, subtree: true });
+        observer2.observe(document.body, { childList: true, subtree: true });
       });
     } else {
       injectStyles();
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer2.observe(document.body, { childList: true, subtree: true });
     }
     return { forceInject: injectMoreInfoButtons };
   })();
@@ -4688,7 +5166,7 @@
         rowContainer.parentNode.insertBefore(displayDiv, rowContainer.nextSibling);
       }
     }
-    function init2() {
+    function init4() {
       mpLog("init \u88AB\u8C03\u7528");
       _qualityCache = {};
       _lastProfitKey = "";
@@ -4725,16 +5203,16 @@
         }
       }, 500);
     }
-    return { init: init2 };
+    return { init: init4 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.outgoingContractMPHandler = outgoingContractMPHandler2;
 
   // src/core/state.js
-  var state = {
+  var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.10",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.11",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -4962,9 +5440,9 @@
       const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
       return selectedRadio ? parseInt(selectedRadio.value) : 15;
     }
-    function computeEffectivePoints(state2, academyLevel) {
+    function computeEffectivePoints(state3, academyLevel) {
       const getSkill = (slotId, skillKey) => {
-        const raw = state2[slotId] && state2[slotId].skills ? state2[slotId].skills[skillKey] : 0;
+        const raw = state3[slotId] && state3[slotId].skills ? state3[slotId].skills[skillKey] : 0;
         const num = Number(raw);
         return Number.isFinite(num) ? num : 0;
       };
@@ -5485,7 +5963,6 @@
         renderBoardroom();
         saveBoardroom();
         renderOptimizerResults();
-        computeAndShowOptResult();
         showToast("\u5DF2\u5E94\u7528\u6700\u4F18\u6446\u653E\u5E76\u4FDD\u5B58", "success");
       });
     }
@@ -6098,16 +6575,16 @@
         modal.style.setProperty("--sc-successFg", theme.successFg);
       };
       updateThemeVars();
-      const observer = new MutationObserver(() => {
+      const observer2 = new MutationObserver(() => {
         updateThemeVars();
         calculateResults();
         renderBoardroom();
       });
-      observer.observe(document.body, { attributes: true, attributeFilter: ["class", "style"] });
+      observer2.observe(document.body, { attributes: true, attributeFilter: ["class", "style"] });
       const closeX = document.getElementById("sc-calc-close-x");
       closeX.onclick = () => {
         optRunId++;
-        observer.disconnect();
+        observer2.disconnect();
         modal.remove();
       };
       const btnSave = document.getElementById("sc-boardroom-save-btn");
@@ -6203,16 +6680,16 @@
       };
       targetHeader.appendChild(btnCustom);
     }
-    const observer = new MutationObserver(() => injectCustomButton());
-    function init2() {
+    const observer2 = new MutationObserver(() => injectCustomButton());
+    function init4() {
       if (typeof window.isPageModuleEnabled === "function" && !window.isPageModuleEnabled("executiveSave")) return;
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer2.observe(document.body, { childList: true, subtree: true });
       injectCustomButton();
     }
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", init2);
+      document.addEventListener("DOMContentLoaded", init4);
     } else {
-      init2();
+      init4();
     }
     return { forceInject: injectCustomButton };
   })();
@@ -6230,7 +6707,7 @@
     backup: true,
     keys: ["sc_building_level", "sc_building_hours"]
   });
-  var { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
+  var { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state2;
   var MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" style="display:block;width:14px;height:14px;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="envelope" class="css-0" role="img" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48H48zM0 176V384c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V176L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"></path></svg>`;
   var ResourceMarketHandler2 = (function() {
     let currentResourceId = null;
@@ -7132,10 +7609,10 @@
             toggleBtn.style.cssText = `font-size: 11px; color: ${btnFgColor}; background: none; border: 1px solid ${btnBorderColor}; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;`;
             const refreshToggleUI = () => {
               const config = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-              const isEnabled = config["executiveCustomToggle"] !== void 0 ? config["executiveCustomToggle"] : false;
-              toggleBtn.textContent = `\u81EA\u5B9A\u4E49\uFF1A${isEnabled ? "\u5F00" : "\u5173"}`;
-              toggleBtn.style.color = isEnabled ? "#4CAF50" : btnFgColor;
-              toggleBtn.style.borderColor = isEnabled ? "#4CAF50" : btnBorderColor;
+              const isEnabled2 = config["executiveCustomToggle"] !== void 0 ? config["executiveCustomToggle"] : false;
+              toggleBtn.textContent = `\u81EA\u5B9A\u4E49\uFF1A${isEnabled2 ? "\u5F00" : "\u5173"}`;
+              toggleBtn.style.color = isEnabled2 ? "#4CAF50" : btnFgColor;
+              toggleBtn.style.borderColor = isEnabled2 ? "#4CAF50" : btnBorderColor;
             };
             refreshToggleUI();
             toggleBtn.onclick = (e) => {
@@ -7386,9 +7863,9 @@
         `;
     const refreshUI = () => {
       const config = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
-      const isEnabled = config[key] !== void 0 ? config[key] : DEFAULT_VALUE;
-      btn.textContent = `${label}\uFF1A${isEnabled ? "\u5F00" : "\u5173"}`;
-      btn.style.backgroundColor = isEnabled ? "#4CAF50" : "#607D8B";
+      const isEnabled2 = config[key] !== void 0 ? config[key] : DEFAULT_VALUE;
+      btn.textContent = `${label}\uFF1A${isEnabled2 ? "\u5F00" : "\u5173"}`;
+      btn.style.backgroundColor = isEnabled2 ? "#4CAF50" : "#607D8B";
     };
     btn.onclick = (e) => {
       e.preventDefault();
@@ -7584,7 +8061,7 @@
     backup: true,
     keys: ["SC_Contract_HighPrice_Settings"]
   });
-  var { SCXXCS: SCXXCS2, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL2, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT2 } = state;
+  var { SCXXCS: SCXXCS2, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL2, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT2 } = state2;
   var incomingContractsHandler2 = (function() {
     let cardIdCounter = 0;
     const pendingCards = /* @__PURE__ */ new Map();
@@ -8173,7 +8650,7 @@
         });
       }
     }
-    function init2() {
+    function init4() {
       cleanupAll();
       const isOnIncomingPage = () => /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
       checkPageTimer = setInterval(() => {
@@ -8650,7 +9127,7 @@
         "executiveCustomToggle",
         "\u81EA\u5B9A\u4E49",
         { buttonClass: "btn btn-primary" },
-        (isEnabled) => {
+        (isEnabled2) => {
           refreshAllContractProfits();
         }
       );
@@ -9119,7 +9596,7 @@
         refreshAllContractProfits();
       };
     }
-    return { init: init2 };
+    return { init: init4 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.incomingContractsHandler = incomingContractsHandler2;
@@ -9130,7 +9607,7 @@
     scope: "realm",
     match: (realmId) => realmId === null ? /(?!)/ : new RegExp(`^(?:market_|market_all_)${realmId}_\\d+$`)
   });
-  var { SCXXCS: SCXXCS3, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL3, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT3 } = state;
+  var { SCXXCS: SCXXCS3, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL3, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT3 } = state2;
   (function() {
     let cachedRetailIds = null;
     function getRetailIds() {
@@ -9369,7 +9846,7 @@
   })();
 
   // src/features/warehouseRetailProfit.js
-  var { SCXXCS: SCXXCS4, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL4, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT4 } = state;
+  var { SCXXCS: SCXXCS4, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL4, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT4 } = state2;
   var WarehouseRetailProfit = (function() {
     const workerCode = `
         self.onmessage = function(e) {
@@ -9768,7 +10245,7 @@
         setTimeout(tryInit, 400);
       }
     }
-    function init2() {
+    function init4() {
       if (typeof window.isPageModuleEnabled === "function" && !window.isPageModuleEnabled("warehouseProfit")) {
         document.querySelectorAll(".sc-warehouse-profit").forEach((e) => e.remove());
         document.querySelectorAll("[data-warehouse-custom-toggle]").forEach((e) => e.remove());
@@ -9800,7 +10277,7 @@
       if (lastUrl !== location.href) {
         lastUrl = location.href;
         if (isWarehouseItemPage()) {
-          setTimeout(init2, 400);
+          setTimeout(init4, 400);
         } else {
           if (domObserver) {
             domObserver.disconnect();
@@ -9812,8 +10289,8 @@
         }
       }
     }).observe(document, { subtree: true, childList: true });
-    setTimeout(init2, 600);
-    return { init: init2 };
+    setTimeout(init4, 600);
+    return { init: init4 };
   })();
 
   // src/features/chatAccessibility.js
@@ -9830,9 +10307,9 @@
       "\u{1F7E4}": "\u68D5"
     };
     const ALLOWED_ROOMS = ["Sales", "Aerospace sales", "[ZH] \u4EA4\u6613"];
-    let observer = null;
+    let observer2 = null;
     let styleInjected = false;
-    function isEnabled() {
+    function isEnabled2() {
       try {
         const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
         return cfg["chatAccessibility"] === true;
@@ -9849,14 +10326,14 @@
       }
     }
     function refreshAllButtons() {
-      const enabled = isEnabled();
+      const enabled = isEnabled2();
       document.querySelectorAll(".sc-chat-toggle-btn").forEach((btn) => {
         btn.textContent = enabled ? "\u{1F7E2} \u6587\u5B57" : "\u{1F534} \u56FE\u6807";
         btn.title = enabled ? "\u70B9\u51FB\u5207\u6362\u4E3A\u539F\u59CB Emoji \u56FE\u6807\u663E\u793A" : "\u70B9\u51FB\u5207\u6362\u4E3A\u6587\u5B57\u8F85\u52A9\u663E\u793A\uFF08\u65B9\u4FBF\u8272\u5F31\u8BC6\u522B\uFF09";
       });
     }
     function refreshAllContainers() {
-      const enabled = isEnabled();
+      const enabled = isEnabled2();
       findChatContainers().forEach((container) => {
         container.classList.toggle("sc-chat-assist", enabled);
       });
@@ -9904,13 +10381,13 @@
       return "";
     }
     function addToggleButtons() {
-      if (!isEnabled()) return;
+      if (!isEnabled2()) return;
       const headers = document.querySelectorAll("div.well-header.text-uppercase.css-12ztnbp");
       headers.forEach((header) => {
         if (header.querySelector(".sc-chat-toggle-btn")) return;
         const roomName = header.textContent?.trim() || "";
         if (!ALLOWED_ROOMS.includes(roomName)) return;
-        const enabled = isEnabled();
+        const enabled = isEnabled2();
         const btn = document.createElement("button");
         btn.className = "sc-chat-toggle-btn";
         btn.textContent = enabled ? "\u{1F7E2} \u6587\u5B57" : "\u{1F534} \u56FE\u6807";
@@ -9919,7 +10396,7 @@
         btn.onclick = (e) => {
           e.stopPropagation();
           e.preventDefault();
-          const newState = !isEnabled();
+          const newState = !isEnabled2();
           setEnabled(newState);
           refreshAllContainers();
           refreshAllButtons();
@@ -9931,33 +10408,33 @@
         header.appendChild(btn);
       });
     }
-    function init2() {
-      if (observer) {
-        observer.disconnect();
-        observer = null;
+    function init4() {
+      if (observer2) {
+        observer2.disconnect();
+        observer2 = null;
       }
       injectStyles();
       const room = getChatRoom();
       if (!room) {
-        setTimeout(init2, 1e3);
+        setTimeout(init4, 1e3);
         return;
       }
       if (!ALLOWED_ROOMS.includes(room)) return;
       const chatContainers = findChatContainers();
       if (chatContainers.length === 0) {
-        setTimeout(init2, 1e3);
+        setTimeout(init4, 1e3);
         return;
       }
-      if (isEnabled()) {
+      if (isEnabled2()) {
         chatContainers.forEach((container) => {
           scanContainer(container);
         });
       }
       addToggleButtons();
       refreshAllContainers();
-      if (observer) observer.disconnect();
-      observer = new MutationObserver((mutations) => {
-        if (!isEnabled()) return;
+      if (observer2) observer2.disconnect();
+      observer2 = new MutationObserver((mutations) => {
+        if (!isEnabled2()) return;
         for (const m of mutations) {
           for (const n of m.addedNodes) {
             if (n.nodeType === 1) scanContainer(n);
@@ -9965,25 +10442,25 @@
         }
       });
       chatContainers.forEach((container) => {
-        observer.observe(container, { childList: true, subtree: true });
+        observer2.observe(container, { childList: true, subtree: true });
       });
     }
     let lastUrl = location.href;
     new MutationObserver(() => {
       if (lastUrl !== location.href) {
         lastUrl = location.href;
-        setTimeout(init2, 500);
+        setTimeout(init4, 500);
       }
     }).observe(document, { subtree: true, childList: true });
-    setTimeout(init2, 1e3);
-    window.scChatAccessibilityRefresh = () => init2();
-    return { init: init2, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
+    setTimeout(init4, 1e3);
+    window.scChatAccessibilityRefresh = () => init4();
+    return { init: init4, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
   })();
 
   // src/features/chatMessageBlocker.js
   (function() {
     "use strict";
-    const MODULE_KEY = "chatBlock";
+    const MODULE_KEY2 = "chatBlock";
     const STORAGE_KEY = "SC_ChatBlock_List";
     const CHATROOM_URL_RE = /\/api\/v2\/chatroom\/[^/?#]+(\/from-id\/\d+)?\/?(\?|$)/;
     const HIDDEN_CLASS = "sc-chatblock-hidden";
@@ -9998,7 +10475,7 @@
       backup: true,
       keys: [STORAGE_KEY]
     });
-    let observer = null;
+    let observer2 = null;
     let bodyObserver = null;
     let scanScheduled = false;
     let containerWatchTimer = null;
@@ -10008,16 +10485,16 @@
     let blockedCache = null;
     let observedContainers = /* @__PURE__ */ new WeakSet();
     const senderIndex = /* @__PURE__ */ new Map();
-    function isEnabled() {
+    function isEnabled2() {
       try {
         const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-        return cfg[MODULE_KEY] === true;
+        return cfg[MODULE_KEY2] === true;
       } catch (e) {
         return false;
       }
     }
     function isBlockingActive() {
-      return isEnabled() && !paused;
+      return isEnabled2() && !paused;
     }
     function readList() {
       try {
@@ -10063,7 +10540,7 @@
         document.head.appendChild(el);
       }
       let css = HIDE_BASE;
-      if (isEnabled() && !paused) {
+      if (isEnabled2() && !paused) {
         for (const e of readList()) {
           if (typeof e.realmId === "number" && e.slug) {
             const hrefPart = "/company/" + e.realmId + "/" + e.slug + "/";
@@ -10308,8 +10785,8 @@
     window.scChatBlockRefresh = () => {
       initAttempts = 0;
       syncCss();
-      init2();
-      if (isEnabled()) scanAll();
+      init4();
+      if (isEnabled2()) scanAll();
       else cleanupUI();
     };
     window.scChatBlockImportFromGame = async () => {
@@ -10464,7 +10941,7 @@
       replyBtn.insertAdjacentElement("afterend", btn);
     }
     function processContainer(container) {
-      if (!isEnabled()) return;
+      if (!isEnabled2()) return;
       const active = isBlockingActive();
       ensureObserved(container);
       const rows = container.querySelectorAll(":scope > div");
@@ -10481,7 +10958,7 @@
       }
     }
     function scanAll() {
-      if (!isEnabled()) return;
+      if (!isEnabled2()) return;
       findChatContainers().forEach((c) => processContainer(c));
       updateQuickButtons();
     }
@@ -10519,7 +10996,7 @@
       updateQuickButtons();
     }
     function updateQuickButtons() {
-      const on = isEnabled();
+      const on = isEnabled2();
       if (!on) {
         document.querySelectorAll(`.${QUICK_CLASS}`).forEach((b) => b.remove());
         return;
@@ -10544,7 +11021,7 @@
     }
     const enqueueMicro = typeof queueMicrotask === "function" ? queueMicrotask : (fn) => setTimeout(fn, 0);
     function scheduleScan() {
-      if (!isEnabled()) return;
+      if (!isEnabled2()) return;
       if (scanScheduled) return;
       scanScheduled = true;
       enqueueMicro(() => {
@@ -10553,14 +11030,14 @@
       });
     }
     function ensureObserved(container) {
-      if (!observer || observedContainers.has(container)) return;
+      if (!observer2 || observedContainers.has(container)) return;
       observedContainers.add(container);
-      observer.observe(container, { childList: true, subtree: true });
+      observer2.observe(container, { childList: true, subtree: true });
     }
     function ensureBodyObserver() {
       if (bodyObserver) return;
       bodyObserver = new MutationObserver((muts) => {
-        if (!isEnabled()) return;
+        if (!isEnabled2()) return;
         for (const m of muts) {
           for (const n of m.addedNodes) {
             if (n.nodeType !== 1) continue;
@@ -10580,14 +11057,14 @@
         bodyObserver = null;
       }
     }
-    function init2() {
-      if (observer) {
-        observer.disconnect();
-        observer = null;
+    function init4() {
+      if (observer2) {
+        observer2.disconnect();
+        observer2 = null;
       }
       observedContainers = /* @__PURE__ */ new WeakSet();
       ensureCss();
-      if (!isEnabled()) {
+      if (!isEnabled2()) {
         detachBodyObserver();
         return;
       }
@@ -10596,12 +11073,12 @@
       if (containers.length === 0) {
         if (initAttempts < 8) {
           initAttempts++;
-          containerWatchTimer = setTimeout(init2, 1e3);
+          containerWatchTimer = setTimeout(init4, 1e3);
         }
         return;
       }
       initAttempts = 0;
-      observer = new MutationObserver(scheduleScan);
+      observer2 = new MutationObserver(scheduleScan);
       containers.forEach((c) => ensureObserved(c));
       scanAll();
     }
@@ -10611,12 +11088,12 @@
         lastUrl = location.href;
         initAttempts = 0;
         if (containerWatchTimer) clearTimeout(containerWatchTimer);
-        setTimeout(init2, 300);
+        setTimeout(init4, 300);
       }
     }).observe(document, { subtree: true, childList: true });
     setTimeout(() => {
       ensureCss();
-      init2();
+      init4();
     }, 500);
   })();
 
@@ -10629,7 +11106,7 @@
   });
   (function() {
     "use strict";
-    const MODULE_KEY = "chatEmojiPicker";
+    const MODULE_KEY2 = "chatEmojiPicker";
     const BUTTON_SELECTOR = "[data-sc-emoji-picker-added]";
     const BUNDLE_SELECTOR = 'script[type="module"][crossorigin][src^="https://www.simcompanies.com/static/bundle/assets/index-"][src$=".js"]';
     const RECENT_KEY = "SC_EmojiPicker_Recent";
@@ -10680,10 +11157,10 @@
     let lastUrl = location.href;
     let emojiDataPromise = null;
     let insertQueue = Promise.resolve();
-    function isEnabled() {
+    function isEnabled2() {
       try {
         const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-        return cfg[MODULE_KEY] !== false;
+        return cfg[MODULE_KEY2] !== false;
       } catch (e) {
         return true;
       }
@@ -10995,12 +11472,12 @@
           return;
         }
         const started2 = Date.now();
-        const timer = setInterval(() => {
+        const timer2 = setInterval(() => {
           if (component.props.value === expected || textarea.value === expected) {
-            clearInterval(timer);
+            clearInterval(timer2);
             resolve(true);
           } else if (Date.now() - started2 > timeout) {
-            clearInterval(timer);
+            clearInterval(timer2);
             resolve(false);
           }
         }, 5);
@@ -11477,7 +11954,7 @@
       }, 150);
     }
     function scan() {
-      if (!isEnabled()) {
+      if (!isEnabled2()) {
         removeAll();
         return;
       }
@@ -11635,11 +12112,11 @@
         return true;
       }
     };
-    window.savePageModuleEnabled = (key, isEnabled) => {
+    window.savePageModuleEnabled = (key, isEnabled2) => {
       try {
         const stored = localStorage.getItem(PAGE_ACTIONS_CONFIG_KEY) || "{}";
         const config = JSON.parse(stored);
-        config[key] = isEnabled;
+        config[key] = isEnabled2;
         localStorage.setItem(PAGE_ACTIONS_CONFIG_KEY, JSON.stringify(config));
       } catch (e) {
         console.error("\u4FDD\u5B58\u914D\u7F6E\u5931\u8D25", e);
@@ -11652,7 +12129,7 @@
     "use strict";
     let hasNewVersion = false;
     let latestVersion = null;
-    let { localVersion, SCXXCS: SCXXCS5, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL5, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT5 } = state;
+    let { localVersion, SCXXCS: SCXXCS5, PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL5, RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT5 } = state2;
     registerExportInfo({
       name: "\u9762\u677F\u4E0E\u5168\u5C40\u8BBE\u7F6E",
       scope: "global",
@@ -11862,9 +12339,9 @@
           return;
         }
         const updateToggleBtn = () => {
-          const isEnabled = window.isAutoAmountEnabled();
-          btn.textContent = isEnabled ? "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F: \u{1F7E2} \u5DF2\u542F\u7528" : "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F: \u{1F534} \u5DF2\u7981\u7528";
-          btn.style.backgroundColor = isEnabled ? "#4CAF50" : "#f44336";
+          const isEnabled2 = window.isAutoAmountEnabled();
+          btn.textContent = isEnabled2 ? "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F: \u{1F7E2} \u5DF2\u542F\u7528" : "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F: \u{1F534} \u5DF2\u7981\u7528";
+          btn.style.backgroundColor = isEnabled2 ? "#4CAF50" : "#f44336";
         };
         updateToggleBtn();
         btn.onclick = () => {
@@ -11894,9 +12371,9 @@
           const label = btn.dataset.label;
           if (!key || !label) return;
           const defaultEnabled = btn.dataset.defaultEnabled !== "false";
-          const isEnabled = config[key] !== void 0 ? config[key] !== false : defaultEnabled;
-          btn.textContent = `${label}: ${isEnabled ? "\u{1F7E2} \u5DF2\u542F\u7528" : "\u{1F534} \u5DF2\u7981\u7528"}`;
-          btn.style.backgroundColor = isEnabled ? "#4CAF50" : "#f44336";
+          const isEnabled2 = config[key] !== void 0 ? config[key] !== false : defaultEnabled;
+          btn.textContent = `${label}: ${isEnabled2 ? "\u{1F7E2} \u5DF2\u542F\u7528" : "\u{1F534} \u5DF2\u7981\u7528"}`;
+          btn.style.backgroundColor = isEnabled2 ? "#4CAF50" : "#f44336";
         });
       };
       const PANEL_POS_KEY = "SC_PanelPosition";
@@ -11994,7 +12471,7 @@
           contentEl.style.top = margin + "px";
         }
       };
-      const createPanel = () => {
+      const createPanel2 = () => {
         const panel = document.createElement("div");
         panel.className = "SimcompaniesRetailCalculation-mini-panel";
         const trigger = document.createElement("button");
@@ -12058,7 +12535,7 @@
           const isTouch = !!e.touches;
           const pos = getClientPos(e);
           const rect = panel.getBoundingClientRect();
-          const state2 = {
+          const state3 = {
             startX: pos.x,
             startY: pos.y,
             origLeft: rect.left,
@@ -12067,11 +12544,11 @@
             readyToDrag: !isTouch
             // 鼠标立即生效，触摸需等长按
           };
-          dragState = state2;
+          dragState = state3;
           if (isTouch) {
             clearLongPress();
             longPressTimer = setTimeout(() => {
-              state2.readyToDrag = true;
+              state3.readyToDrag = true;
               longPressTimer = null;
             }, 500);
           }
@@ -12208,9 +12685,9 @@
             }
           };
           const initialConfig = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-          const isEnabled = initialConfig[key] !== void 0 ? initialConfig[key] !== false : defaultEnabled;
-          btn.textContent = `${label}: ${isEnabled ? "\u{1F7E2} \u5DF2\u542F\u7528" : "\u{1F534} \u5DF2\u7981\u7528"}`;
-          btn.style.backgroundColor = isEnabled ? "#4CAF50" : "#f44336";
+          const isEnabled2 = initialConfig[key] !== void 0 ? initialConfig[key] !== false : defaultEnabled;
+          btn.textContent = `${label}: ${isEnabled2 ? "\u{1F7E2} \u5DF2\u542F\u7528" : "\u{1F534} \u5DF2\u7981\u7528"}`;
+          btn.style.backgroundColor = isEnabled2 ? "#4CAF50" : "#f44336";
           return btn;
         };
         const CHAT_INPUT_HEIGHT_KEY = {
@@ -12511,14 +12988,14 @@
             btn.style.backgroundColor = "#546E7A";
             let retry = 0;
             const maxRetry = 20;
-            const timer = setInterval(() => {
+            const timer2 = setInterval(() => {
               if (typeof win.SCobg_TogglePanel === "function") {
-                clearInterval(timer);
+                clearInterval(timer2);
                 btn.textContent = "SC\u56FE\u7247\u66FF\u6362\u7BA1\u7406";
                 btn.style.backgroundColor = "#9C27B0";
                 btn.onclick = () => win.SCobg_TogglePanel();
               } else if (retry++ > maxRetry) {
-                clearInterval(timer);
+                clearInterval(timer2);
                 btn.textContent = "SC\u56FE\u7247\u66FF\u6362\u7BA1\u7406 (\u672A\u5B89\u88C5)";
                 btn.onclick = () => {
                   if (confirm("\u68C0\u6D4B\u5230\u672A\u5B89\u88C5\u56FE\u7247\u66FF\u6362\u811A\u672C\uFF0C\u662F\u5426\u524D\u5F80\u5B89\u88C5\uFF1F")) {
@@ -12587,6 +13064,7 @@
           { type: "toggle", key: "chatBlock", label: "\u804A\u5929\u5BA4\u5168\u5C40\u5C4F\u853D", defaultEnabled: false, subContent: createChatBlockManageControls },
           { type: "toggle", key: "landscapeHighlight", label: "\u5730\u56FE\u7A7A\u95F2\u5EFA\u7B51\u9AD8\u4EAE" },
           { type: "toggle", key: "restaurantStock", label: "\u9910\u9986\u5907\u8D27\u63D0\u9192" },
+          { type: "toggle", key: "buildingUpgradeMaterialCopy", label: "\u590D\u5236\u5347\u7EA7\u6240\u9700\u5EFA\u6750" },
           { type: "toggle", key: "paQuestAnswers", label: "PA\u4EFB\u52A1\u7B54\u6848", defaultEnabled: true },
           { type: "toggle", key: "snipboardPreview", label: "Snipboard\u56FE\u7247\u9884\u89C8", defaultEnabled: true },
           { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, subContent: createChatInputHeightControls },
@@ -12622,8 +13100,8 @@
                 subConfig = {};
               }
               const defaultEnabled = item.defaultEnabled !== false;
-              const isEnabled = subConfig[item.key] !== void 0 ? subConfig[item.key] !== false : defaultEnabled;
-              sub.classList.toggle("sc-collapsed", !isEnabled);
+              const isEnabled2 = subConfig[item.key] !== void 0 ? subConfig[item.key] !== false : defaultEnabled;
+              sub.classList.toggle("sc-collapsed", !isEnabled2);
               el = wrap;
             } else {
               el.classList.add("sc-toggle-item");
@@ -13253,7 +13731,7 @@
       return {
         init() {
           injectStyles();
-          panelElement = createPanel();
+          panelElement = createPanel2();
           document.body.appendChild(panelElement);
           panelElement.addEventListener("click", (e) => {
             if (e.target.closest("[data-action-type]")) {
@@ -13738,7 +14216,7 @@
         let debounceTimer;
         let lateCheckTimer;
         const targetNode = document.body;
-        const observer = new MutationObserver((mutationsList) => {
+        const observer2 = new MutationObserver((mutationsList) => {
           clearTimeout(debounceTimer);
           clearTimeout(lateCheckTimer);
           debounceTimer = setTimeout(() => {
@@ -13756,7 +14234,7 @@
             }
           }, 100);
         });
-        observer.observe(targetNode, {
+        observer2.observe(targetNode, {
           childList: true,
           // 观察直接子节点的添加/删除
           subtree: true,
@@ -13768,10 +14246,10 @@
         });
         function ensureInputsLoaded() {
           let tries = 0;
-          const timer = setInterval(() => {
+          const timer2 = setInterval(() => {
             const inputs = document.querySelectorAll('input[name="price"]');
             if (inputs.length > 0 || tries > 50) {
-              clearInterval(timer);
+              clearInterval(timer2);
               if (inputs.length > 0) {
                 initAutoPricing();
               }
@@ -14582,7 +15060,7 @@
         }
         return createToggleSection(label, containerDiv, true);
       }
-      const init2 = () => {
+      const init4 = () => {
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
         let resizer;
         const d12 = DM();
@@ -14812,7 +15290,7 @@
       });
       return {
         show() {
-          if (!container) init2();
+          if (!container) init4();
           else container.style.display = "flex";
           renderResult();
         },
@@ -15054,25 +15532,25 @@
       function isExecPage() {
         return /\/headquarters\/executives\/?$/.test(location.href);
       }
-      const observer = new MutationObserver(() => {
+      const observer2 = new MutationObserver(() => {
         if (isExecPage()) injectCOOButton();
       });
-      function init2() {
+      function init4() {
         if (typeof window.isPageModuleEnabled === "function" && !window.isPageModuleEnabled("cooProfit")) return;
-        observer.observe(document.body, { childList: true, subtree: true });
+        observer2.observe(document.body, { childList: true, subtree: true });
         if (isExecPage()) injectCOOButton();
       }
       if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", init2);
+        document.addEventListener("DOMContentLoaded", init4);
       } else {
-        init2();
+        init4();
       }
     })();
     (function() {
       "use strict";
-      var MODULE_KEY = "snipboardPreview";
-      function isEnabled() {
-        return window.isPageModuleEnabled ? window.isPageModuleEnabled(MODULE_KEY) : true;
+      var MODULE_KEY2 = "snipboardPreview";
+      function isEnabled2() {
+        return window.isPageModuleEnabled ? window.isPageModuleEnabled(MODULE_KEY2) : true;
       }
       function injectStyles() {
         var styleId = "sc-snipboard-preview-style";
@@ -15297,30 +15775,30 @@
         });
       }
       function scanContainer(container) {
-        if (!isEnabled()) return;
+        if (!isEnabled2()) return;
         var links = container.querySelectorAll('a[href*="snipboard.io"]');
         for (var i = 0; i < links.length; i++) {
           processLink(links[i]);
         }
       }
       function scanAll() {
-        if (!isEnabled()) return;
+        if (!isEnabled2()) return;
         var containers = findChatContainers();
         for (var i = 0; i < containers.length; i++) {
           scanContainer(containers[i]);
         }
       }
-      var observer = null;
+      var observer2 = null;
       var initAttempted = false;
-      function init2() {
+      function init4() {
         if (initAttempted) return;
         initAttempted = true;
-        if (!isEnabled()) return;
+        if (!isEnabled2()) return;
         injectStyles();
         scanAll();
-        if (observer) observer.disconnect();
-        observer = new MutationObserver(function(mutations) {
-          if (!isEnabled()) return;
+        if (observer2) observer2.disconnect();
+        observer2 = new MutationObserver(function(mutations) {
+          if (!isEnabled2()) return;
           for (var mi = 0; mi < mutations.length; mi++) {
             var m = mutations[mi];
             for (var ni = 0; ni < m.addedNodes.length; ni++) {
@@ -15339,7 +15817,7 @@
         });
         var containers = findChatContainers();
         for (var i = 0; i < containers.length; i++) {
-          observer.observe(containers[i], { childList: true, subtree: true });
+          observer2.observe(containers[i], { childList: true, subtree: true });
         }
       }
       var lastUrl = location.href;
@@ -15347,21 +15825,21 @@
         if (lastUrl !== location.href) {
           lastUrl = location.href;
           initAttempted = false;
-          if (observer) {
-            observer.disconnect();
-            observer = null;
+          if (observer2) {
+            observer2.disconnect();
+            observer2 = null;
           }
-          setTimeout(init2, 300);
+          setTimeout(init4, 300);
         }
       }).observe(document, { subtree: true, childList: true });
-      setTimeout(init2, 500);
-      return { init: init2 };
+      setTimeout(init4, 500);
+      return { init: init4 };
     })();
     (function() {
       "use strict";
-      var MODULE_KEY = "chatInputExpander";
-      function isEnabled() {
-        return typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled(MODULE_KEY) : true;
+      var MODULE_KEY2 = "chatInputExpander";
+      function isEnabled2() {
+        return typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled(MODULE_KEY2) : true;
       }
       function injectStyles() {
         var styleId = "sc-chat-input-expander-style";
@@ -15495,8 +15973,8 @@
           outerContainer
         };
       }
-      function init2() {
-        if (!isEnabled()) return;
+      function init4() {
+        if (!isEnabled2()) return;
         injectStyles();
       }
       var isClickingInside = false;
@@ -15524,7 +16002,7 @@
         }
       }
       document.addEventListener("mousedown", function(e) {
-        if (!isEnabled()) return;
+        if (!isEnabled2()) return;
         var target = e.target;
         if (target) {
           var inputGroup = target.closest(".input-group");
@@ -15537,7 +16015,7 @@
         isClickingInside = false;
       });
       document.addEventListener("mouseup", function() {
-        if (!isEnabled()) return;
+        if (!isEnabled2()) return;
         setTimeout(function() {
           isClickingInside = false;
           var activeEl = document.activeElement;
@@ -15547,7 +16025,7 @@
         }, 150);
       });
       document.addEventListener("focusin", function(e) {
-        if (!isEnabled()) return;
+        if (!isEnabled2()) return;
         var target = e.target;
         if (isChatInput(target)) {
           var containers = findContainers(target);
@@ -15588,7 +16066,7 @@
           collapseContainers(target);
         }
       });
-      init2();
+      init4();
       window.scChatInputExpanderApplyStyles = injectStyles;
     })();
     const UPDATE_IGNORE_KEY = "sc_autoMaxPPHPL_ignored_version";
@@ -15746,4 +16224,4 @@
   })();
 })();
 
-// @changelog 自定义高管数据「最优摆放建议」新增「指定研究类生产提升时管理费用最低」目标
+// @changelog 新增建筑拍卖自定义筛选，支持等级范围、机器人建筑和隐藏已投标；新增建筑升级所需建材复制；修复应用自定义高管数据并保存后重复计算最优摆放的问题。
