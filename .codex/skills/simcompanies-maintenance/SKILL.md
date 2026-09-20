@@ -55,6 +55,8 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 - **大组合枚举/寻优（1.33.9 最优摆放 13 人 × 6 席 ≈ 124 万组合）**：不要在页面主线程一次算完；用分片后台执行（每批固定叶子数后让出主线程）+ 令牌取消（切换目标/重算/关闭时自增令牌，过期结果直接丢弃，避免旧结果覆盖新选择）。
 - **多目标字典序求解返回值**：返回给调用方的 eff/结果字段按最终选定的摆法重算，不要直接解包目标键数组——键序与字段序不一致会串位（曾导致 restaurant/sales 结果字段错位）。
 - **推荐/应用类功能的候补位填充**：应用推荐摆法时先算出本次实际落位的席位（含参与计算的学徒席，如 CTO 学徒 z），这些席位不得再作为候补位被落榜高管覆盖，否则保存结果会与推荐值不一致。
+- **剪贴板功能必须提供降级路径**：使用 `navigator.clipboard.writeText()` 时，同时处理 API 不存在和 Promise reject；复用临时 `textarea` + `document.execCommand('copy')` 的 fallback，避免用户脚本或非安全上下文中复制功能直接失效。
+- **SPA 页面模块必须有完整销毁路径**：凡自行创建 `MutationObserver`、计时器、事件监听或其他长期资源的模块，都要提供 `destroy()`；`pageObserver` 在离开所属路由时调用它，至少断开 Observer、清除 debounce timer 并移除注入 UI，重新进入时再初始化。
 
 ### 5. 正式发布
 
@@ -78,7 +80,10 @@ npm run release -- "<changelog>"
 - **分支保护**：`main` 有必需状态检查时，CI 未绿会拒绝合并；本仓库**未启用 auto-merge**（`gh pr merge --auto` 会报 `enablePullRequestAutoMerge` 错误），正确做法是等 CI 变绿（轮询 `gh pr checks`）后再执行 `gh pr merge`。
 - **release 后检查 CHANGELOG 格式**：新版本条目与下一节之间应保留空行（条目通常为"更新说明 + 原未发布明细"）。
 - **中文 PR 载荷**：`gh pr create` 没有 `--title-file`（只有 `--body-file`）；标题与正文统一用 UTF-8 JSON 文件 + `gh api ... --input` 提交，创建后到 GitHub 核对中文（配合第 6 节编码规则）。
+- **PR 描述必须完整**：不能只写功能摘要；必须明确写出 `pageObserver -> SC_Modules -> 功能模块 -> DOM/异步任务 -> 清理` 调用链、影响范围、验证结果和剩余风险。代码审查修复后同步更新原 PR 描述，不要只追加提交。
 - **更新提示先审阅**：正式发布前，把拟推送的游戏内更新提示（发布说明 / `@changelog` 文案）发给项目负责人审阅确认，确认后再执行 `npm run release`、发布 PR 与标签推送。
+- **PR 模板必须完整填写**：创建 PR 时必须填写改动说明、调用链与影响范围、验证结果、风险与回滚；涉及 UI 但未做浏览器实测时，要明确写入剩余风险，不得只写 `npm run build`/`npm run check`。
+- **合并冲突与提交历史**：PR 之间存在未发布文档冲突时，先更新 PR 分支并保留双方有效记录；避免为解决简单文档冲突制造额外合并提交，必要时在合并前整理提交历史。
 
 ### 5.2 发布后沉淀
 
