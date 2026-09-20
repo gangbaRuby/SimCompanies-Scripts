@@ -1,3 +1,5 @@
+import { registerExportInfo } from '../core/exportInfo.js';
+
 const AUCTIONS_URL = '/api/v2/building-auctions/';
 const PANEL_ID = 'sc-building-auction-level-filter';
 const MIN_ID = 'sc-building-auction-min-level';
@@ -6,6 +8,13 @@ const ROBOTS_ID = 'sc-building-auction-robots';
 const BIDS_ID = 'sc-building-auction-hide-bids';
 const HIDDEN_ATTR = 'data-sc-building-auction-hidden';
 const RANGE_KEY = 'SC_BuildingAuctionLevelRange';
+
+registerExportInfo({
+    name: '建筑拍卖筛选设置',
+    scope: 'global',
+    backup: true,
+    keys: [RANGE_KEY]
+});
 
 const state = {
     auctions: new Map(),
