@@ -58,6 +58,9 @@ description: Maintain the Auto Max PPHPL SimCompanies Tampermonkey userscript th
 - **剪贴板功能必须提供降级路径**：使用 `navigator.clipboard.writeText()` 时，同时处理 API 不存在和 Promise reject；复用临时 `textarea` + `document.execCommand('copy')` 的 fallback，避免用户脚本或非安全上下文中复制功能直接失效。
 - **SPA 页面模块必须有完整销毁路径**：凡自行创建 `MutationObserver`、计时器、事件监听或其他长期资源的模块，都要提供 `destroy()`；`pageObserver` 在离开所属路由时调用它，至少断开 Observer、清除 debounce timer 并移除注入 UI，重新进入时再初始化。
 
+- **往游戏 React 界面注入按钮**：不要自造一套样式塞进去，也不要直接复用原生「一行等分」容器。做法是克隆页面上真实存在的原生行/容器节点（`cloneNode` 不复制事件监听，克隆体天然惰性），只替换文案并自行绑定点击，外观/主题/断点随原生；容器布局与「选项数量可变」冲突时用 inline style 覆盖（例：原生 `flex-direction:row` + 子项 `flex:1` 属于一行等分，要改成 `display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr))` 才会换行）。注入节点必须带可清理标记（class + 宿主卡片属性），且「是否已注入」要同时判断标记与节点是否仍在——React 局部重绘会只清掉注入内容。
+- **分辨游戏 bundle 里的样式来源**：DOM 上的 emotion class 形如 `css-xxxxx`；静态样式在 bundle 里带 `name: "xxxxx"`（可直接搜到），函数式样式（`W({...}, "", "")`，取值依赖主题）没有 name，只能从组件代码里的样式变量（如 `foe`、`_ht`、`S7`）反查定义。判断新版 UI 的选择器和布局约束以此为准，不要靠页面盲试。
+
 ### 5. 正式发布
 
 将 `src/` 视为唯一源码，将 `.user.js` 视为生成产物。正式构建必须要求用户提供一行更新说明；除非用户明确指定其他版本，否则执行：
