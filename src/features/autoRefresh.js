@@ -6,6 +6,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
         const ENABLED_STORAGE_KEY = 'SC_AutoAmount_Enabled'; // 新增：功能开关的存储键
         const DEFAULT_AMOUNTS_STRING = '10pm';
         const DEFAULT_BUTTON_CLASS = 'btn btn-secondary';
+        const CUSTOM_GROUP_CLASS = 'autoamount-custom-group';
 
         registerExportInfo({
             name: '自定义运行时长设置',
@@ -15,7 +16,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
         });
 
         // --- 目标元素选择器 ---
-        const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center'; //前者生产，后者零售 如果自定义运行时长不显示，则需要检查css是否更改
+        const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center, div[class*="test-resource-row-"]:not(.row)'; // 兼容旧版生产/零售卡片与新版生产资源行（旧版外框是 row test-resource-row-*）
+        const NEW_PRODUCTION_GROUP_SELECTOR = 'div[role="group"][aria-labelledby^="production-by-time-"]'; // 新版生产 UI 的「生产时长」分组
         const PROCESSED_DATA_ATTRIBUTE = 'data-custom-amount-added';
 
         function isAutoAmountEnabled() {
@@ -145,22 +147,104 @@ import { registerExportInfo } from '../core/exportInfo.js';
             applyHoverStyle(saveButton, '#5cb85c', '#4cae4c');
         }
 
+        function removeInjectedButtons() {
+            document.querySelectorAll('.autoamount-custom-btn').forEach(btn => btn.remove());
+            document.querySelectorAll('.' + CUSTOM_GROUP_CLASS).forEach(group => group.remove());
+            document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach(card => {
+                card.removeAttribute(PROCESSED_DATA_ATTRIBUTE);
+            });
+        }
+
+        // --- 新版生产 UI：克隆页面原生行结构，保证排版/主题/断点与原生时长控件一致 ---
+        function getNativeDurationTemplate(durationGroup) {
+            const nativeButton = durationGroup.querySelector('button.btn');
+            if (!nativeButton) return null;
+            const row = nativeButton.parentElement;
+            const rows = row ? row.parentElement : null;
+            if (!row || !rows) return null;
+            return { row, rows };
+        }
+
+        function createNativeStyleRow(template, label, onClick) {
+            const row = template.row.cloneNode(true); // cloneNode 不复制事件监听，克隆体保持惰性
+            const buttons = Array.from(row.querySelectorAll('button'));
+            if (buttons.length === 0) return null;
+
+            const mainButton = buttons[0];
+            mainButton.textContent = label;
+            mainButton.type = 'button';
+            mainButton.removeAttribute('aria-label');
+            mainButton.removeAttribute('aria-haspopup');
+            mainButton.removeAttribute('aria-expanded');
+            mainButton.style.flex = '1 1 auto';
+            mainButton.style.whiteSpace = 'nowrap';
+            mainButton.classList.add('autoamount-custom-btn');
+            mainButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClick(e);
+            });
+
+            // 原生行里的铅笔按钮用于编辑该快捷项，插件行不需要
+            buttons.slice(1).forEach(btn => btn.remove());
+            return row;
+        }
+
+        function createPlainCustomButton(label, buttonClass, onClick) {
+            const button = document.createElement('button');
+            button.className = `${buttonClass} autoamount-custom-btn`;
+            button.type = 'button';
+            button.role = 'button';
+            button.textContent = label;
+            button.style.textTransform = 'none';
+            button.style.whiteSpace = 'nowrap';
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClick(e);
+            });
+            return button;
+        }
+
+        function injectNewProductionButtons(input, durationGroup, customAmounts) {
+            const template = getNativeDurationTemplate(durationGroup);
+            // 容器复用原生行容器的 class（宽度/移动端规则跟随原生），但布局改成自动换行网格：
+            // 原生容器是 flex-direction:row + 子项 flex:1 的「一行等分」，选项一多就会被挤成一条
+            const container = template ? template.rows.cloneNode(false) : document.createElement('div');
+            container.classList.add(CUSTOM_GROUP_CLASS);
+            if (template) {
+                container.style.display = 'grid';
+                container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(100px, 1fr))';
+            } else {
+                container.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px;width:310px;max-width:100%;margin-top:4px';
+            }
+
+            const makeRow = (label, onClick) => (template
+                ? createNativeStyleRow(template, label, onClick)
+                : createPlainCustomButton(label, DEFAULT_BUTTON_CLASS, onClick));
+
+            customAmounts.forEach(amount => {
+                const row = makeRow(amount, () => setInput(input, getCalculatedAmount(amount)));
+                if (row) container.appendChild(row);
+            });
+
+            // 配置入口同样使用原生行，不再出现绿色加号
+            const configRow = makeRow('自定义设置', () => showConfigModal());
+            if (configRow) container.appendChild(configRow);
+
+            durationGroup.appendChild(container);
+        }
+
         function initAutoAmountButtons(forceReload = false) {
             if (!isAutoAmountEnabled()) {
                 // 如果功能被禁用，确保所有已添加的按钮被移除
-                document.querySelectorAll(`.autoamount-custom-btn`).forEach(btn => btn.remove());
-                document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach(card => {
-                    card.removeAttribute(PROCESSED_DATA_ATTRIBUTE);
-                });
+                removeInjectedButtons();
                 // 退出，不添加新按钮
                 return;
             }
 
             if (forceReload) {
-                document.querySelectorAll(`.autoamount-custom-btn`).forEach(btn => btn.remove());
-                document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach(card => {
-                    card.removeAttribute(PROCESSED_DATA_ATTRIBUTE);
-                });
+                removeInjectedButtons();
             }
 
             const customAmounts = loadCustomAmounts();
@@ -171,14 +255,22 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
                 targetDivs.forEach((card, index) => { // 添加 index 用于日志定位
                     try { // <<<<<<<<<<<<<<< TRY 开始 >>>>>>>>>>>>>>>
-                        if (card.hasAttribute(PROCESSED_DATA_ATTRIBUTE)) {
+                        // 已经注入且按钮还在时跳过；React 局部重绘可能清掉注入内容，这里允许补注入
+                        if (card.hasAttribute(PROCESSED_DATA_ATTRIBUTE) && card.querySelector('.autoamount-custom-btn')) {
                             return;
                         }
 
                         const input = card.querySelector('input[name="amount"], input[name="quantity"]');
-                        let buttonContainer = null;
-                        // 查找包含 "text-center" 类名的 div
-                        buttonContainer = card.querySelector('div.text-center');
+                        // 新版生产 UI：生产时长分组在卡片内部，按原生行结构克隆注入
+                        const durationGroup = input ? card.querySelector(NEW_PRODUCTION_GROUP_SELECTOR) : null;
+                        if (durationGroup) {
+                            injectNewProductionButtons(input, durationGroup, customAmounts);
+                            card.setAttribute(PROCESSED_DATA_ATTRIBUTE, 'true');
+                            return;
+                        }
+
+                        // 旧版：查找包含 "text-center" 类名的 div
+                        let buttonContainer = card.querySelector('div.text-center');
 
                         if (!buttonContainer) {
                             // 如果没找到，尝试查找卡片内的最后一个带有按钮的 div
@@ -195,7 +287,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
 
                             const existingButton = buttonContainer.querySelector('button');
                             // 确保 existingButton 存在，否则使用默认类
-                            let buttonClass = existingButton ? existingButton.className : DEFAULT_BUTTON_CLASS;
+                            const buttonClass = existingButton ? existingButton.className : DEFAULT_BUTTON_CLASS;
 
                             // A. 注入配置 (+) 按钮
                             const configButton = document.createElement('button');
