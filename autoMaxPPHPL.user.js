@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.11
+// @version      1.33.12
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1020,13 +1020,15 @@
     const ENABLED_STORAGE_KEY = "SC_AutoAmount_Enabled";
     const DEFAULT_AMOUNTS_STRING = "10pm";
     const DEFAULT_BUTTON_CLASS = "btn btn-secondary";
+    const CUSTOM_GROUP_CLASS = "autoamount-custom-group";
     registerExportInfo({
       name: "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F\u8BBE\u7F6E",
       scope: "global",
       backup: true,
       keys: [ENABLED_STORAGE_KEY, CUSTOM_AMOUNTS_STORAGE_KEY]
     });
-    const CARD_SELECTOR = ".col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center";
+    const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center, div[class*="test-resource-row-"]:not(.row)';
+    const NEW_PRODUCTION_GROUP_SELECTOR = 'div[role="group"][aria-labelledby^="production-by-time-"]';
     const PROCESSED_DATA_ATTRIBUTE = "data-custom-amount-added";
     function isAutoAmountEnabled() {
       const stored = localStorage.getItem(ENABLED_STORAGE_KEY);
@@ -1131,31 +1133,100 @@
       applyHoverStyle(cancelButton, isDark ? "#555" : "#e0e0e0", isDark ? "#444" : "#ccc");
       applyHoverStyle(saveButton, "#5cb85c", "#4cae4c");
     }
+    function removeInjectedButtons() {
+      document.querySelectorAll(".autoamount-custom-btn").forEach((btn) => btn.remove());
+      document.querySelectorAll("." + CUSTOM_GROUP_CLASS).forEach((group) => group.remove());
+      document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach((card) => {
+        card.removeAttribute(PROCESSED_DATA_ATTRIBUTE);
+      });
+    }
+    function getNativeDurationTemplate(durationGroup) {
+      const nativeButton = durationGroup.querySelector("button.btn");
+      if (!nativeButton) return null;
+      const row = nativeButton.parentElement;
+      const rows = row ? row.parentElement : null;
+      if (!row || !rows) return null;
+      return { row, rows };
+    }
+    function createNativeStyleRow(template, label, onClick) {
+      const row = template.row.cloneNode(true);
+      const buttons = Array.from(row.querySelectorAll("button"));
+      if (buttons.length === 0) return null;
+      const mainButton = buttons[0];
+      mainButton.textContent = label;
+      mainButton.type = "button";
+      mainButton.removeAttribute("aria-label");
+      mainButton.removeAttribute("aria-haspopup");
+      mainButton.removeAttribute("aria-expanded");
+      mainButton.style.flex = "1 1 auto";
+      mainButton.style.whiteSpace = "nowrap";
+      mainButton.classList.add("autoamount-custom-btn");
+      mainButton.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick(e);
+      });
+      buttons.slice(1).forEach((btn) => btn.remove());
+      return row;
+    }
+    function createPlainCustomButton(label, buttonClass, onClick) {
+      const button = document.createElement("button");
+      button.className = `${buttonClass} autoamount-custom-btn`;
+      button.type = "button";
+      button.role = "button";
+      button.textContent = label;
+      button.style.textTransform = "none";
+      button.style.whiteSpace = "nowrap";
+      button.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick(e);
+      });
+      return button;
+    }
+    function injectNewProductionButtons(input, durationGroup, customAmounts) {
+      const template = getNativeDurationTemplate(durationGroup);
+      const container = template ? template.rows.cloneNode(false) : document.createElement("div");
+      container.classList.add(CUSTOM_GROUP_CLASS);
+      if (template) {
+        container.style.display = "grid";
+        container.style.gridTemplateColumns = "repeat(auto-fill, minmax(100px, 1fr))";
+      } else {
+        container.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px;width:310px;max-width:100%;margin-top:4px";
+      }
+      const makeRow = (label, onClick) => template ? createNativeStyleRow(template, label, onClick) : createPlainCustomButton(label, DEFAULT_BUTTON_CLASS, onClick);
+      customAmounts.forEach((amount) => {
+        const row = makeRow(amount, () => setInput(input, getCalculatedAmount(amount)));
+        if (row) container.appendChild(row);
+      });
+      const configRow = makeRow("\u81EA\u5B9A\u4E49\u8BBE\u7F6E", () => showConfigModal());
+      if (configRow) container.appendChild(configRow);
+      durationGroup.appendChild(container);
+    }
     function initAutoAmountButtons(forceReload = false) {
       if (!isAutoAmountEnabled()) {
-        document.querySelectorAll(`.autoamount-custom-btn`).forEach((btn) => btn.remove());
-        document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach((card) => {
-          card.removeAttribute(PROCESSED_DATA_ATTRIBUTE);
-        });
+        removeInjectedButtons();
         return;
       }
       if (forceReload) {
-        document.querySelectorAll(`.autoamount-custom-btn`).forEach((btn) => btn.remove());
-        document.querySelectorAll(`[${PROCESSED_DATA_ATTRIBUTE}]`).forEach((card) => {
-          card.removeAttribute(PROCESSED_DATA_ATTRIBUTE);
-        });
+        removeInjectedButtons();
       }
       const customAmounts = loadCustomAmounts();
       requestAnimationFrame(() => {
         const targetDivs = document.querySelectorAll(CARD_SELECTOR);
         targetDivs.forEach((card, index) => {
           try {
-            if (card.hasAttribute(PROCESSED_DATA_ATTRIBUTE)) {
+            if (card.hasAttribute(PROCESSED_DATA_ATTRIBUTE) && card.querySelector(".autoamount-custom-btn")) {
               return;
             }
             const input = card.querySelector('input[name="amount"], input[name="quantity"]');
-            let buttonContainer = null;
-            buttonContainer = card.querySelector("div.text-center");
+            const durationGroup = input ? card.querySelector(NEW_PRODUCTION_GROUP_SELECTOR) : null;
+            if (durationGroup) {
+              injectNewProductionButtons(input, durationGroup, customAmounts);
+              card.setAttribute(PROCESSED_DATA_ATTRIBUTE, "true");
+              return;
+            }
+            let buttonContainer = card.querySelector("div.text-center");
             if (!buttonContainer) {
               const candidateDivs = card.querySelectorAll("div");
               if (candidateDivs.length > 0) {
@@ -1167,7 +1238,7 @@
             }
             if (input && buttonContainer) {
               const existingButton = buttonContainer.querySelector("button");
-              let buttonClass = existingButton ? existingButton.className : DEFAULT_BUTTON_CLASS;
+              const buttonClass = existingButton ? existingButton.className : DEFAULT_BUTTON_CLASS;
               const configButton = document.createElement("button");
               configButton.className = `${buttonClass} autoamount-custom-btn`;
               configButton.type = "button";
@@ -5212,7 +5283,7 @@ ${materials.join("\n")}`;
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.11",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.12",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -16224,4 +16295,4 @@ ${materials.join("\n")}`;
   })();
 })();
 
-// @changelog 新增建筑拍卖自定义筛选，支持等级范围、机器人建筑和隐藏已投标；新增建筑升级所需建材复制；修复应用自定义高管数据并保存后重复计算最优摆放的问题。
+// @changelog 自定义运行时长适配新版生产界面
