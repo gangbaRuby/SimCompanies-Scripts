@@ -16,8 +16,9 @@ import { registerExportInfo } from '../core/exportInfo.js';
         });
 
         // --- 目标元素选择器 ---
-        const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center, div[class*="test-resource-row-"]:not(.row)'; // 兼容旧版生产/零售卡片与新版生产资源行（旧版外框是 row test-resource-row-*）
+        const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center, div[class*="test-resource-row-"]:not(.row)'; // 兼容旧版生产/零售卡片与新版生产/零售资源行（旧版外框是 row test-resource-row-*）
         const NEW_PRODUCTION_GROUP_SELECTOR = 'div[role="group"][aria-labelledby^="production-by-time-"]'; // 新版生产 UI 的「生产时长」分组
+        const NEW_RETAIL_GROUP_SELECTOR = 'div[role="group"][aria-labelledby^="retail-by-time-"]'; // 新版零售 UI 的「按时间」分组
         const PROCESSED_DATA_ATTRIBUTE = 'data-custom-amount-added';
 
         function isAutoAmountEnabled() {
@@ -155,7 +156,7 @@ import { registerExportInfo } from '../core/exportInfo.js';
             });
         }
 
-        // --- 新版生产 UI：克隆页面原生行结构，保证排版/主题/断点与原生时长控件一致 ---
+        // --- 新版生产/零售 UI：克隆页面原生行结构，保证排版/主题/断点与原生时长控件一致 ---
         function getNativeDurationTemplate(durationGroup) {
             const nativeButton = durationGroup.querySelector('button.btn');
             if (!nativeButton) return null;
@@ -261,8 +262,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
                         }
 
                         const input = card.querySelector('input[name="amount"], input[name="quantity"]');
-                        // 新版生产 UI：生产时长分组在卡片内部，按原生行结构克隆注入
-                        const durationGroup = input ? card.querySelector(NEW_PRODUCTION_GROUP_SELECTOR) : null;
+                        // 新版生产/零售 UI：在卡片内部的「按时间」分组按原生行结构克隆注入
+                        const durationGroup = input ? card.querySelector(`${NEW_PRODUCTION_GROUP_SELECTOR}, ${NEW_RETAIL_GROUP_SELECTOR}`) : null;
                         if (durationGroup) {
                             injectNewProductionButtons(input, durationGroup, customAmounts);
                             card.setAttribute(PROCESSED_DATA_ATTRIBUTE, 'true');
