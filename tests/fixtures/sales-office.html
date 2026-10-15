@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>销售办公室优化（测试中）本地验证</title>
+<style>
+    * { box-sizing:border-box; }
+    body { margin:0; padding:24px 24px 300px; background:#f4f5f6; color:#333; font:14px/1.5 Arial,sans-serif; }
+    body.dark { background:#171c22; color:#eee; }
+    main { max-width:1000px; margin:auto; }
+    h1 { margin:0; font-size:25px; }
+    .note { color:#77808b; }
+    .well { position:relative; overflow:visible; padding:16px; margin:16px 0; background:#ffffffb0; border:1px solid #d4d8db; border-radius:4px; }
+    .dark .well { background:#2b323b; border-color:#49535f; }
+    .row { display:flex; flex-wrap:wrap; margin:0 -8px; }
+    .col-md-6, .col-sm-6 { width:50%; padding:0 8px; }
+    .ebrfvjt0 { min-height:160px; }
+    .ebrfvjt3 { position:relative; padding-left:45px; padding-top:20px; height:45px; margin-bottom:14px; }
+    .ebrfvjt3 b { position:absolute; right:0; top:0; }
+    .ebrfvjt4 { position:absolute; left:5px; top:0; height:40px; width:40px; }
+    .progress { height:20px; position:relative; background:#c6cbd1; color:#222; text-align:center; }
+    .progress-bar { position:absolute; left:0; top:0; bottom:0; background:#ecb838; }
+    .progress > span { position:relative; }
+    .ebrfvjt2 { display:block; margin:0 auto 7px; width:fit-content; border:0; }
+    .ebrfvjt2 td { text-align:right; padding-left:6px; }
+    .ebrfvjt2 tr:last-child { border-top:1px solid; font-weight:bold; }
+    .text-center { text-align:center; }
+    .btn { border:1px solid transparent; border-radius:4px; padding:6px 12px; margin:2px; font:inherit; cursor:pointer; }
+    .btn-primary { color:#fff; background:#318c45; border-color:#287639; }
+    .btn-secondary { color:#333; background:#e8eaed; border-color:#aaa; }
+    .dark .btn-secondary { background:#46515d; color:#eee; border-color:#6f7c8b; }
+    .btn:disabled { opacity:.5; cursor:default; }
+    .ebrfvjt6 { background:#bd2d2d; color:white; }
+    .exewzot8 { padding:8px; text-align:center; }
+    .exewzot7 { display:inline-block; padding:7px 10px; }
+    nav { display:none; }
+    @media(max-width:767px) {
+        body { padding:16px 12px 340px; }
+        .col-md-6 { width:100%; }
+        nav { display:flex; position:fixed; left:0; right:0; bottom:0; height:56px; align-items:center; justify-content:space-around; background:#283542; color:white; z-index:1000; }
+    }
+</style>
+<main>
+    <h1>销售办公室优化（测试中） · 4 级</h1>
+    <p class="note">本地模拟页面 · 结构依据游戏前端 OCi 订单组件 · 不连接游戏服务器</p>
+    <div class="exewzot8"><div class="exewzot7">单引擎飞机 × 280</div><div class="exewzot7">无人机 × 60</div></div>
+    <div id="orders"></div>
+</main>
+<nav><span>地图</span><span>仓库</span><span>市场</span><span>聊天</span></nav>
+<script>
+    const inventory = { 97: 100, 98: 40 };
+    const names = { 97: '单引擎飞机', 98: '无人机' };
+    const images = { 97: 'single-engine-plane', 98: 'drone' };
+    const data = [
+        { id: 1, resources: [[97, 60], [98, 30]], profit: '$12,000' },
+        { id: 2, resources: [[97, 70], [98, 25]], profit: '(-) $800' },
+        { id: 3, resources: [[97, 150]], profit: '$4,000' },
+        { id: 4, resources: [[98, 5]], profit: '$0' }
+    ];
+    window.fixture = { clicks: [], outcomes: {}, enabled: true, clipboard: '', fallbackCalls: 0 };
+    window.isPageModuleEnabled = () => fixture.enabled;
+    localStorage.setItem('SimcompaniesConstantsData', JSON.stringify({ constantsResources: Object.fromEntries(
+        Object.keys(images).map(id => [id, { dbLetter: Number(id), image: `images/resources/${images[id]}.png` }])
+    ) }));
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { fixture.clipboard = text; } } });
+    document.execCommand = () => { fixture.fallbackCalls++; fixture.clipboard = document.querySelector('textarea').value; return true; };
+    window.fetch = () => { throw new Error('助手不应发起网络请求'); };
+    window.XMLHttpRequest = function () { throw new Error('助手不应发起网络请求'); };
+
+    function draw(item) {
+        const card = document.createElement('div');
+        card.className = 'well';
+        card.dataset.order = item.id;
+        card.innerHTML = `<div class="row"><div class="col-md-6"><h3>订单 ${item.id}</h3><p>品质加成已计入原生净利润</p><label><input type="checkbox" checked> 优先使用高品质</label></div>
+            <div class="col-md-6"><div class="row"><div class="ebrfvjt0 col-sm-6 resources right-border text-center"><h4>货物</h4>${item.resources.map(([id, amount]) => `
+                <div class="ebrfvjt3"><img class="ebrfvjt4" src="/static/images/resources/${images[id]}.test.png"><b>${names[id]} Q2.0</b>
+                <div class="progress"><div class="progress-bar" style="width:${Math.min(100,inventory[id]*100/amount)}%"></div><span>${inventory[id]}/${amount}</span></div></div>`).join('')}</div>
+            <div class="ebrfvjt5 col-sm-6"><table class="ebrfvjt2"><tbody>
+                <tr><td>收入</td><td>$100,000</td></tr><tr><td>Bonus</td><td>$8,000</td></tr><tr><td class="test-right" colspan="2">$108,000</td></tr>
+                <tr><td>货物成本</td><td>(-) $90,000</td></tr><tr><td>寻单费用</td><td>(-) $6,000</td></tr>
+                <tr><td class="test-right" colspan="2">${item.profit}</td></tr></tbody></table><div class="text-center"></div></div></div></div></div>`;
+        const controls = card.querySelector('.ebrfvjt5 > .text-center');
+        const buttons = () => {
+            controls.innerHTML = '<button type="button" class="btn btn-primary">交付</button><button type="button" class="btn btn-secondary">拒绝</button>';
+            const button = controls.querySelector('.btn-primary');
+            button.disabled = item.resources.some(([id, amount]) => inventory[id] < amount);
+            button.addEventListener('click', event => {
+                fixture.clicks.push({ id: item.id, trusted: event.isTrusted });
+                controls.innerHTML = '<span class="spinner">处理中…</span>';
+                const outcome = fixture.outcomes[item.id] || 'success';
+                if (outcome === 'pending') return;
+                setTimeout(() => {
+                    if (outcome === 'error') {
+                        buttons();
+                        const error = document.createElement('div');
+                        error.className = 'ebrfvjt6';
+                        error.textContent = '模拟服务器错误，请稍后重试';
+                        controls.prepend(error);
+                    } else {
+                        item.resources.forEach(([id, amount]) => inventory[id] -= amount);
+                        card.remove();
+                        fixture.refreshInventory();
+                    }
+                }, 200);
+            });
+        };
+        buttons();
+        card.querySelector('input').addEventListener('change', event => {
+            card.querySelector('tbody > tr:last-child > td').textContent = event.target.checked ? item.profit : '(-) $1,234';
+        });
+        return card;
+    }
+    fixture.refreshInventory = () => {
+        document.querySelectorAll('[data-order]').forEach(card => {
+            const item = data.find(item => item.id === Number(card.dataset.order));
+            card.querySelectorAll('.progress > span').forEach((span, index) => {
+                const [id, amount] = item.resources[index];
+                span.textContent = `${inventory[id]}/${amount}`;
+            });
+            const button = card.querySelector('.btn-primary');
+            if (button) button.disabled = item.resources.some(([id, amount]) => inventory[id] < amount);
+        });
+    };
+    fixture.replace = id => {
+        const old = document.querySelector(`[data-order="${id}"]`);
+        old.replaceWith(draw(data.find(item => item.id === id)));
+    };
+    data.forEach(item => document.getElementById('orders').appendChild(draw(item)));
+</script>
+</html>

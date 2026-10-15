@@ -5,6 +5,7 @@ import './features/pageObserver.js';
 import './features/landscapeIdleBuildingHighlight.js';
 import './features/restaurantStockReminder.js';
 import './features/buildingUpgradeMaterialCopy.js';
+import './features/salesOfficeHelper.js';
 import './features/buildingAuctionLevelFilter.js';
 import './features/formerExecutivesModule.js';
 import './features/executiveTrainingModule.js';
@@ -691,6 +692,15 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                         const subEl = subWrap.querySelector(':scope > .sc-toggle-sub');
                         if (subEl) subEl.classList.toggle('sc-collapsed', !newState);
                     }
+                    if (key === 'autoPricing' && typeof window.refreshAutoPricingButtons === 'function') {
+                        window.refreshAutoPricingButtons();
+                        if (newState && /\/b\/\d+\/?$/.test(location.href) && typeof window.initAutoPricing === 'function') {
+                            window.initAutoPricing();
+                        }
+                    }
+                    if (key === 'salesOfficeHelper') {
+                        window.SC_Modules?.salesOfficeHelper?.init();
+                    }
                     if (typeof window.scChatEmojiPickerRefresh === 'function') {
                         window.scChatEmojiPickerRefresh();
                     }
@@ -816,6 +826,42 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 actionRow.append(applyBtn, resetBtn);
                 row.appendChild(actionRow);
                 return row;
+            };
+
+            const createRetailStoreButtonControls = () => {
+                const box = document.createElement('div');
+                box.className = 'sc-retail-store-button-controls';
+                box.style.cssText = 'display:flex;flex-direction:column;gap:5px;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);';
+                const options = [
+                    ['autoPricingHourlyButton', '最大时利润'],
+                    ['autoPricingTotalButton', '最大利润'],
+                    ['autoPricingUnitCostInput', '假设单位成本'],
+                ];
+                let config = {};
+                try { config = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}'); } catch (err) { config = {}; }
+
+                options.forEach(([key, label]) => {
+                    const row = document.createElement('label');
+                    row.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = config[key] !== false;
+                    checkbox.dataset.retailStoreButtonKey = key;
+                    checkbox.addEventListener('change', () => {
+                        let current = {};
+                        try { current = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}'); } catch (err) { current = {}; }
+                        current[key] = checkbox.checked;
+                        localStorage.setItem('SC_PageActions_Settings', JSON.stringify(current));
+                        if (typeof window.refreshAutoPricingButtons === 'function') {
+                            window.refreshAutoPricingButtons();
+                        }
+                    });
+                    const text = document.createElement('span');
+                    text.textContent = label;
+                    row.append(checkbox, text);
+                    box.appendChild(row);
+                });
+                return box;
             };
             // ---------- 聊天室全局屏蔽：名单管理入口 + 居中弹层 ----------
             const chatBlockRefreshEntryCount = () => {
@@ -1107,6 +1153,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                         return b;
                     }
                 },
+                { type: 'toggle', key: 'autoPricing', label: '零售商店内按钮', subContent: createRetailStoreButtonControls },
                 { type: 'toggle', key: 'marketProfit', label: '交易所计算时利润' },
                 { type: 'toggle', key: 'marketMessageIcon', label: '交易所私信图标', defaultEnabled: false },
                 { type: 'toggle', key: 'contractProfit', label: '合同计算时利润' },
@@ -1120,6 +1167,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 { type: 'toggle', key: 'landscapeHighlight', label: '地图空闲建筑高亮' },
                 { type: 'toggle', key: 'restaurantStock', label: '餐馆备货提醒' },
                 { type: 'toggle', key: 'buildingUpgradeMaterialCopy', label: '复制升级所需建材' },
+                { type: 'toggle', key: 'salesOfficeHelper', label: '销售办公室优化（测试中）' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
                 { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
                 { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true, subContent: createChatInputHeightControls },
@@ -2041,6 +2089,44 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
     // 模块6：商店内的最大时利润 本模块只使用了SimcompaniesConstantsData
     // ======================
     (function () {
+        const RETAIL_BUTTON_HIDDEN_CLASS = 'sc-retail-store-button-hidden';
+
+        function getRetailStoreButtonConfig() {
+            let config = {};
+            try { config = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}'); } catch (e) { config = {}; }
+            return {
+                enabled: typeof window.isPageModuleEnabled === 'function' ? window.isPageModuleEnabled('autoPricing') : true,
+                hourly: config.autoPricingHourlyButton !== false,
+                total: config.autoPricingTotalButton !== false,
+                unitCost: config.autoPricingUnitCostInput !== false,
+            };
+        }
+
+        function ensureRetailStoreButtonStyles() {
+            if (document.getElementById('sc-retail-store-button-settings-style')) return;
+            const style = document.createElement('style');
+            style.id = 'sc-retail-store-button-settings-style';
+            style.textContent = `.${RETAIL_BUTTON_HIDDEN_CLASS}{display:none !important;}`;
+            document.head.appendChild(style);
+        }
+
+        function refreshAutoPricingButtons() {
+            ensureRetailStoreButtonStyles();
+            const config = getRetailStoreButtonConfig();
+            document.querySelectorAll('[data-auto-pricing-added]').forEach(card => {
+                const btnContainer = card.querySelector('.sc-retail-store-button-container');
+                const btnHourly = card.querySelector('.btn-max-hourly-profit');
+                const btnTotal = card.querySelector('.btn-max-total-profit');
+                const customCostInput = card.querySelector('.custom-unit-cost-input');
+                if (btnHourly) btnHourly.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.hourly);
+                if (btnTotal) btnTotal.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.total);
+                if (customCostInput) customCostInput.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.unitCost);
+                if (btnContainer) btnContainer.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || (!config.hourly && !config.total));
+            });
+        }
+
+        window.refreshAutoPricingButtons = refreshAutoPricingButtons;
+
         // setInput: 输入并触发 input 事件
         function setInput(inputNode, value, count = 3) {
             let lastValue = inputNode.value;
@@ -2208,7 +2294,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             // 读取自定义单位成本（通过 index 找到对应卡片上的输入框），仅当 >0 时覆盖 cogs
             const cardEl = document.querySelectorAll('div[style="overflow: visible;"]')[index];
             const customCostEl = cardEl?.querySelector('.custom-unit-cost-input');
-            const customUnitCostVal = customCostEl ? (parseFloat(customCostEl.value) || 0) : 0;
+            const customUnitCostVal = getRetailStoreButtonConfig().unitCost && customCostEl ? (parseFloat(customCostEl.value) || 0) : 0;
             const cogs = customUnitCostVal > 0 ? customUnitCostVal * quantity : originalCogs;
 
             // 在主线程预计算 Worker 无法访问的函数结果
@@ -2314,6 +2400,12 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         // 主功能
         function initAutoPricing() {
             try {
+                const buttonConfig = getRetailStoreButtonConfig();
+                if (!buttonConfig.enabled) {
+                    refreshAutoPricingButtons();
+                    return;
+                }
+                ensureRetailStoreButtonStyles();
                 const input = document.querySelector('input[name="price"]');
                 if (!input) return;
 
@@ -2332,6 +2424,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     if (!comp) return;
 
                     const btnContainer = document.createElement('div');
+                    btnContainer.className = 'sc-retail-store-button-container';
                     btnContainer.style = `display: flex; flex-direction: column; gap: 4px; margin-top: 5px;`;
 
                     const btnHourly = document.createElement('button');
@@ -2365,6 +2458,10 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     customCostInput.min = '0';
                     customCostInput.step = '0.01';
                     customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid ${d ? '#555' : '#bbb'}; border-radius: 4px; background: ${d ? '#333' : '#fff'}; color: ${d ? '#fff' : '#333'}; font-size: 13px; box-sizing: border-box;`;
+                    btnHourly.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly);
+                    btnTotal.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.total);
+                    customCostInput.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.unitCost);
+                    btnContainer.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly && !buttonConfig.total);
 
                     // --- 提取核心发送逻辑 ---
                     // 这样按钮点击能用，后续重试也能用
@@ -2394,7 +2491,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                         const { cogs: originalCogs, quality, quantity } = targetComp.state;
 
                         // 读取自定义单位成本，仅当输入 >0 时用 单位成本*数量 覆盖 cogs
-                        const customUnitCost = parseFloat(customCostInput.value) || 0;
+                        const customUnitCost = getRetailStoreButtonConfig().unitCost ? (parseFloat(customCostInput.value) || 0) : 0;
                         const cogs = customUnitCost > 0 ? customUnitCost * quantity : originalCogs;
 
                         const v = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
@@ -2431,6 +2528,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     priceInput.parentNode.insertBefore(customCostInput, profitDisplay.nextSibling);
                     card.dataset.autoPricingAdded = 'true';
                 });
+                refreshAutoPricingButtons();
             } catch (err) { }
         }
 

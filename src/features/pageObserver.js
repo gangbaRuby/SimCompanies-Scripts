@@ -7,6 +7,10 @@ const LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.L
 const RestaurantStockReminder = { init: (...args) => window.SC_Modules?.RestaurantStockReminder?.init(...args) };
 const BuildingUpgradeMaterialCopy = { init: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.init(...args) };
 const BuildingUpgradeMaterialCopyLifecycle = { destroy: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.destroy(...args) };
+const SalesOfficeHelper = {
+    init: () => window.SC_Modules?.salesOfficeHelper?.init(),
+    destroy: () => window.SC_Modules?.salesOfficeHelper?.destroy()
+};
 const BuildingAuctionLevelFilter = { init: (...args) => window.SC_Modules?.BuildingAuctionLevelFilter?.init(...args) };
 const BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Modules?.BuildingAuctionLevelFilter?.destroy(...args) };
     // 模块9：判断当前页面
@@ -79,6 +83,7 @@ const BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Mo
                 pattern: /\/b\/\d+\/?$/,
                 action: () => {
                     RestaurantStockReminder.init();
+                    SalesOfficeHelper.init();
                     if (isPageModuleEnabled('buildingUpgradeMaterialCopy')) {
                         BuildingUpgradeMaterialCopy.init();
                     }
@@ -126,6 +131,7 @@ const BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Mo
             const url = location.href;
             if (!/\/b\/\d+\/?$/.test(url)) {
                 BuildingUpgradeMaterialCopyLifecycle.destroy();
+                SalesOfficeHelper.destroy();
             }
             if (!/\/market\/building-auctions\/?$/.test(url)) {
                 BuildingAuctionLevelFilterLifecycle.destroy();
