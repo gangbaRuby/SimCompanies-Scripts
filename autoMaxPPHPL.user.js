@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.12
+// @version      1.33.13
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1029,6 +1029,7 @@
     });
     const CARD_SELECTOR = '.col-xs-6.css-0.ewayztq2, .col-xs-6.resources.text-center, div[class*="test-resource-row-"]:not(.row)';
     const NEW_PRODUCTION_GROUP_SELECTOR = 'div[role="group"][aria-labelledby^="production-by-time-"]';
+    const NEW_RETAIL_GROUP_SELECTOR = 'div[role="group"][aria-labelledby^="retail-by-time-"]';
     const PROCESSED_DATA_ATTRIBUTE = "data-custom-amount-added";
     function isAutoAmountEnabled() {
       const stored = localStorage.getItem(ENABLED_STORAGE_KEY);
@@ -1037,8 +1038,8 @@
       }
       return stored === "true";
     }
-    function saveAutoAmountEnabled(isEnabled2) {
-      localStorage.setItem(ENABLED_STORAGE_KEY, isEnabled2 ? "true" : "false");
+    function saveAutoAmountEnabled(isEnabled3) {
+      localStorage.setItem(ENABLED_STORAGE_KEY, isEnabled3 ? "true" : "false");
     }
     function loadCustomAmounts() {
       const stored = localStorage.getItem(CUSTOM_AMOUNTS_STORAGE_KEY);
@@ -1220,7 +1221,7 @@
               return;
             }
             const input = card.querySelector('input[name="amount"], input[name="quantity"]');
-            const durationGroup = input ? card.querySelector(NEW_PRODUCTION_GROUP_SELECTOR) : null;
+            const durationGroup = input ? card.querySelector(`${NEW_PRODUCTION_GROUP_SELECTOR}, ${NEW_RETAIL_GROUP_SELECTOR}`) : null;
             if (durationGroup) {
               injectNewProductionButtons(input, durationGroup, customAmounts);
               card.setAttribute(PROCESSED_DATA_ATTRIBUTE, "true");
@@ -1401,7 +1402,7 @@
         'div[style="overflow: visible;"]',
         CARD_SELECTOR.split(",").map((s) => s.trim()).join(",")
       ];
-      const observer2 = new MutationObserver((mutationsList) => {
+      const observer3 = new MutationObserver((mutationsList) => {
         clearTimeout(debounceTimer);
         clearTimeout(lateCheckTimer);
         debounceTimer = setTimeout(() => {
@@ -1420,7 +1421,7 @@
           }
         }, 100);
       });
-      observer2.observe(targetNode, {
+      observer3.observe(targetNode, {
         childList: true,
         subtree: true
       });
@@ -1457,9 +1458,9 @@
     let questData = null;
     let dataLoadAttempted = false;
     let initAttempted = false;
-    let observer2 = null;
+    let observer3 = null;
     let cleanupTimer = null;
-    function isEnabled2() {
+    function isEnabled3() {
       return window.isPageModuleEnabled ? window.isPageModuleEnabled("paQuestAnswers") : true;
     }
     async function loadData() {
@@ -1826,30 +1827,30 @@
         cleanupStaleAnswers();
       }, 300);
     }
-    async function init4() {
+    async function init5() {
       if (!/\/messages(\/|$)/.test(location.href)) {
-        if (observer2) {
-          observer2.disconnect();
-          observer2 = null;
+        if (observer3) {
+          observer3.disconnect();
+          observer3 = null;
         }
         initAttempted = false;
         dataLoadAttempted = false;
         return;
       }
-      if (!isEnabled2()) return;
+      if (!isEnabled3()) return;
       await loadData();
       if (!questData || questData.length === 0) {
         dataLoadAttempted = false;
-        setTimeout(init4, 3e3);
+        setTimeout(init5, 3e3);
         return;
       }
       if (initAttempted) return;
       initAttempted = true;
       scanPage();
       cleanupStaleAnswers();
-      if (observer2) observer2.disconnect();
-      observer2 = new MutationObserver(function(mutations) {
-        if (!isEnabled2()) return;
+      if (observer3) observer3.disconnect();
+      observer3 = new MutationObserver(function(mutations) {
+        if (!isEnabled3()) return;
         for (var mi = 0; mi < mutations.length; mi++) {
           var m = mutations[mi];
           for (var ni = 0; ni < m.addedNodes.length; ni++) {
@@ -1862,9 +1863,9 @@
         scheduleCleanup();
       });
       findChatContainers().forEach(function(c) {
-        observer2.observe(c, { childList: true, subtree: true });
+        observer3.observe(c, { childList: true, subtree: true });
       });
-      observer2.observe(document.body, { childList: true, subtree: true });
+      observer3.observe(document.body, { childList: true, subtree: true });
     }
     function scanElement(element) {
       if (!questData || questData.length === 0) return;
@@ -1914,15 +1915,15 @@
         lastUrl = location.href;
         initAttempted = false;
         dataLoadAttempted = false;
-        if (observer2) {
-          observer2.disconnect();
-          observer2 = null;
+        if (observer3) {
+          observer3.disconnect();
+          observer3 = null;
         }
-        setTimeout(init4, 300);
+        setTimeout(init5, 300);
       }
     }).observe(document, { subtree: true, childList: true });
-    setTimeout(init4, 500);
-    return { init: init4 };
+    setTimeout(init5, 500);
+    return { init: init5 };
   })();
 
   // src/features/pageObserver.js
@@ -1935,6 +1936,10 @@
   var RestaurantStockReminder = { init: (...args) => window.SC_Modules?.RestaurantStockReminder?.init(...args) };
   var BuildingUpgradeMaterialCopy = { init: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.init(...args) };
   var BuildingUpgradeMaterialCopyLifecycle = { destroy: (...args) => window.SC_Modules?.buildingUpgradeMaterialCopy?.destroy(...args) };
+  var SalesOfficeHelper = {
+    init: () => window.SC_Modules?.salesOfficeHelper?.init(),
+    destroy: () => window.SC_Modules?.salesOfficeHelper?.destroy()
+  };
   var BuildingAuctionLevelFilter = { init: (...args) => window.SC_Modules?.BuildingAuctionLevelFilter?.init(...args) };
   var BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Modules?.BuildingAuctionLevelFilter?.destroy(...args) };
   (function() {
@@ -2004,6 +2009,7 @@
         pattern: /\/b\/\d+\/?$/,
         action: () => {
           RestaurantStockReminder.init();
+          SalesOfficeHelper.init();
           if (isPageModuleEnabled("buildingUpgradeMaterialCopy")) {
             BuildingUpgradeMaterialCopy.init();
           }
@@ -2049,6 +2055,7 @@
       const url = location.href;
       if (!/\/b\/\d+\/?$/.test(url)) {
         BuildingUpgradeMaterialCopyLifecycle.destroy();
+        SalesOfficeHelper.destroy();
       }
       if (!/\/market\/building-auctions\/?$/.test(url)) {
         BuildingAuctionLevelFilterLifecycle.destroy();
@@ -2061,13 +2068,13 @@
       }
     }
     let lastUrl = "";
-    const observer2 = new MutationObserver(() => {
+    const observer3 = new MutationObserver(() => {
       if (lastUrl !== location.href) {
         lastUrl = location.href;
         handlePage();
       }
     });
-    observer2.observe(document, { subtree: true, childList: true });
+    observer3.observe(document, { subtree: true, childList: true });
     setTimeout(handlePage, 0);
   })();
 
@@ -2150,11 +2157,11 @@
         delete el.dataset.scLandscapeHighlight;
       });
     }
-    function init4() {
+    function init5() {
       if (!/\/landscape\/?$/.test(location.href)) return;
       setTimeout(processBuildings, 500);
     }
-    return { init: init4 };
+    return { init: init5 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.LandscapeIdleBuildingHighlight = LandscapeIdleBuildingHighlight2;
@@ -2293,10 +2300,10 @@
       if (min !== null) return `(Q${min}+)`;
       return `(\u2264Q${max})`;
     }
-    function isEnabled2() {
+    function isEnabled3() {
       return typeof window.isPageModuleEnabled !== "function" || window.isPageModuleEnabled("restaurantStock");
     }
-    function init4() {
+    function init5() {
       startWatch();
     }
     function startWatch() {
@@ -2735,7 +2742,7 @@
         }
       });
     }
-    function fallbackCopy2(text) {
+    function fallbackCopy3(text) {
       const ta = document.createElement("textarea");
       ta.value = text;
       ta.style.position = "fixed";
@@ -2750,9 +2757,9 @@
     }
     function copyText2(text) {
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).catch(() => fallbackCopy2(text));
+        navigator.clipboard.writeText(text).catch(() => fallbackCopy3(text));
       } else {
-        fallbackCopy2(text);
+        fallbackCopy3(text);
       }
     }
     function removeBlock() {
@@ -2890,7 +2897,7 @@
       renderIntoBlock(block, restaurant, state3.allRestaurants);
     }
     function mainFunc() {
-      if (!isEnabled2()) {
+      if (!isEnabled3()) {
         removeBlock();
         return;
       }
@@ -2931,7 +2938,7 @@
       ensureBlock(container, restaurant, allRestaurants, buildingId);
       refreshStocks();
     }
-    return { init: init4 };
+    return { init: init5 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.RestaurantStockReminder = RestaurantStockReminder2;
@@ -3045,7 +3052,7 @@ ${materials.join("\n")}`;
     buttonContainer.insertBefore(createCopyButton(MP_BUTTON_LABEL, "BUYING MP-4%"), buyMissingButton);
   }
   function init2() {
-    const scan = () => {
+    const scan2 = () => {
       timer = null;
       if (!isEnabled()) {
         removeButtons();
@@ -3054,15 +3061,15 @@ ${materials.join("\n")}`;
       document.querySelectorAll('[role="dialog"]').forEach(inject);
     };
     if (observer) {
-      scan();
+      scan2();
       return;
     }
     observer = new MutationObserver(() => {
       clearTimeout(timer);
-      timer = setTimeout(scan, 100);
+      timer = setTimeout(scan2, 100);
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    scan();
+    scan2();
   }
   function destroy() {
     observer?.disconnect();
@@ -3074,9 +3081,421 @@ ${materials.join("\n")}`;
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.buildingUpgradeMaterialCopy = { init: init2, destroy };
 
+  // src/features/salesOfficeHelper.js
+  var MODULE_KEY2 = "salesOfficeHelper";
+  var PANEL_ID = "sc-sales-office-helper";
+  var SLOT_ATTR = "data-sc-sales-office-slot";
+  var TABLE_SELECTOR = "table.ebrfvjt2";
+  var GROUPS = ["profit", "loss"];
+  var observer2 = null;
+  var resizeObserver = null;
+  var scanTimer = null;
+  var pendingTimer = null;
+  var frame = null;
+  var route = "";
+  var panel = null;
+  var style = null;
+  var geometryStyle = null;
+  var orders = [];
+  var pending = null;
+  var lastMessage = "";
+  var resourceRaw = null;
+  var resourceImages = /* @__PURE__ */ new Map();
+  var docked = /* @__PURE__ */ new Map();
+  var staleRows = /* @__PURE__ */ new WeakSet();
+  function isEnabled2() {
+    return typeof window.isPageModuleEnabled !== "function" || window.isPageModuleEnabled(MODULE_KEY2);
+  }
+  function currentRoute() {
+    return /\/b\/\d+\/?$/.test(location.pathname) ? location.pathname : "";
+  }
+  function imageKey(src) {
+    return src?.match(/\/resources\/([^/.]+)(?:\.[^/]+)?\.[^/.]+(?:[?#].*)?$/)?.[1] || "";
+  }
+  function loadResourceImages() {
+    try {
+      const raw = localStorage.getItem("SimcompaniesConstantsData");
+      if (raw === resourceRaw) return;
+      resourceRaw = raw;
+      resourceImages = /* @__PURE__ */ new Map();
+      const constants = JSON.parse(raw || "{}").constantsResources || {};
+      Object.values(constants).forEach((resource) => {
+        const key = imageKey(resource.image);
+        const id = Number(resource.dbLetter);
+        if (key && Number.isSafeInteger(id) && id > 0) resourceImages.set(key, id);
+      });
+    } catch {
+      resourceRaw = null;
+      resourceImages = /* @__PURE__ */ new Map();
+    }
+  }
+  function readOrders() {
+    loadResourceImages();
+    return [...document.querySelectorAll(TABLE_SELECTOR)].map((table) => {
+      const controls = table.parentElement;
+      const row = controls?.parentElement;
+      if (!row?.querySelector(".ebrfvjt0") || staleRows.has(row)) return null;
+      const requirements = [...row.querySelectorAll(".ebrfvjt3")].map((item) => {
+        const text = item.querySelector(".progress > span")?.textContent.trim() || "";
+        const match2 = text.match(/^(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/);
+        return {
+          id: resourceImages.get(imageKey(item.querySelector("img")?.getAttribute("src"))),
+          available: match2 ? Number(match2[1]) : NaN,
+          required: match2 ? Number(match2[2]) : NaN
+        };
+      });
+      const profitText = table.querySelector('tbody > tr:last-child > td[colspan="2"]')?.textContent.trim() || "";
+      const validProfit = /^(?:\(-\)\s*)?\$\s*[\d\s.,\u00a0\u202f\u0660-\u0669\u06f0-\u06f9\u066b\u066c]+$/.test(profitText);
+      return {
+        row,
+        controls,
+        requirements,
+        profitText,
+        group: validProfit ? profitText.startsWith("(-)") ? "loss" : "profit" : null,
+        button: controls.querySelector(":scope > div.text-center > button.btn-primary"),
+        error: controls.querySelector(".ebrfvjt6")?.textContent.trim() || ""
+      };
+    }).filter(Boolean);
+  }
+  function aggregateRequirements() {
+    const totals = /* @__PURE__ */ new Map();
+    let consistent = true;
+    for (const order of orders) {
+      if (!order.requirements.length) return { valid: false, totals };
+      for (const item of order.requirements) {
+        if (!item.id || !Number.isFinite(item.required) || item.required <= 0 || !Number.isFinite(item.available) || item.available < 0) return { valid: false, totals };
+        const previous = totals.get(item.id);
+        if (previous && previous.available !== item.available) consistent = false;
+        totals.set(item.id, {
+          required: (previous?.required || 0) + item.required,
+          available: item.available
+        });
+      }
+    }
+    return { valid: totals.size > 0, consistent, totals };
+  }
+  function fallbackCopy2(text) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+    const focused = document.activeElement;
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+    }
+    textarea.remove();
+    focused?.focus({ preventScroll: true });
+    return copied;
+  }
+  async function copyRequirements(missingOnly) {
+    scan();
+    if (!panel || pending) return;
+    const snapshot = aggregateRequirements();
+    if (!snapshot.valid || missingOnly && !snapshot.consistent) return;
+    const lines = [...snapshot.totals].sort(([a], [b]) => a - b).map(([id, item]) => {
+      const amount = Math.ceil(missingOnly ? Math.max(0, item.required - item.available) : item.required);
+      return amount > 0 ? `:re-${id}: x${amount.toLocaleString("en-US")}` : null;
+    }).filter(Boolean);
+    if (!lines.length) {
+      lastMessage = "\u5E93\u5B58\u5145\u8DB3\uFF0C\u65E0\u9700\u91C7\u8D2D\u3002";
+      scan();
+      return;
+    }
+    const text = `BUYING
+${lines.join("\n")}`;
+    const owner = panel;
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch {
+    }
+    if (panel !== owner || currentRoute() !== route || !isEnabled2()) return;
+    if (!copied) copied = fallbackCopy2(text);
+    lastMessage = copied ? `\u5DF2\u590D\u5236${missingOnly ? "\u7F3A\u8D27\u91C7\u8D2D\u5355" : "\u8D27\u7269\u603B\u9700\u6C42"}\uFF0C\u5171 ${lines.length} \u79CD\u8D27\u7269\u3002` : "\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u526A\u8D34\u677F\u6743\u9650\u3002";
+    scan();
+  }
+  function addStyle() {
+    style = document.createElement("style");
+    style.id = "sc-sales-office-style";
+    style.textContent = `
+        #${PANEL_ID} { position:fixed; right:16px; bottom:16px; width:360px; max-width:calc(100vw - 16px);
+            box-sizing:border-box; padding:12px; border:1px solid var(--sc-so-border); border-radius:8px;
+            background:var(--sc-so-bg); color:var(--sc-so-fg); z-index:900; box-shadow:0 3px 16px #0003;
+            font-size:13px; line-height:1.4; }
+        #${PANEL_ID}.sc-sales-office-hidden { display:none; }
+        #${PANEL_ID} .sc-sales-office-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+        #${PANEL_ID} .sc-sales-office-header strong { font-size:15px; }
+        #${PANEL_ID} .sc-sales-office-copy, #${PANEL_ID} .sc-sales-office-groups { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+        #${PANEL_ID} .sc-sales-office-copy { margin-bottom:10px; }
+        #${PANEL_ID} .sc-sales-office-copy button { margin:0; min-width:0; padding:7px 4px; white-space:normal; font-size:13px; }
+        #${PANEL_ID} .sc-sales-office-group { min-width:0; border-top:3px solid var(--sc-so-profit); padding-top:6px; }
+        #${PANEL_ID} .sc-sales-office-group[data-group="loss"] { border-color:var(--sc-so-loss); }
+        #${PANEL_ID} .sc-sales-office-label { font-weight:bold; }
+        #${PANEL_ID} .sc-sales-office-next { height:20px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+        #${PANEL_ID} .sc-sales-office-slot { height:36px; display:flex; align-items:center; justify-content:center;
+            border:1px dashed var(--sc-so-border); border-radius:4px; margin-top:4px; }
+        #${PANEL_ID} .sc-sales-office-status { height:38px; overflow:auto; margin-top:8px; font-size:12px; }
+        button[${SLOT_ATTR}] { position:fixed!important; margin:0!important; box-sizing:border-box!important;
+            z-index:901!important; min-width:0!important; max-width:none!important; padding:6px!important; }
+        button[${SLOT_ATTR}="profit"] { outline:2px solid var(--sc-so-profit,#388e3c); }
+        button[${SLOT_ATTR}="loss"] { outline:2px solid var(--sc-so-loss,#c83b3b); }
+        button[${SLOT_ATTR}][data-sc-sales-office-wait] { pointer-events:none!important; }
+        @media(max-width:767px) { #${PANEL_ID} { left:8px; right:8px; width:auto; bottom:calc(64px + env(safe-area-inset-bottom,0px)); padding:10px; } }
+    `;
+    geometryStyle = document.createElement("style");
+    geometryStyle.id = "sc-sales-office-geometry";
+    document.head.append(style, geometryStyle);
+  }
+  function createPanel() {
+    if (!style) addStyle();
+    panel = document.createElement("section");
+    panel.id = PANEL_ID;
+    panel.setAttribute("aria-label", "\u9500\u552E\u529E\u516C\u5BA4\u4F18\u5316\uFF08\u6D4B\u8BD5\u4E2D\uFF09");
+    panel.innerHTML = `
+        <div class="sc-sales-office-header"><strong>\u9500\u552E\u529E\u516C\u5BA4\u4F18\u5316\uFF08\u6D4B\u8BD5\u4E2D\uFF09</strong><span class="sc-sales-office-count"></span></div>
+        <div class="sc-sales-office-copy"></div>
+        <div class="sc-sales-office-groups">
+            <div class="sc-sales-office-group" data-group="profit"><div class="sc-sales-office-label">\u76C8\u5229\uFF0F\u6301\u5E73 <span></span></div><div class="sc-sales-office-next"></div><div class="sc-sales-office-slot"></div></div>
+            <div class="sc-sales-office-group" data-group="loss"><div class="sc-sales-office-label">\u4E8F\u635F <span></span></div><div class="sc-sales-office-next"></div><div class="sc-sales-office-slot"></div></div>
+        </div>
+        <div class="sc-sales-office-status" role="status" aria-live="polite"></div>`;
+    const native = orders[0]?.controls.querySelector("button.btn-secondary");
+    [false, true].forEach((missing) => {
+      const button = native ? native.cloneNode(false) : document.createElement("button");
+      button.removeAttribute("id");
+      button.removeAttribute("disabled");
+      button.removeAttribute("aria-label");
+      button.className = native?.className || "btn btn-secondary";
+      button.type = "button";
+      button.dataset.scSalesOfficeCopy = missing ? "missing" : "total";
+      button.textContent = missing ? "\u590D\u5236\u7F3A\u8D27\u91C7\u8D2D\u5355" : "\u590D\u5236\u603B\u9700\u6C42";
+      button.addEventListener("click", () => copyRequirements(missing));
+      panel.querySelector(".sc-sales-office-copy").appendChild(button);
+    });
+    document.body.appendChild(panel);
+    resizeObserver = new ResizeObserver(scheduleLayout);
+    resizeObserver.observe(panel);
+  }
+  function setText(element, text) {
+    if (element.textContent !== text) element.textContent = text;
+  }
+  function releaseButtons() {
+    docked.forEach((button) => {
+      button.removeAttribute(SLOT_ATTR);
+      button.removeAttribute("data-sc-sales-office-wait");
+    });
+    docked.clear();
+    if (geometryStyle) geometryStyle.textContent = "";
+  }
+  function hasDialog() {
+    return [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')].some((dialog) => dialog.getClientRects().length > 0);
+  }
+  function canDock(button) {
+    for (let element = button.parentElement; element; element = element.parentElement) {
+      const css = getComputedStyle(element);
+      if (css.display === "none" || css.visibility === "hidden" || css.transform && css.transform !== "none" || css.filter && css.filter !== "none" || css.perspective && css.perspective !== "none" || /paint|layout|strict|content/.test(css.contain) || /transform|filter|perspective/.test(css.willChange)) return false;
+    }
+    return true;
+  }
+  function layout() {
+    frame = null;
+    if (!panel?.isConnected || panel.classList.contains("sc-sales-office-hidden")) return;
+    const bg = getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g)?.slice(0, 3).map(Number) || [255, 255, 255];
+    const dark = bg.reduce((a, b) => a + b, 0) < 380;
+    panel.style.setProperty("--sc-so-bg", dark ? "#262b30" : "#fff");
+    panel.style.setProperty("--sc-so-fg", dark ? "#eee" : "#333");
+    panel.style.setProperty("--sc-so-border", dark ? "#626970" : "#bbb");
+    panel.style.setProperty("--sc-so-profit", dark ? "#81c784" : "#388e3c");
+    panel.style.setProperty("--sc-so-loss", dark ? "#ef9a9a" : "#c83b3b");
+    const rules = [];
+    docked.forEach((button, group) => {
+      const rect = panel.querySelector(`[data-group="${group}"] .sc-sales-office-slot`).getBoundingClientRect();
+      rules.push(`button[${SLOT_ATTR}="${group}"] { left:${rect.left}px!important; top:${rect.top}px!important; width:${rect.width}px!important; height:${rect.height}px!important; }`);
+    });
+    const css = rules.join("\n");
+    if (geometryStyle.textContent !== css) geometryStyle.textContent = css;
+    let obscured = false;
+    docked.forEach((button) => {
+      const rect = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      if (!hit || !button.contains(hit)) obscured = true;
+    });
+    if (obscured) {
+      releaseButtons();
+      panel.querySelectorAll(".sc-sales-office-slot").forEach((slot) => setText(slot, "\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE"));
+      setText(panel.querySelector(".sc-sales-office-status"), "\u96C6\u4E2D\u6309\u94AE\u88AB\u9875\u9762\u5176\u4ED6\u5185\u5BB9\u906E\u6321\uFF0C\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE\u3002");
+    }
+  }
+  function scheduleLayout() {
+    if (frame === null) frame = requestAnimationFrame(layout);
+  }
+  function clearPending() {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+    pending = null;
+  }
+  function onNativeClick(event) {
+    const button = event.target.closest?.("button.btn-primary");
+    const order = orders.find((item) => item.button === button);
+    if (!order || button.disabled) return;
+    if (currentRoute() !== route || !isEnabled2()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      destroy2();
+      return;
+    }
+    if (button.hasAttribute(SLOT_ATTR)) {
+      const latest = readOrders().find((item) => item.button === button);
+      if (!latest || latest.group !== button.getAttribute(SLOT_ATTR)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        scheduleScan();
+        return;
+      }
+    }
+    if (pending || button.hasAttribute(SLOT_ATTR) && event.detail > 1) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    pending = { row: order.row, button };
+    lastMessage = "";
+    docked.forEach((item) => item.setAttribute("data-sc-sales-office-wait", "true"));
+    if (panel) setText(panel.querySelector(".sc-sales-office-status"), "\u4EA4\u4ED8\u5904\u7406\u4E2D\uFF0C\u8BF7\u7B49\u5F85\u6E38\u620F\u8FD4\u56DE\u7ED3\u679C\u3002");
+    pendingTimer = setTimeout(() => {
+      if (pending?.button.isConnected && !pending.button.disabled) {
+        clearPending();
+        lastMessage = "\u672A\u68C0\u6D4B\u5230\u4EA4\u4ED8\u8FDB\u5EA6\uFF0C\u8BF7\u91CD\u8BD5\u539F\u751F\u4EA4\u4ED8\u6309\u94AE\u3002";
+        scheduleScan();
+      }
+    }, 1500);
+    scheduleScan();
+  }
+  function scan() {
+    clearTimeout(scanTimer);
+    scanTimer = null;
+    if (!isEnabled2() || currentRoute() !== route) {
+      destroy2();
+      return;
+    }
+    orders = readOrders();
+    if (pending) {
+      if (!pending.row.isConnected) {
+        clearPending();
+        lastMessage = "\u8BA2\u5355\u5DF2\u79FB\u9664\uFF0C\u5DF2\u66F4\u65B0\u5269\u4F59\u8BA2\u5355\u3002";
+      } else {
+        const current = orders.find((order) => order.row === pending.row);
+        if (current?.error && current.button) {
+          clearPending();
+          lastMessage = `\u4EA4\u4ED8\u5931\u8D25\uFF1A${current.error}`;
+        }
+      }
+    }
+    if (!panel?.isConnected && orders.length) {
+      releaseButtons();
+      resizeObserver?.disconnect();
+      createPanel();
+    }
+    if (!panel) return;
+    releaseButtons();
+    const hidden = hasDialog();
+    panel.classList.toggle("sc-sales-office-hidden", hidden);
+    const snapshot = aggregateRequirements();
+    panel.querySelector('[data-sc-sales-office-copy="total"]').disabled = !!pending || !snapshot.valid;
+    panel.querySelector('[data-sc-sales-office-copy="missing"]').disabled = !!pending || !snapshot.valid || !snapshot.consistent;
+    setText(panel.querySelector(".sc-sales-office-count"), `${orders.length} \u7B14\u5F85\u4EA4\u4ED8`);
+    let unsafeLayout = false;
+    GROUPS.forEach((group) => {
+      const available = orders.filter((order) => order.group === group && order.button && !order.button.disabled);
+      const block = panel.querySelector(`[data-group="${group}"]`);
+      setText(block.querySelector(".sc-sales-office-label span"), `(${available.length})`);
+      const next = pending ? null : available[0];
+      setText(block.querySelector(".sc-sales-office-next"), next ? `\u4E0B\u4E00\u7B14\uFF1A${next.profitText}` : "\u2014");
+      const slot = block.querySelector(".sc-sales-office-slot");
+      setText(slot, pending ? "\u4EA4\u4ED8\u5904\u7406\u4E2D" : "\u6682\u65E0\u53EF\u4EA4\u4ED8\u8BA2\u5355");
+      if (next && !hidden) {
+        if (canDock(next.button)) {
+          next.button.setAttribute(SLOT_ATTR, group);
+          docked.set(group, next.button);
+          setText(slot, "");
+        } else {
+          unsafeLayout = true;
+          setText(slot, "\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE");
+        }
+      }
+    });
+    const missing = orders.filter((order) => order.button?.disabled).length;
+    const unknown = orders.filter((order) => !order.group).length;
+    const message = pending ? "\u4EA4\u4ED8\u5904\u7406\u4E2D\uFF0C\u8BF7\u7B49\u5F85\u6E38\u620F\u8FD4\u56DE\u7ED3\u679C\u3002" : unsafeLayout ? "\u9875\u9762\u5E03\u5C40\u4E0D\u652F\u6301\u96C6\u4E2D\u4EA4\u4ED8\uFF0C\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE\u3002" : !orders.length ? "\u6682\u65E0\u5DF2\u5B8C\u6210\u5BFB\u5355\u7684\u8BA2\u5355\u3002" : !snapshot.valid ? "\u8D27\u7269\u6570\u636E\u672A\u8BC6\u522B\u5B8C\u6574\uFF0C\u6682\u4E0D\u80FD\u590D\u5236\u3002\u8BF7\u786E\u8BA4\u63D2\u4EF6\u57FA\u7840\u6570\u636E\u5DF2\u66F4\u65B0\u3002" : !snapshot.consistent ? "\u5E93\u5B58\u6B63\u5728\u66F4\u65B0\uFF0C\u6682\u4E0D\u80FD\u590D\u5236\u7F3A\u8D27\u91C7\u8D2D\u5355\u3002" : lastMessage || `\u6BCF\u6B21\u70B9\u51FB\u4EA4\u4ED8\u4E00\u7B14\u3002${missing ? ` ${missing} \u7B14\u5E93\u5B58\u4E0D\u8DB3\u3002` : ""}${unknown ? ` ${unknown} \u7B14\u5229\u6DA6\u672A\u8BC6\u522B\uFF0C\u4FDD\u7559\u539F\u6309\u94AE\u3002` : ""}`;
+    setText(panel.querySelector(".sc-sales-office-status"), message);
+    layout();
+  }
+  function scheduleScan() {
+    if (scanTimer === null) scanTimer = setTimeout(scan, 60);
+  }
+  function onStorage(event) {
+    if (event.key === "SC_PageActions_Settings" || event.key === "SimcompaniesConstantsData") scheduleScan();
+  }
+  function init3() {
+    if (!isEnabled2() || !currentRoute()) {
+      destroy2();
+      return;
+    }
+    if (observer2 && route === currentRoute()) {
+      scan();
+      return;
+    }
+    destroy2();
+    route = currentRoute();
+    observer2 = new MutationObserver((records) => {
+      if (records.some((record) => !panel?.contains(record.target))) scheduleScan();
+    });
+    observer2.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["disabled", "class", "style", "src", "aria-hidden"] });
+    document.addEventListener("click", onNativeClick, true);
+    window.addEventListener("resize", scheduleLayout);
+    window.addEventListener("scroll", scheduleLayout, true);
+    window.addEventListener("storage", onStorage);
+    window.visualViewport?.addEventListener("resize", scheduleLayout);
+    scan();
+  }
+  function destroy2() {
+    if (route && currentRoute() !== route) orders.forEach((order) => staleRows.add(order.row));
+    observer2?.disconnect();
+    observer2 = null;
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    clearTimeout(scanTimer);
+    scanTimer = null;
+    clearPending();
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+    document.removeEventListener("click", onNativeClick, true);
+    window.removeEventListener("resize", scheduleLayout);
+    window.removeEventListener("scroll", scheduleLayout, true);
+    window.removeEventListener("storage", onStorage);
+    window.visualViewport?.removeEventListener("resize", scheduleLayout);
+    releaseButtons();
+    panel?.remove();
+    style?.remove();
+    geometryStyle?.remove();
+    panel = style = geometryStyle = null;
+    orders = [];
+    lastMessage = route = "";
+    resourceRaw = null;
+    resourceImages = /* @__PURE__ */ new Map();
+  }
+  window.SC_Modules = window.SC_Modules || {};
+  window.SC_Modules.salesOfficeHelper = { init: init3, destroy: destroy2 };
+
   // src/features/buildingAuctionLevelFilter.js
   var AUCTIONS_URL = "/api/v2/building-auctions/";
-  var PANEL_ID = "sc-building-auction-level-filter";
+  var PANEL_ID2 = "sc-building-auction-level-filter";
   var MIN_ID = "sc-building-auction-min-level";
   var MAX_ID = "sc-building-auction-max-level";
   var ROBOTS_ID = "sc-building-auction-robots";
@@ -3199,7 +3618,7 @@ ${materials.join("\n")}`;
     return text;
   }
   function updatePanelHint(allView) {
-    const hint = document.querySelector(`#${PANEL_ID} [data-sc-auction-refresh-hint]`);
+    const hint = document.querySelector(`#${PANEL_ID2} [data-sc-auction-refresh-hint]`);
     if (!hint) return;
     const buttonText = getFilterAuctionsText();
     const pageText = getBuildingAuctionsText();
@@ -3319,9 +3738,9 @@ ${materials.join("\n")}`;
   function filterAuctionCards() {
     if (!isAuctionListPage()) return;
     const allView = isAllView();
-    const panel = document.getElementById(PANEL_ID);
-    if (panel) {
-      panel.style.display = "inline-flex";
+    const panel2 = document.getElementById(PANEL_ID2);
+    if (panel2) {
+      panel2.style.display = "inline-flex";
     }
     document.querySelectorAll('a[href*="/market/building-auction/"]').forEach((card) => {
       const id = auctionIdFromHref(card.getAttribute("href"));
@@ -3340,46 +3759,46 @@ ${materials.join("\n")}`;
     clearTimeout(state.renderTimer);
     state.renderTimer = setTimeout(filterAuctionCards, 0);
   }
-  function createPanel() {
-    if (!isAuctionListPage() || document.getElementById(PANEL_ID)) return;
-    const panel = document.createElement("div");
-    panel.id = PANEL_ID;
-    panel.style.cssText = "display:inline-flex;gap:7px;align-items:center;flex-wrap:wrap;max-width:100%;margin-left:8px;color:inherit;font-size:13px;line-height:1;vertical-align:middle;";
-    panel.innerHTML = '<span style="display:inline-flex;align-items:center;height:26px;white-space:nowrap;">\u7B49\u7EA7</span><input id="' + MIN_ID + '" aria-label="\u6700\u4F4E\u7B49\u7EA7" type="number" min="1" step="1" inputmode="numeric" placeholder="\u4ECE" value="' + (state.min ?? "") + '" style="box-sizing:border-box;width:52px;height:26px;margin:0;padding:2px 5px;border:1px solid currentColor;border-radius:2px;background:transparent;color:inherit;line-height:20px;"><span style="display:inline-flex;align-items:center;height:26px;">\u2013</span><input id="' + MAX_ID + '" aria-label="\u6700\u9AD8\u7B49\u7EA7" type="number" min="1" step="1" inputmode="numeric" placeholder="\u5230" value="' + (state.max ?? "") + '" style="box-sizing:border-box;width:52px;height:26px;margin:0;padding:2px 5px;border:1px solid currentColor;border-radius:2px;background:transparent;color:inherit;line-height:20px;"><label style="display:inline-flex;align-items:center;height:26px;margin:0;white-space:nowrap;"><input id="' + ROBOTS_ID + '" type="checkbox" style="margin:0 4px 0 0;" ' + (state.robotsOnly ? "checked" : "") + '>\u673A\u5668\u4EBA\u5EFA\u7B51</label><label style="display:inline-flex;align-items:center;height:26px;margin:0;white-space:nowrap;"><input id="' + BIDS_ID + '" type="checkbox" style="margin:0 4px 0 0;" ' + (state.hideBids ? "checked" : "") + '>\u9690\u85CF\u5DF2\u6295\u6807</label><span data-sc-auction-refresh-hint style="display:inline-flex;align-items:center;min-height:26px;max-width:100%;opacity:.75;white-space:normal;line-height:18px;"></span>';
+  function createPanel2() {
+    if (!isAuctionListPage() || document.getElementById(PANEL_ID2)) return;
+    const panel2 = document.createElement("div");
+    panel2.id = PANEL_ID2;
+    panel2.style.cssText = "display:inline-flex;gap:7px;align-items:center;flex-wrap:wrap;max-width:100%;margin-left:8px;color:inherit;font-size:13px;line-height:1;vertical-align:middle;";
+    panel2.innerHTML = '<span style="display:inline-flex;align-items:center;height:26px;white-space:nowrap;">\u7B49\u7EA7</span><input id="' + MIN_ID + '" aria-label="\u6700\u4F4E\u7B49\u7EA7" type="number" min="1" step="1" inputmode="numeric" placeholder="\u4ECE" value="' + (state.min ?? "") + '" style="box-sizing:border-box;width:52px;height:26px;margin:0;padding:2px 5px;border:1px solid currentColor;border-radius:2px;background:transparent;color:inherit;line-height:20px;"><span style="display:inline-flex;align-items:center;height:26px;">\u2013</span><input id="' + MAX_ID + '" aria-label="\u6700\u9AD8\u7B49\u7EA7" type="number" min="1" step="1" inputmode="numeric" placeholder="\u5230" value="' + (state.max ?? "") + '" style="box-sizing:border-box;width:52px;height:26px;margin:0;padding:2px 5px;border:1px solid currentColor;border-radius:2px;background:transparent;color:inherit;line-height:20px;"><label style="display:inline-flex;align-items:center;height:26px;margin:0;white-space:nowrap;"><input id="' + ROBOTS_ID + '" type="checkbox" style="margin:0 4px 0 0;" ' + (state.robotsOnly ? "checked" : "") + '>\u673A\u5668\u4EBA\u5EFA\u7B51</label><label style="display:inline-flex;align-items:center;height:26px;margin:0;white-space:nowrap;"><input id="' + BIDS_ID + '" type="checkbox" style="margin:0 4px 0 0;" ' + (state.hideBids ? "checked" : "") + '>\u9690\u85CF\u5DF2\u6295\u6807</label><span data-sc-auction-refresh-hint style="display:inline-flex;align-items:center;min-height:26px;max-width:100%;opacity:.75;white-space:normal;line-height:18px;"></span>';
     const filterLink = document.querySelector('a[href*="/market/building-auctions/filter-settings/"]');
     if (!filterLink) return;
-    filterLink.insertAdjacentElement("afterend", panel);
-    panel.querySelectorAll('input[type="number"]').forEach((input) => input.addEventListener("change", normalizeRange));
-    panel.querySelector("#" + ROBOTS_ID).addEventListener("change", (event) => {
+    filterLink.insertAdjacentElement("afterend", panel2);
+    panel2.querySelectorAll('input[type="number"]').forEach((input) => input.addEventListener("change", normalizeRange));
+    panel2.querySelector("#" + ROBOTS_ID).addEventListener("change", (event) => {
       state.robotsOnly = event.target.checked;
       storeRange();
       scheduleRender();
     });
-    panel.querySelector("#" + BIDS_ID).addEventListener("change", (event) => {
+    panel2.querySelector("#" + BIDS_ID).addEventListener("change", (event) => {
       state.hideBids = event.target.checked;
       storeRange();
       scheduleRender();
     });
     updatePanelHint(true);
   }
-  function init3() {
+  function init4() {
     if (!isAuctionListPage()) return;
     readStoredRange();
     updateViewModeFromDom();
     document.removeEventListener("click", handleViewClick, true);
     document.addEventListener("click", handleViewClick, true);
     state.viewListener = handleViewClick;
-    createPanel();
+    createPanel2();
     state.observer?.disconnect();
     state.observer = new MutationObserver(() => {
       updateViewModeFromDom();
-      createPanel();
+      createPanel2();
       scheduleRender();
     });
     state.observer.observe(document.body, { childList: true, subtree: true });
     scheduleRender();
   }
-  function destroy2() {
+  function destroy3() {
     state.observer?.disconnect();
     state.observer = null;
     if (state.viewListener) document.removeEventListener("click", state.viewListener, true);
@@ -3390,11 +3809,11 @@ ${materials.join("\n")}`;
       card.removeAttribute(HIDDEN_ATTR);
       card.style.removeProperty("display");
     });
-    document.getElementById(PANEL_ID)?.remove();
+    document.getElementById(PANEL_ID2)?.remove();
   }
   installNetworkCapture();
   window.SC_Modules = window.SC_Modules || {};
-  window.SC_Modules.BuildingAuctionLevelFilter = { init: init3, destroy: destroy2 };
+  window.SC_Modules.BuildingAuctionLevelFilter = { init: init4, destroy: destroy3 };
 
   // src/utils/ui.js
   var isDarkMode = () => {
@@ -3549,15 +3968,15 @@ ${materials.join("\n")}`;
     function injectStyles() {
       if (document.getElementById("sc-module15-styles")) return;
       const d15s = DM();
-      const style = document.createElement("style");
-      style.id = "sc-module15-styles";
-      style.textContent = `
+      const style2 = document.createElement("style");
+      style2.id = "sc-module15-styles";
+      style2.textContent = `
             @keyframes sc-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
             .sc-spinner { border: 3px solid ${d15s ? "#444" : "#f3f3f3"}; border-top: 3px solid #2196f3; border-radius: 50%; width: 30px; height: 30px; animation: sc-spin 1s linear infinite; margin: 0 auto 10px auto; }
             .sc-modal-btn { margin-left: auto; padding: 6px 12px; background-color: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: all 0.2s; }
             .sc-modal-btn:hover { background-color: #1976d2; transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
         `;
-      document.head.appendChild(style);
+      document.head.appendChild(style2);
     }
     function processData(url, d) {
       if (!d) return;
@@ -3779,7 +4198,7 @@ ${materials.join("\n")}`;
         }
       });
     }
-    const observer2 = new MutationObserver((mutations) => {
+    const observer3 = new MutationObserver((mutations) => {
       let shouldCheck = false;
       for (let mutation of mutations) {
         if (mutation.addedNodes.length > 0) {
@@ -3795,11 +4214,11 @@ ${materials.join("\n")}`;
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", () => {
         injectStyles();
-        observer2.observe(document.body, { childList: true, subtree: true });
+        observer3.observe(document.body, { childList: true, subtree: true });
       });
     } else {
       injectStyles();
-      observer2.observe(document.body, { childList: true, subtree: true });
+      observer3.observe(document.body, { childList: true, subtree: true });
     }
     return { forceInject: injectMoreInfoButtons };
   })();
@@ -3950,8 +4369,8 @@ ${materials.join("\n")}`;
     };
     window.addEventListener("pagehide", clearCurrentPanelRenderTimer, { once: true });
     const ensureAgencyPanelRelocated = () => {
-      const panel = document.getElementById("sc-plugin-panel");
-      if (!panel) {
+      const panel2 = document.getElementById("sc-plugin-panel");
+      if (!panel2) {
         if (panelRelocateTimer) {
           clearInterval(panelRelocateTimer);
           panelRelocateTimer = null;
@@ -3960,8 +4379,8 @@ ${materials.join("\n")}`;
       }
       if (getValidTargetContainer()) return;
       const firstCol = getCurrentExecPanelContainer();
-      if (firstCol && panel.parentElement !== firstCol) {
-        firstCol.appendChild(panel);
+      if (firstCol && panel2.parentElement !== firstCol) {
+        firstCol.appendChild(panel2);
       }
     };
     const startAgencyPanelRelocateWatch = () => {
@@ -4002,8 +4421,8 @@ ${materials.join("\n")}`;
       if (!targetContainer || mode !== "current" && existingPanel) return;
       if (mode === "current") clearCurrentPanelRenderTimer();
       const d14 = DM();
-      const panel = existingPanel || document.createElement("div");
-      panel.id = panelId;
+      const panel2 = existingPanel || document.createElement("div");
+      panel2.id = panelId;
       const baseStyle = `margin-top: 12px; padding: 12px; border-radius: 4px; font-family: sans-serif; font-size: 14px; background-color: ${d14 ? "#2c2c2c" : "#f2f2f2"}; border: 1px solid ${d14 ? "#555" : "#d1d1d1"}; color: ${d14 ? "#efefef" : "#333"};${mode === "current" ? " width:100%; box-sizing:border-box;" : ""}`;
       let contentHtml = "";
       if (isError) {
@@ -4134,13 +4553,13 @@ ${materials.join("\n")}`;
 
                 ${warningHtml}`;
       }
-      panel.style = baseStyle;
-      panel.innerHTML = contentHtml;
+      panel2.style = baseStyle;
+      panel2.innerHTML = contentHtml;
       if (mode === "current") {
-        panel.dataset.scExecId = data2?.id != null ? String(data2.id) : "";
+        panel2.dataset.scExecId = data2?.id != null ? String(data2.id) : "";
         const anchor = getCurrentExecTrainingSummaryNode(data2?.id);
         if (anchor) {
-          anchor.after(panel);
+          anchor.after(panel2);
         } else {
           const startedAt = Date.now();
           clearCurrentPanelRenderTimer();
@@ -4148,15 +4567,15 @@ ${materials.join("\n")}`;
             const retryAnchor = getCurrentExecTrainingSummaryNode(data2?.id);
             if (retryAnchor) {
               clearCurrentPanelRenderTimer();
-              retryAnchor.after(panel);
+              retryAnchor.after(panel2);
             } else if (Date.now() - startedAt > 5e3) {
               clearCurrentPanelRenderTimer();
-              if (targetContainer) targetContainer.appendChild(panel);
+              if (targetContainer) targetContainer.appendChild(panel2);
             }
           }, 200);
         }
       } else {
-        targetContainer.after(panel);
+        targetContainer.after(panel2);
         startAgencyPanelRelocateWatch();
       }
     }
@@ -5237,7 +5656,7 @@ ${materials.join("\n")}`;
         rowContainer.parentNode.insertBefore(displayDiv, rowContainer.nextSibling);
       }
     }
-    function init4() {
+    function init5() {
       mpLog("init \u88AB\u8C03\u7528");
       _qualityCache = {};
       _lastProfitKey = "";
@@ -5274,7 +5693,7 @@ ${materials.join("\n")}`;
         }
       }, 500);
     }
-    return { init: init4 };
+    return { init: init5 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.outgoingContractMPHandler = outgoingContractMPHandler2;
@@ -5283,7 +5702,7 @@ ${materials.join("\n")}`;
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.12",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.13",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -6390,9 +6809,9 @@ ${materials.join("\n")}`;
     }
     function injectStyles() {
       if (document.getElementById("sc-boardroom-styles")) return;
-      const style = document.createElement("style");
-      style.id = "sc-boardroom-styles";
-      style.textContent = `
+      const style2 = document.createElement("style");
+      style2.id = "sc-boardroom-styles";
+      style2.textContent = `
                 .sc-boardroom-layout {
                     display: flex;
                     flex-direction: row;
@@ -6580,7 +6999,7 @@ ${materials.join("\n")}`;
                     }
                 }
             `;
-      document.head.appendChild(style);
+      document.head.appendChild(style2);
     }
     function show() {
       if (document.getElementById("sc-calc-modal")) return;
@@ -6646,16 +7065,16 @@ ${materials.join("\n")}`;
         modal.style.setProperty("--sc-successFg", theme.successFg);
       };
       updateThemeVars();
-      const observer2 = new MutationObserver(() => {
+      const observer3 = new MutationObserver(() => {
         updateThemeVars();
         calculateResults();
         renderBoardroom();
       });
-      observer2.observe(document.body, { attributes: true, attributeFilter: ["class", "style"] });
+      observer3.observe(document.body, { attributes: true, attributeFilter: ["class", "style"] });
       const closeX = document.getElementById("sc-calc-close-x");
       closeX.onclick = () => {
         optRunId++;
-        observer2.disconnect();
+        observer3.disconnect();
         modal.remove();
       };
       const btnSave = document.getElementById("sc-boardroom-save-btn");
@@ -6751,16 +7170,16 @@ ${materials.join("\n")}`;
       };
       targetHeader.appendChild(btnCustom);
     }
-    const observer2 = new MutationObserver(() => injectCustomButton());
-    function init4() {
+    const observer3 = new MutationObserver(() => injectCustomButton());
+    function init5() {
       if (typeof window.isPageModuleEnabled === "function" && !window.isPageModuleEnabled("executiveSave")) return;
-      observer2.observe(document.body, { childList: true, subtree: true });
+      observer3.observe(document.body, { childList: true, subtree: true });
       injectCustomButton();
     }
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", init4);
+      document.addEventListener("DOMContentLoaded", init5);
     } else {
-      init4();
+      init5();
     }
     return { forceInject: injectCustomButton };
   })();
@@ -7392,9 +7811,9 @@ ${materials.join("\n")}`;
       if (!isMarketMessageIconEnabled()) return;
       const injectMessageIconStyles = () => {
         if (document.getElementById("sc-market-message-icon-style")) return;
-        const style = document.createElement("style");
-        style.id = "sc-market-message-icon-style";
-        style.textContent = `
+        const style2 = document.createElement("style");
+        style2.id = "sc-market-message-icon-style";
+        style2.textContent = `
                     a[data-sc-market-message-icon] {
                         display: inline-flex !important;
                         align-items: center !important;
@@ -7416,7 +7835,7 @@ ${materials.join("\n")}`;
                         margin: 0 !important;
                     }
                 `;
-        document.head.appendChild(style);
+        document.head.appendChild(style2);
       };
       injectMessageIconStyles();
       const injectRows = () => {
@@ -7518,19 +7937,19 @@ ${materials.join("\n")}`;
       const SRC = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${currentRealmId}`));
       if (!SRC) return;
       const rows = Array.from(tbody.querySelectorAll("tr")).filter((r) => !r.hasAttribute("data-profit-calculated"));
-      const orders = [];
+      const orders2 = [];
       for (const row of rows) {
         const data2 = extractNumbersFromAriaLabel(row.getAttribute("aria-label"));
         if (!data2) continue;
         const rowId = rowIdCounter++;
         pendingRows.set(rowId, row);
         row.setAttribute("data-profit-calculated", "1");
-        orders.push({ rowId, price: data2.price, quantity: data2.quantity, quality: data2.quality, resourceId: currentResourceId });
+        orders2.push({ rowId, price: data2.price, quantity: data2.quantity, quality: data2.quality, resourceId: currentResourceId });
       }
-      if (orders.length > 0) {
+      if (orders2.length > 0) {
         const shared = buildSharedContext(SCD, SRC, currentResourceId);
         profitWorker.postMessage({
-          orders,
+          orders: orders2,
           shared,
           SCD,
           SRC,
@@ -7680,10 +8099,10 @@ ${materials.join("\n")}`;
             toggleBtn.style.cssText = `font-size: 11px; color: ${btnFgColor}; background: none; border: 1px solid ${btnBorderColor}; border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;`;
             const refreshToggleUI = () => {
               const config = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-              const isEnabled2 = config["executiveCustomToggle"] !== void 0 ? config["executiveCustomToggle"] : false;
-              toggleBtn.textContent = `\u81EA\u5B9A\u4E49\uFF1A${isEnabled2 ? "\u5F00" : "\u5173"}`;
-              toggleBtn.style.color = isEnabled2 ? "#4CAF50" : btnFgColor;
-              toggleBtn.style.borderColor = isEnabled2 ? "#4CAF50" : btnBorderColor;
+              const isEnabled3 = config["executiveCustomToggle"] !== void 0 ? config["executiveCustomToggle"] : false;
+              toggleBtn.textContent = `\u81EA\u5B9A\u4E49\uFF1A${isEnabled3 ? "\u5F00" : "\u5173"}`;
+              toggleBtn.style.color = isEnabled3 ? "#4CAF50" : btnFgColor;
+              toggleBtn.style.borderColor = isEnabled3 ? "#4CAF50" : btnBorderColor;
             };
             refreshToggleUI();
             toggleBtn.onclick = (e) => {
@@ -7934,9 +8353,9 @@ ${materials.join("\n")}`;
         `;
     const refreshUI = () => {
       const config = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
-      const isEnabled2 = config[key] !== void 0 ? config[key] : DEFAULT_VALUE;
-      btn.textContent = `${label}\uFF1A${isEnabled2 ? "\u5F00" : "\u5173"}`;
-      btn.style.backgroundColor = isEnabled2 ? "#4CAF50" : "#607D8B";
+      const isEnabled3 = config[key] !== void 0 ? config[key] : DEFAULT_VALUE;
+      btn.textContent = `${label}\uFF1A${isEnabled3 ? "\u5F00" : "\u5173"}`;
+      btn.style.backgroundColor = isEnabled3 ? "#4CAF50" : "#607D8B";
     };
     btn.onclick = (e) => {
       e.preventDefault();
@@ -8721,7 +9140,7 @@ ${materials.join("\n")}`;
         });
       }
     }
-    function init4() {
+    function init5() {
       cleanupAll();
       const isOnIncomingPage = () => /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
       checkPageTimer = setInterval(() => {
@@ -8916,15 +9335,15 @@ ${materials.join("\n")}`;
         warningSpan.textContent = "[\u26A0\uFE0F\u9AD8\u4EF7\u5408\u540C]";
         displayEl.appendChild(warningSpan);
         if (!document.getElementById("sc-highprice-blink-style")) {
-          const style = document.createElement("style");
-          style.id = "sc-highprice-blink-style";
-          style.textContent = `
+          const style2 = document.createElement("style");
+          style2.id = "sc-highprice-blink-style";
+          style2.textContent = `
                         @keyframes sc-highprice-blink {
                             0% { opacity: 0.3; }
                             100% { opacity: 1; }
                         }
                     `;
-          document.head.appendChild(style);
+          document.head.appendChild(style2);
         }
       }
     }
@@ -9198,7 +9617,7 @@ ${materials.join("\n")}`;
         "executiveCustomToggle",
         "\u81EA\u5B9A\u4E49",
         { buttonClass: "btn btn-primary" },
-        (isEnabled2) => {
+        (isEnabled3) => {
           refreshAllContractProfits();
         }
       );
@@ -9667,7 +10086,7 @@ ${materials.join("\n")}`;
         refreshAllContractProfits();
       };
     }
-    return { init: init4 };
+    return { init: init5 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.incomingContractsHandler = incomingContractsHandler2;
@@ -10249,7 +10668,7 @@ ${materials.join("\n")}`;
         weather
       };
       const list = SRC.ResourcesRetailInfo || [];
-      const orders = [];
+      const orders2 = [];
       let idx = 0;
       stacks.forEach((stack) => {
         if (stack.querySelector(".sc-warehouse-profit")) return;
@@ -10280,7 +10699,7 @@ ${materials.join("\n")}`;
           quantityRow.appendChild(profitEl);
         }
         pendingItems.set(idx, profitEl);
-        orders.push({
+        orders2.push({
           idx,
           unitCost,
           quality,
@@ -10291,9 +10710,9 @@ ${materials.join("\n")}`;
         });
         idx++;
       });
-      if (orders.length > 0) {
+      if (orders2.length > 0) {
         profitWorker.postMessage({
-          items: orders,
+          items: orders2,
           shared,
           SCXXCS: SCXXCS4,
           PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL4,
@@ -10316,7 +10735,7 @@ ${materials.join("\n")}`;
         setTimeout(tryInit, 400);
       }
     }
-    function init4() {
+    function init5() {
       if (typeof window.isPageModuleEnabled === "function" && !window.isPageModuleEnabled("warehouseProfit")) {
         document.querySelectorAll(".sc-warehouse-profit").forEach((e) => e.remove());
         document.querySelectorAll("[data-warehouse-custom-toggle]").forEach((e) => e.remove());
@@ -10348,7 +10767,7 @@ ${materials.join("\n")}`;
       if (lastUrl !== location.href) {
         lastUrl = location.href;
         if (isWarehouseItemPage()) {
-          setTimeout(init4, 400);
+          setTimeout(init5, 400);
         } else {
           if (domObserver) {
             domObserver.disconnect();
@@ -10360,8 +10779,8 @@ ${materials.join("\n")}`;
         }
       }
     }).observe(document, { subtree: true, childList: true });
-    setTimeout(init4, 600);
-    return { init: init4 };
+    setTimeout(init5, 600);
+    return { init: init5 };
   })();
 
   // src/features/chatAccessibility.js
@@ -10378,9 +10797,9 @@ ${materials.join("\n")}`;
       "\u{1F7E4}": "\u68D5"
     };
     const ALLOWED_ROOMS = ["Sales", "Aerospace sales", "[ZH] \u4EA4\u6613"];
-    let observer2 = null;
+    let observer3 = null;
     let styleInjected = false;
-    function isEnabled2() {
+    function isEnabled3() {
       try {
         const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
         return cfg["chatAccessibility"] === true;
@@ -10397,14 +10816,14 @@ ${materials.join("\n")}`;
       }
     }
     function refreshAllButtons() {
-      const enabled = isEnabled2();
+      const enabled = isEnabled3();
       document.querySelectorAll(".sc-chat-toggle-btn").forEach((btn) => {
         btn.textContent = enabled ? "\u{1F7E2} \u6587\u5B57" : "\u{1F534} \u56FE\u6807";
         btn.title = enabled ? "\u70B9\u51FB\u5207\u6362\u4E3A\u539F\u59CB Emoji \u56FE\u6807\u663E\u793A" : "\u70B9\u51FB\u5207\u6362\u4E3A\u6587\u5B57\u8F85\u52A9\u663E\u793A\uFF08\u65B9\u4FBF\u8272\u5F31\u8BC6\u522B\uFF09";
       });
     }
     function refreshAllContainers() {
-      const enabled = isEnabled2();
+      const enabled = isEnabled3();
       findChatContainers().forEach((container) => {
         container.classList.toggle("sc-chat-assist", enabled);
       });
@@ -10412,9 +10831,9 @@ ${materials.join("\n")}`;
     function injectStyles() {
       if (styleInjected) return;
       styleInjected = true;
-      const style = document.createElement("style");
-      style.textContent = `.sc-chat-emoji-text{display:none;font-size:inherit;vertical-align:middle;font-style:normal;color:inherit}.sc-chat-assist .sc-chat-emoji-text{display:inline}.sc-chat-assist .sc-chat-emoji-wrapper img.emoji{display:none}`;
-      document.head.appendChild(style);
+      const style2 = document.createElement("style");
+      style2.textContent = `.sc-chat-emoji-text{display:none;font-size:inherit;vertical-align:middle;font-style:normal;color:inherit}.sc-chat-assist .sc-chat-emoji-text{display:inline}.sc-chat-assist .sc-chat-emoji-wrapper img.emoji{display:none}`;
+      document.head.appendChild(style2);
     }
     function processEmoji(img) {
       if (img.dataset.scEmojiDone) return;
@@ -10452,13 +10871,13 @@ ${materials.join("\n")}`;
       return "";
     }
     function addToggleButtons() {
-      if (!isEnabled2()) return;
+      if (!isEnabled3()) return;
       const headers = document.querySelectorAll("div.well-header.text-uppercase.css-12ztnbp");
       headers.forEach((header) => {
         if (header.querySelector(".sc-chat-toggle-btn")) return;
         const roomName = header.textContent?.trim() || "";
         if (!ALLOWED_ROOMS.includes(roomName)) return;
-        const enabled = isEnabled2();
+        const enabled = isEnabled3();
         const btn = document.createElement("button");
         btn.className = "sc-chat-toggle-btn";
         btn.textContent = enabled ? "\u{1F7E2} \u6587\u5B57" : "\u{1F534} \u56FE\u6807";
@@ -10467,7 +10886,7 @@ ${materials.join("\n")}`;
         btn.onclick = (e) => {
           e.stopPropagation();
           e.preventDefault();
-          const newState = !isEnabled2();
+          const newState = !isEnabled3();
           setEnabled(newState);
           refreshAllContainers();
           refreshAllButtons();
@@ -10479,33 +10898,33 @@ ${materials.join("\n")}`;
         header.appendChild(btn);
       });
     }
-    function init4() {
-      if (observer2) {
-        observer2.disconnect();
-        observer2 = null;
+    function init5() {
+      if (observer3) {
+        observer3.disconnect();
+        observer3 = null;
       }
       injectStyles();
       const room = getChatRoom();
       if (!room) {
-        setTimeout(init4, 1e3);
+        setTimeout(init5, 1e3);
         return;
       }
       if (!ALLOWED_ROOMS.includes(room)) return;
       const chatContainers = findChatContainers();
       if (chatContainers.length === 0) {
-        setTimeout(init4, 1e3);
+        setTimeout(init5, 1e3);
         return;
       }
-      if (isEnabled2()) {
+      if (isEnabled3()) {
         chatContainers.forEach((container) => {
           scanContainer(container);
         });
       }
       addToggleButtons();
       refreshAllContainers();
-      if (observer2) observer2.disconnect();
-      observer2 = new MutationObserver((mutations) => {
-        if (!isEnabled2()) return;
+      if (observer3) observer3.disconnect();
+      observer3 = new MutationObserver((mutations) => {
+        if (!isEnabled3()) return;
         for (const m of mutations) {
           for (const n of m.addedNodes) {
             if (n.nodeType === 1) scanContainer(n);
@@ -10513,25 +10932,25 @@ ${materials.join("\n")}`;
         }
       });
       chatContainers.forEach((container) => {
-        observer2.observe(container, { childList: true, subtree: true });
+        observer3.observe(container, { childList: true, subtree: true });
       });
     }
     let lastUrl = location.href;
     new MutationObserver(() => {
       if (lastUrl !== location.href) {
         lastUrl = location.href;
-        setTimeout(init4, 500);
+        setTimeout(init5, 500);
       }
     }).observe(document, { subtree: true, childList: true });
-    setTimeout(init4, 1e3);
-    window.scChatAccessibilityRefresh = () => init4();
-    return { init: init4, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
+    setTimeout(init5, 1e3);
+    window.scChatAccessibilityRefresh = () => init5();
+    return { init: init5, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
   })();
 
   // src/features/chatMessageBlocker.js
   (function() {
     "use strict";
-    const MODULE_KEY2 = "chatBlock";
+    const MODULE_KEY3 = "chatBlock";
     const STORAGE_KEY = "SC_ChatBlock_List";
     const CHATROOM_URL_RE = /\/api\/v2\/chatroom\/[^/?#]+(\/from-id\/\d+)?\/?(\?|$)/;
     const HIDDEN_CLASS = "sc-chatblock-hidden";
@@ -10546,7 +10965,7 @@ ${materials.join("\n")}`;
       backup: true,
       keys: [STORAGE_KEY]
     });
-    let observer2 = null;
+    let observer3 = null;
     let bodyObserver = null;
     let scanScheduled = false;
     let containerWatchTimer = null;
@@ -10556,16 +10975,16 @@ ${materials.join("\n")}`;
     let blockedCache = null;
     let observedContainers = /* @__PURE__ */ new WeakSet();
     const senderIndex = /* @__PURE__ */ new Map();
-    function isEnabled2() {
+    function isEnabled3() {
       try {
         const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-        return cfg[MODULE_KEY2] === true;
+        return cfg[MODULE_KEY3] === true;
       } catch (e) {
         return false;
       }
     }
     function isBlockingActive() {
-      return isEnabled2() && !paused;
+      return isEnabled3() && !paused;
     }
     function readList() {
       try {
@@ -10611,7 +11030,7 @@ ${materials.join("\n")}`;
         document.head.appendChild(el);
       }
       let css = HIDE_BASE;
-      if (isEnabled2() && !paused) {
+      if (isEnabled3() && !paused) {
         for (const e of readList()) {
           if (typeof e.realmId === "number" && e.slug) {
             const hrefPart = "/company/" + e.realmId + "/" + e.slug + "/";
@@ -10750,19 +11169,19 @@ ${materials.join("\n")}`;
       }
       return prevSend.apply(this, arguments);
     };
-    function filterWsFrame(frame) {
-      if (!frame || typeof frame !== "object") return { keep: true, data: null };
-      if (frame.routing === "NEW_MESSAGE" || frame.routing === "UPDATE_MESSAGE") {
-        if (frame.data) {
-          indexMessage(frame.data);
-          if (isBlockingActive() && isBlockedSender(frame.data)) return { keep: false, data: null };
+    function filterWsFrame(frame2) {
+      if (!frame2 || typeof frame2 !== "object") return { keep: true, data: null };
+      if (frame2.routing === "NEW_MESSAGE" || frame2.routing === "UPDATE_MESSAGE") {
+        if (frame2.data) {
+          indexMessage(frame2.data);
+          if (isBlockingActive() && isBlockedSender(frame2.data)) return { keep: false, data: null };
         }
         return { keep: true, data: null };
       }
-      if (frame.routing === "GROUP" && Array.isArray(frame.messages)) {
+      if (frame2.routing === "GROUP" && Array.isArray(frame2.messages)) {
         let changed = false;
         const kept = [];
-        for (const sub of frame.messages) {
+        for (const sub of frame2.messages) {
           const r = filterWsFrame(sub);
           if (!r.keep) {
             changed = true;
@@ -10775,7 +11194,7 @@ ${materials.join("\n")}`;
         }
         if (changed) {
           if (kept.length === 0) return { keep: false, data: null };
-          return { keep: true, data: { ...frame, messages: kept } };
+          return { keep: true, data: { ...frame2, messages: kept } };
         }
         return { keep: true, data: null };
       }
@@ -10790,8 +11209,8 @@ ${materials.join("\n")}`;
         let out = ev;
         if (typeof ev.data === "string") {
           try {
-            const frame = JSON.parse(ev.data);
-            const r = filterWsFrame(frame);
+            const frame2 = JSON.parse(ev.data);
+            const r = filterWsFrame(frame2);
             if (!r.keep) return;
             if (r.data) out = new MessageEvent("message", { data: JSON.stringify(r.data) });
           } catch (e) {
@@ -10856,8 +11275,8 @@ ${materials.join("\n")}`;
     window.scChatBlockRefresh = () => {
       initAttempts = 0;
       syncCss();
-      init4();
-      if (isEnabled2()) scanAll();
+      init5();
+      if (isEnabled3()) scanAll();
       else cleanupUI();
     };
     window.scChatBlockImportFromGame = async () => {
@@ -11012,7 +11431,7 @@ ${materials.join("\n")}`;
       replyBtn.insertAdjacentElement("afterend", btn);
     }
     function processContainer(container) {
-      if (!isEnabled2()) return;
+      if (!isEnabled3()) return;
       const active = isBlockingActive();
       ensureObserved(container);
       const rows = container.querySelectorAll(":scope > div");
@@ -11029,7 +11448,7 @@ ${materials.join("\n")}`;
       }
     }
     function scanAll() {
-      if (!isEnabled2()) return;
+      if (!isEnabled3()) return;
       findChatContainers().forEach((c) => processContainer(c));
       updateQuickButtons();
     }
@@ -11067,7 +11486,7 @@ ${materials.join("\n")}`;
       updateQuickButtons();
     }
     function updateQuickButtons() {
-      const on = isEnabled2();
+      const on = isEnabled3();
       if (!on) {
         document.querySelectorAll(`.${QUICK_CLASS}`).forEach((b) => b.remove());
         return;
@@ -11091,8 +11510,8 @@ ${materials.join("\n")}`;
       });
     }
     const enqueueMicro = typeof queueMicrotask === "function" ? queueMicrotask : (fn) => setTimeout(fn, 0);
-    function scheduleScan() {
-      if (!isEnabled2()) return;
+    function scheduleScan2() {
+      if (!isEnabled3()) return;
       if (scanScheduled) return;
       scanScheduled = true;
       enqueueMicro(() => {
@@ -11101,14 +11520,14 @@ ${materials.join("\n")}`;
       });
     }
     function ensureObserved(container) {
-      if (!observer2 || observedContainers.has(container)) return;
+      if (!observer3 || observedContainers.has(container)) return;
       observedContainers.add(container);
-      observer2.observe(container, { childList: true, subtree: true });
+      observer3.observe(container, { childList: true, subtree: true });
     }
     function ensureBodyObserver() {
       if (bodyObserver) return;
       bodyObserver = new MutationObserver((muts) => {
-        if (!isEnabled2()) return;
+        if (!isEnabled3()) return;
         for (const m of muts) {
           for (const n of m.addedNodes) {
             if (n.nodeType !== 1) continue;
@@ -11128,14 +11547,14 @@ ${materials.join("\n")}`;
         bodyObserver = null;
       }
     }
-    function init4() {
-      if (observer2) {
-        observer2.disconnect();
-        observer2 = null;
+    function init5() {
+      if (observer3) {
+        observer3.disconnect();
+        observer3 = null;
       }
       observedContainers = /* @__PURE__ */ new WeakSet();
       ensureCss();
-      if (!isEnabled2()) {
+      if (!isEnabled3()) {
         detachBodyObserver();
         return;
       }
@@ -11144,12 +11563,12 @@ ${materials.join("\n")}`;
       if (containers.length === 0) {
         if (initAttempts < 8) {
           initAttempts++;
-          containerWatchTimer = setTimeout(init4, 1e3);
+          containerWatchTimer = setTimeout(init5, 1e3);
         }
         return;
       }
       initAttempts = 0;
-      observer2 = new MutationObserver(scheduleScan);
+      observer3 = new MutationObserver(scheduleScan2);
       containers.forEach((c) => ensureObserved(c));
       scanAll();
     }
@@ -11159,12 +11578,12 @@ ${materials.join("\n")}`;
         lastUrl = location.href;
         initAttempts = 0;
         if (containerWatchTimer) clearTimeout(containerWatchTimer);
-        setTimeout(init4, 300);
+        setTimeout(init5, 300);
       }
     }).observe(document, { subtree: true, childList: true });
     setTimeout(() => {
       ensureCss();
-      init4();
+      init5();
     }, 500);
   })();
 
@@ -11177,7 +11596,7 @@ ${materials.join("\n")}`;
   });
   (function() {
     "use strict";
-    const MODULE_KEY2 = "chatEmojiPicker";
+    const MODULE_KEY3 = "chatEmojiPicker";
     const BUTTON_SELECTOR = "[data-sc-emoji-picker-added]";
     const BUNDLE_SELECTOR = 'script[type="module"][crossorigin][src^="https://www.simcompanies.com/static/bundle/assets/index-"][src$=".js"]';
     const RECENT_KEY = "SC_EmojiPicker_Recent";
@@ -11223,15 +11642,15 @@ ${materials.join("\n")}`;
     let layoutTimer = null;
     let buttonPositionTimer = null;
     let variantPopup = null;
-    let scanTimer = null;
+    let scanTimer2 = null;
     let started = false;
     let lastUrl = location.href;
     let emojiDataPromise = null;
     let insertQueue = Promise.resolve();
-    function isEnabled2() {
+    function isEnabled3() {
       try {
         const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-        return cfg[MODULE_KEY2] !== false;
+        return cfg[MODULE_KEY3] !== false;
       } catch (e) {
         return true;
       }
@@ -11486,20 +11905,20 @@ ${materials.join("\n")}`;
       } catch (e) {
       }
     }
-    function applyPanelTheme(panel) {
+    function applyPanelTheme(panel2) {
       const dark = typeof DM === "function" ? DM() : false;
-      panel.style.background = dark ? "rgba(35,35,38,0.98)" : "rgba(255,255,255,0.98)";
-      panel.style.setProperty("--sc-fg", dark ? "#efefef" : "#333");
-      panel.style.setProperty("--sc-border", dark ? "#555" : "#ccc");
-      panel.style.setProperty("--sc-input-bg", dark ? "#1d1d1f" : "#f4f4f4");
-      panel.style.setProperty("--sc-hover", dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)");
-      panel.style.setProperty("--sc-accent", "#2196F3");
+      panel2.style.background = dark ? "rgba(35,35,38,0.98)" : "rgba(255,255,255,0.98)";
+      panel2.style.setProperty("--sc-fg", dark ? "#efefef" : "#333");
+      panel2.style.setProperty("--sc-border", dark ? "#555" : "#ccc");
+      panel2.style.setProperty("--sc-input-bg", dark ? "#1d1d1f" : "#f4f4f4");
+      panel2.style.setProperty("--sc-hover", dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)");
+      panel2.style.setProperty("--sc-accent", "#2196F3");
     }
-    function positionPanel(panel, btn) {
+    function positionPanel(panel2, btn) {
       const rect = btn.getBoundingClientRect();
       const gap = 6;
       const panelWidth = Math.min(360, window.innerWidth - 16);
-      const panelHeight = panel.offsetHeight || 340;
+      const panelHeight = panel2.offsetHeight || 340;
       let input = null;
       if (openInputGroup) {
         const textareas = openInputGroup.querySelectorAll("textarea");
@@ -11514,12 +11933,12 @@ ${materials.join("\n")}`;
       const anchorRect = input ? input.getBoundingClientRect() : rect;
       const availableAbove = anchorRect.top - gap - 8;
       const maxHeight = Math.max(0, Math.min(420, availableAbove, window.innerHeight - 16));
-      panel.style.maxHeight = maxHeight + "px";
+      panel2.style.maxHeight = maxHeight + "px";
       const top = anchorRect.top - gap - Math.min(panelHeight, maxHeight);
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
-      panel.style.width = panelWidth + "px";
-      panel.style.left = left + "px";
-      panel.style.top = top + "px";
+      panel2.style.width = panelWidth + "px";
+      panel2.style.left = left + "px";
+      panel2.style.top = top + "px";
     }
     function findMentionsComponent(textarea) {
       const fiberKey = Object.keys(textarea).find(
@@ -11740,10 +12159,10 @@ ${materials.join("\n")}`;
       });
       return btn;
     }
-    function renderPanelContent(panel, items, inputGroup) {
-      const search = panel.querySelector(".sc-chat-emoji-picker-search");
-      const tabs = panel.querySelector(".sc-chat-emoji-picker-tabs");
-      const grid = panel.querySelector(".sc-chat-emoji-picker-grid");
+    function renderPanelContent(panel2, items, inputGroup) {
+      const search = panel2.querySelector(".sc-chat-emoji-picker-search");
+      const tabs = panel2.querySelector(".sc-chat-emoji-picker-tabs");
+      const grid = panel2.querySelector(".sc-chat-emoji-picker-grid");
       const getTextarea = () => inputGroup.querySelector("textarea");
       const allItems = [].concat(items.special, items.resources, items.buildings, items.eggs, items.realms, items.other);
       const groupLabels = {
@@ -11821,8 +12240,8 @@ ${materials.join("\n")}`;
         repositionPanel();
       }
       function repositionPanel() {
-        if (openPanel === panel && openButton) {
-          requestAnimationFrame(() => positionPanel(panel, openButton));
+        if (openPanel === panel2 && openButton) {
+          requestAnimationFrame(() => positionPanel(panel2, openButton));
         }
       }
       search.addEventListener("input", () => {
@@ -11833,10 +12252,10 @@ ${materials.join("\n")}`;
       renderGrid();
     }
     function buildPanel(btn, inputGroup) {
-      const panel = document.createElement("div");
-      panel.className = "sc-chat-emoji-picker-panel";
-      panel.style.cssText = "position:fixed;z-index:2147483646;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.35);";
-      applyPanelTheme(panel);
+      const panel2 = document.createElement("div");
+      panel2.className = "sc-chat-emoji-picker-panel";
+      panel2.style.cssText = "position:fixed;z-index:2147483646;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.35);";
+      applyPanelTheme(panel2);
       const hint = document.createElement("div");
       hint.className = "sc-chat-emoji-picker-hint";
       hint.textContent = "\u8BE5\u529F\u80FD\u6D4B\u8BD5\u4E2D\uFF0C\u5982\u51FA\u73B0\u95EE\u9898\u8BF7\u53CD\u9988\u5E76\u8BBE\u7F6E\u4E2D\u5173\u95ED\u8BE5\u529F\u80FD";
@@ -11865,22 +12284,22 @@ ${materials.join("\n")}`;
       loading.style.cssText = "color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;";
       grid.appendChild(loading);
       header.append(search, closeBtn);
-      panel.append(hint, header, tabs, grid);
+      panel2.append(hint, header, tabs, grid);
       loadEmojiData().then((items) => {
-        if (!panel.isConnected) return;
-        renderPanelContent(panel, items, inputGroup);
+        if (!panel2.isConnected) return;
+        renderPanelContent(panel2, items, inputGroup);
       }).catch(() => {
-        if (!panel.isConnected) return;
+        if (!panel2.isConnected) return;
         grid.textContent = "";
         const error = document.createElement("div");
         error.textContent = "\u8868\u60C5\u6570\u636E\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u91CD\u8BD5";
         error.style.cssText = "color:var(--sc-fg);opacity:0.8;font-size:12px;padding:16px;text-align:center;";
         grid.appendChild(error);
-        if (openPanel === panel && openButton) {
-          requestAnimationFrame(() => positionPanel(panel, openButton));
+        if (openPanel === panel2 && openButton) {
+          requestAnimationFrame(() => positionPanel(panel2, openButton));
         }
       });
-      return panel;
+      return panel2;
     }
     function ensureButton(inputGroup) {
       if (inputGroup.dataset.scEmojiPickerGroup === "1") return;
@@ -11996,18 +12415,18 @@ ${materials.join("\n")}`;
       }
       closePanel();
       if (!inputGroup.querySelector("textarea")) return;
-      const panel = buildPanel(btn, inputGroup);
-      document.body.appendChild(panel);
-      openPanel = panel;
+      const panel2 = buildPanel(btn, inputGroup);
+      document.body.appendChild(panel2);
+      openPanel = panel2;
       openButton = btn;
       openInputGroup = inputGroup;
       startLayoutObserver();
-      requestAnimationFrame(() => positionPanel(panel, btn));
+      requestAnimationFrame(() => positionPanel(panel2, btn));
       document.addEventListener("pointerdown", onPointerDown, true);
       document.addEventListener("keydown", onKeyDown);
       window.addEventListener("resize", onViewportChange);
       window.addEventListener("scroll", onViewportChange, true);
-      const search = panel.querySelector(".sc-chat-emoji-picker-search");
+      const search = panel2.querySelector(".sc-chat-emoji-picker-search");
       if (search) setTimeout(() => search.focus(), 0);
     }
     function removeAll() {
@@ -12018,14 +12437,14 @@ ${materials.join("\n")}`;
       });
     }
     function requestScan() {
-      if (scanTimer) return;
-      scanTimer = setTimeout(() => {
-        scanTimer = null;
-        scan();
+      if (scanTimer2) return;
+      scanTimer2 = setTimeout(() => {
+        scanTimer2 = null;
+        scan2();
       }, 150);
     }
-    function scan() {
-      if (!isEnabled2()) {
+    function scan2() {
+      if (!isEnabled3()) {
         removeAll();
         return;
       }
@@ -12049,7 +12468,7 @@ ${materials.join("\n")}`;
         if (lastUrl !== location.href) {
           lastUrl = location.href;
           closePanel();
-          setTimeout(scan, 400);
+          setTimeout(scan2, 400);
         }
       }).observe(document.body, { childList: true, subtree: true });
       const themeObserver = new MutationObserver(() => {
@@ -12063,9 +12482,9 @@ ${materials.join("\n")}`;
       window.addEventListener("resize", updateButtonPositions);
       window.scChatEmojiPickerRefresh = () => {
         removeAll();
-        scan();
+        scan2();
       };
-      scan();
+      scan2();
       loadEmojiData().catch(() => {
       });
     }
@@ -12183,11 +12602,11 @@ ${materials.join("\n")}`;
         return true;
       }
     };
-    window.savePageModuleEnabled = (key, isEnabled2) => {
+    window.savePageModuleEnabled = (key, isEnabled3) => {
       try {
         const stored = localStorage.getItem(PAGE_ACTIONS_CONFIG_KEY) || "{}";
         const config = JSON.parse(stored);
-        config[key] = isEnabled2;
+        config[key] = isEnabled3;
         localStorage.setItem(PAGE_ACTIONS_CONFIG_KEY, JSON.stringify(config));
       } catch (e) {
         console.error("\u4FDD\u5B58\u914D\u7F6E\u5931\u8D25", e);
@@ -12272,9 +12691,9 @@ ${materials.join("\n")}`;
         constants: "\u57FA\u672C"
       };
       const injectStyles = () => {
-        const style = document.createElement("style");
-        style.id = "sc-panel-dynamic-styles";
-        style.textContent = `
+        const style2 = document.createElement("style");
+        style2.id = "sc-panel-dynamic-styles";
+        style2.textContent = `
             .SimcompaniesRetailCalculation-mini-panel {
                 position: fixed;
                 z-index: 9999;
@@ -12391,7 +12810,7 @@ ${materials.join("\n")}`;
                 display: none;
             }
         `;
-        document.head.appendChild(style);
+        document.head.appendChild(style2);
       };
       const showSaturationTable = () => {
         const realmId = getRealmIdFromLink();
@@ -12410,9 +12829,9 @@ ${materials.join("\n")}`;
           return;
         }
         const updateToggleBtn = () => {
-          const isEnabled2 = window.isAutoAmountEnabled();
-          btn.textContent = isEnabled2 ? "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F: \u{1F7E2} \u5DF2\u542F\u7528" : "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F: \u{1F534} \u5DF2\u7981\u7528";
-          btn.style.backgroundColor = isEnabled2 ? "#4CAF50" : "#f44336";
+          const isEnabled3 = window.isAutoAmountEnabled();
+          btn.textContent = isEnabled3 ? "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F: \u{1F7E2} \u5DF2\u542F\u7528" : "\u81EA\u5B9A\u4E49\u8FD0\u884C\u65F6\u957F: \u{1F534} \u5DF2\u7981\u7528";
+          btn.style.backgroundColor = isEnabled3 ? "#4CAF50" : "#f44336";
         };
         updateToggleBtn();
         btn.onclick = () => {
@@ -12442,9 +12861,9 @@ ${materials.join("\n")}`;
           const label = btn.dataset.label;
           if (!key || !label) return;
           const defaultEnabled = btn.dataset.defaultEnabled !== "false";
-          const isEnabled2 = config[key] !== void 0 ? config[key] !== false : defaultEnabled;
-          btn.textContent = `${label}: ${isEnabled2 ? "\u{1F7E2} \u5DF2\u542F\u7528" : "\u{1F534} \u5DF2\u7981\u7528"}`;
-          btn.style.backgroundColor = isEnabled2 ? "#4CAF50" : "#f44336";
+          const isEnabled3 = config[key] !== void 0 ? config[key] !== false : defaultEnabled;
+          btn.textContent = `${label}: ${isEnabled3 ? "\u{1F7E2} \u5DF2\u542F\u7528" : "\u{1F534} \u5DF2\u7981\u7528"}`;
+          btn.style.backgroundColor = isEnabled3 ? "#4CAF50" : "#f44336";
         });
       };
       const PANEL_POS_KEY = "SC_PanelPosition";
@@ -12542,9 +12961,9 @@ ${materials.join("\n")}`;
           contentEl.style.top = margin + "px";
         }
       };
-      const createPanel2 = () => {
-        const panel = document.createElement("div");
-        panel.className = "SimcompaniesRetailCalculation-mini-panel";
+      const createPanel3 = () => {
+        const panel2 = document.createElement("div");
+        panel2.className = "SimcompaniesRetailCalculation-mini-panel";
         const trigger = document.createElement("button");
         trigger.className = "SimcompaniesRetailCalculation-trigger-btn";
         trigger.textContent = "\u2261";
@@ -12561,8 +12980,8 @@ ${materials.join("\n")}`;
           return { x: e.clientX, y: e.clientY };
         };
         const getPanelBounds = () => {
-          const w = panel.offsetWidth || 40;
-          const h = panel.offsetHeight || 40;
+          const w = panel2.offsetWidth || 40;
+          const h = panel2.offsetHeight || 40;
           return { w, h };
         };
         const clampPosition = (left, top) => {
@@ -12573,23 +12992,23 @@ ${materials.join("\n")}`;
           };
         };
         const saveDragPosition = () => {
-          const rect = panel.getBoundingClientRect();
+          const rect = panel2.getBoundingClientRect();
           intendedLeft = Math.round(rect.left);
           intendedBottom = Math.round(window.innerHeight - rect.bottom);
           savePos(intendedLeft, intendedBottom);
         };
         const applyClampedPosition = () => {
-          if (intendedLeft === null || !panel) return;
+          if (intendedLeft === null || !panel2) return;
           const vw = window.innerWidth;
           const vh = window.innerHeight;
-          const btnW = panel.offsetWidth || 32;
-          const btnH = panel.offsetHeight || 32;
+          const btnW = panel2.offsetWidth || 32;
+          const btnH = panel2.offsetHeight || 32;
           const intendedTop = vh - intendedBottom - btnH;
           const left = Math.max(0, Math.min(vw - btnW, intendedLeft));
           const top = Math.max(0, Math.min(vh - btnH, intendedTop));
-          panel.style.left = left + "px";
-          panel.style.bottom = vh - top - btnH + "px";
-          panel.style.top = "auto";
+          panel2.style.left = left + "px";
+          panel2.style.bottom = vh - top - btnH + "px";
+          panel2.style.top = "auto";
         };
         const savedPos = getSavedPos();
         if (savedPos) {
@@ -12605,7 +13024,7 @@ ${materials.join("\n")}`;
           if (e.button !== void 0 && e.button !== 0) return;
           const isTouch = !!e.touches;
           const pos = getClientPos(e);
-          const rect = panel.getBoundingClientRect();
+          const rect = panel2.getBoundingClientRect();
           const state3 = {
             startX: pos.x,
             startY: pos.y,
@@ -12640,19 +13059,19 @@ ${materials.join("\n")}`;
           let newLeft = dragState.origLeft + dx;
           let newTop = dragState.origTop + dy;
           const clamped = clampPosition(newLeft, newTop);
-          panel.style.left = clamped.left + "px";
-          panel.style.top = clamped.top + "px";
-          panel.style.bottom = "auto";
+          panel2.style.left = clamped.left + "px";
+          panel2.style.top = clamped.top + "px";
+          panel2.style.bottom = "auto";
           if (e.cancelable) e.preventDefault();
         };
         const onDragEnd = () => {
           clearLongPress();
           if (!dragState) return;
           if (dragState.isDragging) {
-            const rect = panel.getBoundingClientRect();
+            const rect = panel2.getBoundingClientRect();
             const clamped = clampPosition(rect.left, rect.top);
-            panel.style.left = clamped.left + "px";
-            panel.style.top = clamped.top + "px";
+            panel2.style.left = clamped.left + "px";
+            panel2.style.top = clamped.top + "px";
             saveDragPosition();
             if (content.style.display === "block") {
               setTimeout(() => adjustPanelPosition(content), 50);
@@ -12745,6 +13164,15 @@ ${materials.join("\n")}`;
               const subEl = subWrap.querySelector(":scope > .sc-toggle-sub");
               if (subEl) subEl.classList.toggle("sc-collapsed", !newState);
             }
+            if (key === "autoPricing" && typeof window.refreshAutoPricingButtons === "function") {
+              window.refreshAutoPricingButtons();
+              if (newState && /\/b\/\d+\/?$/.test(location.href) && typeof window.initAutoPricing === "function") {
+                window.initAutoPricing();
+              }
+            }
+            if (key === "salesOfficeHelper") {
+              window.SC_Modules?.salesOfficeHelper?.init();
+            }
             if (typeof window.scChatEmojiPickerRefresh === "function") {
               window.scChatEmojiPickerRefresh();
             }
@@ -12756,9 +13184,9 @@ ${materials.join("\n")}`;
             }
           };
           const initialConfig = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-          const isEnabled2 = initialConfig[key] !== void 0 ? initialConfig[key] !== false : defaultEnabled;
-          btn.textContent = `${label}: ${isEnabled2 ? "\u{1F7E2} \u5DF2\u542F\u7528" : "\u{1F534} \u5DF2\u7981\u7528"}`;
-          btn.style.backgroundColor = isEnabled2 ? "#4CAF50" : "#f44336";
+          const isEnabled3 = initialConfig[key] !== void 0 ? initialConfig[key] !== false : defaultEnabled;
+          btn.textContent = `${label}: ${isEnabled3 ? "\u{1F7E2} \u5DF2\u542F\u7528" : "\u{1F534} \u5DF2\u7981\u7528"}`;
+          btn.style.backgroundColor = isEnabled3 ? "#4CAF50" : "#f44336";
           return btn;
         };
         const CHAT_INPUT_HEIGHT_KEY = {
@@ -12863,6 +13291,48 @@ ${materials.join("\n")}`;
           actionRow.append(applyBtn, resetBtn);
           row.appendChild(actionRow);
           return row;
+        };
+        const createRetailStoreButtonControls = () => {
+          const box = document.createElement("div");
+          box.className = "sc-retail-store-button-controls";
+          box.style.cssText = "display:flex;flex-direction:column;gap:5px;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);";
+          const options = [
+            ["autoPricingHourlyButton", "\u6700\u5927\u65F6\u5229\u6DA6"],
+            ["autoPricingTotalButton", "\u6700\u5927\u5229\u6DA6"],
+            ["autoPricingUnitCostInput", "\u5047\u8BBE\u5355\u4F4D\u6210\u672C"]
+          ];
+          let config = {};
+          try {
+            config = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+          } catch (err) {
+            config = {};
+          }
+          options.forEach(([key, label]) => {
+            const row = document.createElement("label");
+            row.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = config[key] !== false;
+            checkbox.dataset.retailStoreButtonKey = key;
+            checkbox.addEventListener("change", () => {
+              let current = {};
+              try {
+                current = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+              } catch (err) {
+                current = {};
+              }
+              current[key] = checkbox.checked;
+              localStorage.setItem("SC_PageActions_Settings", JSON.stringify(current));
+              if (typeof window.refreshAutoPricingButtons === "function") {
+                window.refreshAutoPricingButtons();
+              }
+            });
+            const text = document.createElement("span");
+            text.textContent = label;
+            row.append(checkbox, text);
+            box.appendChild(row);
+          });
+          return box;
         };
         const chatBlockRefreshEntryCount = () => {
           const el = document.getElementById("sc-chatblock-count");
@@ -13123,6 +13593,7 @@ ${materials.join("\n")}`;
               return b;
             }
           },
+          { type: "toggle", key: "autoPricing", label: "\u96F6\u552E\u5546\u5E97\u5185\u6309\u94AE", subContent: createRetailStoreButtonControls },
           { type: "toggle", key: "marketProfit", label: "\u4EA4\u6613\u6240\u8BA1\u7B97\u65F6\u5229\u6DA6" },
           { type: "toggle", key: "marketMessageIcon", label: "\u4EA4\u6613\u6240\u79C1\u4FE1\u56FE\u6807", defaultEnabled: false },
           { type: "toggle", key: "contractProfit", label: "\u5408\u540C\u8BA1\u7B97\u65F6\u5229\u6DA6" },
@@ -13136,6 +13607,7 @@ ${materials.join("\n")}`;
           { type: "toggle", key: "landscapeHighlight", label: "\u5730\u56FE\u7A7A\u95F2\u5EFA\u7B51\u9AD8\u4EAE" },
           { type: "toggle", key: "restaurantStock", label: "\u9910\u9986\u5907\u8D27\u63D0\u9192" },
           { type: "toggle", key: "buildingUpgradeMaterialCopy", label: "\u590D\u5236\u5347\u7EA7\u6240\u9700\u5EFA\u6750" },
+          { type: "toggle", key: "salesOfficeHelper", label: "\u9500\u552E\u529E\u516C\u5BA4\u4F18\u5316\uFF08\u6D4B\u8BD5\u4E2D\uFF09" },
           { type: "toggle", key: "paQuestAnswers", label: "PA\u4EFB\u52A1\u7B54\u6848", defaultEnabled: true },
           { type: "toggle", key: "snipboardPreview", label: "Snipboard\u56FE\u7247\u9884\u89C8", defaultEnabled: true },
           { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, subContent: createChatInputHeightControls },
@@ -13171,8 +13643,8 @@ ${materials.join("\n")}`;
                 subConfig = {};
               }
               const defaultEnabled = item.defaultEnabled !== false;
-              const isEnabled2 = subConfig[item.key] !== void 0 ? subConfig[item.key] !== false : defaultEnabled;
-              sub.classList.toggle("sc-collapsed", !isEnabled2);
+              const isEnabled3 = subConfig[item.key] !== void 0 ? subConfig[item.key] !== false : defaultEnabled;
+              sub.classList.toggle("sc-collapsed", !isEnabled3);
               el = wrap;
             } else {
               el.classList.add("sc-toggle-item");
@@ -13428,8 +13900,8 @@ ${materials.join("\n")}`;
         }, 500);
         mainMenu.appendChild(btnGroup);
         content.append(mainMenu, secondaryMenu, backupMenu, info);
-        panel.append(trigger, content);
-        return panel;
+        panel2.append(trigger, content);
+        return panel2;
       };
       let panelThemeInited = false;
       const refreshPanelTheme = () => {
@@ -13636,8 +14108,8 @@ ${materials.join("\n")}`;
                 `;
           box.appendChild(tableContainer);
           document.body.appendChild(box);
-          const style = document.createElement("style");
-          style.textContent = `
+          const style2 = document.createElement("style");
+          style2.textContent = `
                     #mp-table-container table {
                         width: 100%;
                         table-layout: fixed;
@@ -13658,7 +14130,7 @@ ${materials.join("\n")}`;
                         flex-shrink: 1;    /* \u7F29\u5C0F\u907F\u514D\u6491\u51FA */
                     }
                 `;
-          document.head.appendChild(style);
+          document.head.appendChild(style2);
           const calcBtn = document.getElementById("mp-calc-btn");
           const percentInput = document.getElementById("mp-percent-input");
           calcBtn.addEventListener("click", async () => {
@@ -13802,7 +14274,7 @@ ${materials.join("\n")}`;
       return {
         init() {
           injectStyles();
-          panelElement = createPanel2();
+          panelElement = createPanel3();
           document.body.appendChild(panelElement);
           panelElement.addEventListener("click", (e) => {
             if (e.target.closest("[data-action-type]")) {
@@ -13921,6 +14393,43 @@ ${materials.join("\n")}`;
       };
     })();
     (function() {
+      const RETAIL_BUTTON_HIDDEN_CLASS = "sc-retail-store-button-hidden";
+      function getRetailStoreButtonConfig() {
+        let config = {};
+        try {
+          config = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+        } catch (e) {
+          config = {};
+        }
+        return {
+          enabled: typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled("autoPricing") : true,
+          hourly: config.autoPricingHourlyButton !== false,
+          total: config.autoPricingTotalButton !== false,
+          unitCost: config.autoPricingUnitCostInput !== false
+        };
+      }
+      function ensureRetailStoreButtonStyles() {
+        if (document.getElementById("sc-retail-store-button-settings-style")) return;
+        const style2 = document.createElement("style");
+        style2.id = "sc-retail-store-button-settings-style";
+        style2.textContent = `.${RETAIL_BUTTON_HIDDEN_CLASS}{display:none !important;}`;
+        document.head.appendChild(style2);
+      }
+      function refreshAutoPricingButtons() {
+        ensureRetailStoreButtonStyles();
+        const config = getRetailStoreButtonConfig();
+        document.querySelectorAll("[data-auto-pricing-added]").forEach((card) => {
+          const btnContainer = card.querySelector(".sc-retail-store-button-container");
+          const btnHourly = card.querySelector(".btn-max-hourly-profit");
+          const btnTotal = card.querySelector(".btn-max-total-profit");
+          const customCostInput = card.querySelector(".custom-unit-cost-input");
+          if (btnHourly) btnHourly.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.hourly);
+          if (btnTotal) btnTotal.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.total);
+          if (customCostInput) customCostInput.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.unitCost);
+          if (btnContainer) btnContainer.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.hourly && !config.total);
+        });
+      }
+      window.refreshAutoPricingButtons = refreshAutoPricingButtons;
       function setInput(inputNode, value, count = 3) {
         let lastValue = inputNode.value;
         inputNode.value = value;
@@ -14081,7 +14590,7 @@ ${materials.join("\n")}`;
         const { cogs: originalCogs, quality: quality2, quantity: quantity2 } = comp.state;
         const cardEl = document.querySelectorAll('div[style="overflow: visible;"]')[index];
         const customCostEl = cardEl?.querySelector(".custom-unit-cost-input");
-        const customUnitCostVal = customCostEl ? parseFloat(customCostEl.value) || 0 : 0;
+        const customUnitCostVal = getRetailStoreButtonConfig().unitCost && customCostEl ? parseFloat(customCostEl.value) || 0 : 0;
         const cogs2 = customUnitCostVal > 0 ? customUnitCostVal * quantity2 : originalCogs;
         const vVal = salesModifierWithRecreationBonus2 + Math.floor(skillCMO2 / 3);
         const bVal = Ul(administrationOverhead2, skillCOO2);
@@ -14171,6 +14680,12 @@ ${materials.join("\n")}`;
       };
       function initAutoPricing() {
         try {
+          const buttonConfig = getRetailStoreButtonConfig();
+          if (!buttonConfig.enabled) {
+            refreshAutoPricingButtons();
+            return;
+          }
+          ensureRetailStoreButtonStyles();
           const input = document.querySelector('input[name="price"]');
           if (!input) return;
           const reactInstance = findReactComponent(input);
@@ -14183,6 +14698,7 @@ ${materials.join("\n")}`;
             const comp = findReactComponent(priceInput);
             if (!comp) return;
             const btnContainer = document.createElement("div");
+            btnContainer.className = "sc-retail-store-button-container";
             btnContainer.style = `display: flex; flex-direction: column; gap: 4px; margin-top: 5px;`;
             const btnHourly = document.createElement("button");
             btnHourly.textContent = "\u6700\u5927\u65F6\u5229\u6DA6";
@@ -14210,6 +14726,10 @@ ${materials.join("\n")}`;
             customCostInput.min = "0";
             customCostInput.step = "0.01";
             customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid ${d ? "#555" : "#bbb"}; border-radius: 4px; background: ${d ? "#333" : "#fff"}; color: ${d ? "#fff" : "#333"}; font-size: 13px; box-sizing: border-box;`;
+            btnHourly.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly);
+            btnTotal.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.total);
+            customCostInput.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.unitCost);
+            btnContainer.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly && !buttonConfig.total);
             const startCalc = (targetComp, retryIdx = 0, mode = "hourly") => {
               if (localStorage.getItem("SimcompaniesConstantsData") == null) {
                 showToast("\u8BF7\u5C1D\u8BD5\u66F4\u65B0\u57FA\u672C\u6570\u636E\uFF08\u5DE6\u4E0B\u89D2\u6309\u94AE\uFF09");
@@ -14229,7 +14749,7 @@ ${materials.join("\n")}`;
               const zn2 = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
               const { size: size2, acceleration: acceleration2, economyState: economyState2, resource: resource2, salesModifierWithRecreationBonus: salesModifierWithRecreationBonus2, skillCMO: skillCMO2, skillCOO: skillCOO2, saturation: saturation2, administrationOverhead: administrationOverhead2, wages: wages2, buildingKind: buildingKind2, forceQuality: forceQuality2, weather = null } = targetComp.props;
               const { cogs: originalCogs, quality: quality2, quantity: quantity2 } = targetComp.state;
-              const customUnitCost = parseFloat(customCostInput.value) || 0;
+              const customUnitCost = getRetailStoreButtonConfig().unitCost ? parseFloat(customCostInput.value) || 0 : 0;
               const cogs2 = customUnitCost > 0 ? customUnitCost * quantity2 : originalCogs;
               const v = salesModifierWithRecreationBonus2 + Math.floor(skillCMO2 / 3);
               const b = Ul(administrationOverhead2, skillCOO2);
@@ -14279,6 +14799,7 @@ ${materials.join("\n")}`;
             priceInput.parentNode.insertBefore(customCostInput, profitDisplay.nextSibling);
             card.dataset.autoPricingAdded = "true";
           });
+          refreshAutoPricingButtons();
         } catch (err) {
         }
       }
@@ -14287,7 +14808,7 @@ ${materials.join("\n")}`;
         let debounceTimer;
         let lateCheckTimer;
         const targetNode = document.body;
-        const observer2 = new MutationObserver((mutationsList) => {
+        const observer3 = new MutationObserver((mutationsList) => {
           clearTimeout(debounceTimer);
           clearTimeout(lateCheckTimer);
           debounceTimer = setTimeout(() => {
@@ -14305,7 +14826,7 @@ ${materials.join("\n")}`;
             }
           }, 100);
         });
-        observer2.observe(targetNode, {
+        observer3.observe(targetNode, {
           childList: true,
           // 观察直接子节点的添加/删除
           subtree: true,
@@ -15131,7 +15652,7 @@ ${materials.join("\n")}`;
         }
         return createToggleSection(label, containerDiv, true);
       }
-      const init4 = () => {
+      const init5 = () => {
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
         let resizer;
         const d12 = DM();
@@ -15361,7 +15882,7 @@ ${materials.join("\n")}`;
       });
       return {
         show() {
-          if (!container) init4();
+          if (!container) init5();
           else container.style.display = "flex";
           renderResult();
         },
@@ -15603,25 +16124,25 @@ ${materials.join("\n")}`;
       function isExecPage() {
         return /\/headquarters\/executives\/?$/.test(location.href);
       }
-      const observer2 = new MutationObserver(() => {
+      const observer3 = new MutationObserver(() => {
         if (isExecPage()) injectCOOButton();
       });
-      function init4() {
+      function init5() {
         if (typeof window.isPageModuleEnabled === "function" && !window.isPageModuleEnabled("cooProfit")) return;
-        observer2.observe(document.body, { childList: true, subtree: true });
+        observer3.observe(document.body, { childList: true, subtree: true });
         if (isExecPage()) injectCOOButton();
       }
       if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", init4);
+        document.addEventListener("DOMContentLoaded", init5);
       } else {
-        init4();
+        init5();
       }
     })();
     (function() {
       "use strict";
-      var MODULE_KEY2 = "snipboardPreview";
-      function isEnabled2() {
-        return window.isPageModuleEnabled ? window.isPageModuleEnabled(MODULE_KEY2) : true;
+      var MODULE_KEY3 = "snipboardPreview";
+      function isEnabled3() {
+        return window.isPageModuleEnabled ? window.isPageModuleEnabled(MODULE_KEY3) : true;
       }
       function injectStyles() {
         var styleId = "sc-snipboard-preview-style";
@@ -15645,10 +16166,10 @@ ${materials.join("\n")}`;
         if (existingStyle) {
           existingStyle.textContent = styleText;
         } else {
-          var style = document.createElement("style");
-          style.id = styleId;
-          style.textContent = styleText;
-          document.head.appendChild(style);
+          var style2 = document.createElement("style");
+          style2.id = styleId;
+          style2.textContent = styleText;
+          document.head.appendChild(style2);
         }
       }
       function findChatContainers() {
@@ -15846,30 +16367,30 @@ ${materials.join("\n")}`;
         });
       }
       function scanContainer(container) {
-        if (!isEnabled2()) return;
+        if (!isEnabled3()) return;
         var links = container.querySelectorAll('a[href*="snipboard.io"]');
         for (var i = 0; i < links.length; i++) {
           processLink(links[i]);
         }
       }
       function scanAll() {
-        if (!isEnabled2()) return;
+        if (!isEnabled3()) return;
         var containers = findChatContainers();
         for (var i = 0; i < containers.length; i++) {
           scanContainer(containers[i]);
         }
       }
-      var observer2 = null;
+      var observer3 = null;
       var initAttempted = false;
-      function init4() {
+      function init5() {
         if (initAttempted) return;
         initAttempted = true;
-        if (!isEnabled2()) return;
+        if (!isEnabled3()) return;
         injectStyles();
         scanAll();
-        if (observer2) observer2.disconnect();
-        observer2 = new MutationObserver(function(mutations) {
-          if (!isEnabled2()) return;
+        if (observer3) observer3.disconnect();
+        observer3 = new MutationObserver(function(mutations) {
+          if (!isEnabled3()) return;
           for (var mi = 0; mi < mutations.length; mi++) {
             var m = mutations[mi];
             for (var ni = 0; ni < m.addedNodes.length; ni++) {
@@ -15888,7 +16409,7 @@ ${materials.join("\n")}`;
         });
         var containers = findChatContainers();
         for (var i = 0; i < containers.length; i++) {
-          observer2.observe(containers[i], { childList: true, subtree: true });
+          observer3.observe(containers[i], { childList: true, subtree: true });
         }
       }
       var lastUrl = location.href;
@@ -15896,21 +16417,21 @@ ${materials.join("\n")}`;
         if (lastUrl !== location.href) {
           lastUrl = location.href;
           initAttempted = false;
-          if (observer2) {
-            observer2.disconnect();
-            observer2 = null;
+          if (observer3) {
+            observer3.disconnect();
+            observer3 = null;
           }
-          setTimeout(init4, 300);
+          setTimeout(init5, 300);
         }
       }).observe(document, { subtree: true, childList: true });
-      setTimeout(init4, 500);
-      return { init: init4 };
+      setTimeout(init5, 500);
+      return { init: init5 };
     })();
     (function() {
       "use strict";
-      var MODULE_KEY2 = "chatInputExpander";
-      function isEnabled2() {
-        return typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled(MODULE_KEY2) : true;
+      var MODULE_KEY3 = "chatInputExpander";
+      function isEnabled3() {
+        return typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled(MODULE_KEY3) : true;
       }
       function injectStyles() {
         var styleId = "sc-chat-input-expander-style";
@@ -15976,10 +16497,10 @@ ${materials.join("\n")}`;
         if (existingStyle) {
           existingStyle.textContent = styleText;
         } else {
-          var style = document.createElement("style");
-          style.id = styleId;
-          style.textContent = styleText;
-          document.head.appendChild(style);
+          var style2 = document.createElement("style");
+          style2.id = styleId;
+          style2.textContent = styleText;
+          document.head.appendChild(style2);
         }
       }
       function readCustomHeight(key, fallback) {
@@ -16044,8 +16565,8 @@ ${materials.join("\n")}`;
           outerContainer
         };
       }
-      function init4() {
-        if (!isEnabled2()) return;
+      function init5() {
+        if (!isEnabled3()) return;
         injectStyles();
       }
       var isClickingInside = false;
@@ -16073,7 +16594,7 @@ ${materials.join("\n")}`;
         }
       }
       document.addEventListener("mousedown", function(e) {
-        if (!isEnabled2()) return;
+        if (!isEnabled3()) return;
         var target = e.target;
         if (target) {
           var inputGroup = target.closest(".input-group");
@@ -16086,7 +16607,7 @@ ${materials.join("\n")}`;
         isClickingInside = false;
       });
       document.addEventListener("mouseup", function() {
-        if (!isEnabled2()) return;
+        if (!isEnabled3()) return;
         setTimeout(function() {
           isClickingInside = false;
           var activeEl = document.activeElement;
@@ -16096,7 +16617,7 @@ ${materials.join("\n")}`;
         }, 150);
       });
       document.addEventListener("focusin", function(e) {
-        if (!isEnabled2()) return;
+        if (!isEnabled3()) return;
         var target = e.target;
         if (isChatInput(target)) {
           var containers = findContainers(target);
@@ -16137,7 +16658,7 @@ ${materials.join("\n")}`;
           collapseContainers(target);
         }
       });
-      init4();
+      init5();
       window.scChatInputExpanderApplyStyles = injectStyles;
     })();
     const UPDATE_IGNORE_KEY = "sc_autoMaxPPHPL_ignored_version";
@@ -16155,8 +16676,8 @@ ${materials.join("\n")}`;
     }
     function showUpdateToast(version, changelog, downloadUrl) {
       const dUp = DM();
-      const style = document.createElement("style");
-      style.textContent = `
+      const style2 = document.createElement("style");
+      style2.textContent = `
             .sc-update-toast {
                 position: fixed; top: -80px; left: 50%; transform: translateX(-50%);
                 z-index: 10001; background: #2196F3; color: white;
@@ -16219,7 +16740,7 @@ ${materials.join("\n")}`;
             .sc-btn-link { background: transparent; color: ${dUp ? "#aaa" : "#999"}; text-decoration: underline; padding: 8px 0; }
             .sc-btn-link:hover { color: ${dUp ? "#ccc" : "#666"}; }
         `;
-      document.head.appendChild(style);
+      document.head.appendChild(style2);
       const toast = document.createElement("div");
       toast.className = "sc-update-toast sc-update-toast-autoMaxPPHPL";
       toast.innerHTML = `
@@ -16295,4 +16816,4 @@ ${materials.join("\n")}`;
   })();
 })();
 
-// @changelog 自定义运行时长适配新版生产界面
+// @changelog 1.33.13：新增销售办公室优化（测试中）；修复新版零售ui自定义时长按钮显示，支持单独设置零售按钮开关。<br>*由于作者没有大楼，需要大楼玩家反馈新功能出现的问题
