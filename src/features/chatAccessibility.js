@@ -10,6 +10,7 @@
 
         let observer = null;
         let styleInjected = false;
+        let initTimer = null;
 
         // 检查功能开关是否开启
         function isEnabled() {
@@ -80,6 +81,7 @@
         }
 
         function scanContainer(container) {
+            if (container.matches?.('img.emoji:not([data-sc-emoji-done])')) processEmoji(container);
             const emojis = container.querySelectorAll('img.emoji:not([data-sc-emoji-done])');
             emojis.forEach(processEmoji);
         }
@@ -92,18 +94,35 @@
             return document.querySelectorAll('div[style*="column-reverse"][style*="overflow"]');
         }
 
+        // 只读取房间名，避免色弱/全局屏蔽按钮的文案参与白名单匹配。
+        function readRoomName(header) {
+            if (!header) return '';
+            const title = header.cloneNode(true);
+            title.querySelectorAll('.sc-chat-toggle-btn, .sc-chat-block-quick').forEach(btn => btn.remove());
+            return title.textContent?.trim() || '';
+        }
+
         // 获取当前聊天室名称
         function getChatRoom() {
             // 优先通过聊天室标识容器查找
             const roomIndicator = document.querySelector('div.css-13udsys.col-lg-6');
             if (roomIndicator) {
                 const header = roomIndicator.querySelector('div.well-header.text-uppercase.css-12ztnbp');
-                if (header) return header.textContent?.trim() || '';
+                if (header) return readRoomName(header);
             }
             // 后备：直接查找 header
             const header = document.querySelector('div.well-header.text-uppercase.css-12ztnbp');
-            if (header) return header.textContent?.trim() || '';
-            return '';
+            return readRoomName(header);
+        }
+
+        function cleanupUI() {
+            document.querySelectorAll('.sc-chat-toggle-btn').forEach(btn => btn.remove());
+            document.querySelectorAll('.sc-chat-assist').forEach(container => container.classList.remove('sc-chat-assist'));
+        }
+
+        function scheduleInit(delay) {
+            if (initTimer !== null) clearTimeout(initTimer);
+            initTimer = setTimeout(init, delay);
         }
 
         // 给所有符合条件的聊天室 header 添加切换按钮
@@ -113,11 +132,14 @@
 
             const headers = document.querySelectorAll('div.well-header.text-uppercase.css-12ztnbp');
             headers.forEach(header => {
+                const roomName = readRoomName(header);
+                if (!ALLOWED_ROOMS.includes(roomName)) {
+                    header.querySelector('.sc-chat-toggle-btn')?.remove();
+                    return;
+                }
+
                 // 查重
                 if (header.querySelector('.sc-chat-toggle-btn')) return;
-
-                const roomName = header.textContent?.trim() || '';
-                if (!ALLOWED_ROOMS.includes(roomName)) return;
 
                 const enabled = isEnabled();
                 const btn = document.createElement('button');
@@ -147,39 +169,46 @@
 
         // 初始化监听
         function init() {
+            if (initTimer !== null) { clearTimeout(initTimer); initTimer = null; }
             if (observer) { observer.disconnect(); observer = null; }
+
+            // 设置面板关闭功能时立即恢复图标并移除入口，不等待切换聊天室。
+            if (!isEnabled()) {
+                cleanupUI();
+                return;
+            }
 
             injectStyles();
 
             const room = getChatRoom();
             if (!room) {
-                setTimeout(init, 1000);
+                cleanupUI();
+                scheduleInit(1000);
                 return;
             }
 
-            if (!ALLOWED_ROOMS.includes(room)) return;
+            if (!ALLOWED_ROOMS.includes(room)) {
+                cleanupUI();
+                return;
+            }
+
+            // 标题和消息列表可分批挂载，按钮状态无需等待消息列表。
+            addToggleButtons();
+            refreshAllButtons();
 
             const chatContainers = findChatContainers();
             if (chatContainers.length === 0) {
-                setTimeout(init, 1000);
+                scheduleInit(1000);
                 return;
             }
 
-            // 仅开启时扫描包裹（关闭时不产生 DOM 开销；开启由设置面板/头部按钮触发重新扫描）
-            if (isEnabled()) {
-                chatContainers.forEach(container => {
-                    scanContainer(container);
-                });
-            }
-
-            // 给所有符合条件的聊天室 header 添加切换按钮
-            addToggleButtons();
+            // 仅开启时扫描包裹；重复刷新后重新监听当前消息容器。
+            chatContainers.forEach(container => scanContainer(container));
 
             // 应用当前开关状态到所有容器
             refreshAllContainers();
 
-            // 监听新消息（始终监听，但 CSS 控制显示；关闭时不扫描包裹）
-            if (observer) observer.disconnect();
+            // 标题按钮切到图标模式时保留监听，但不扫描包裹。
             observer = new MutationObserver((mutations) => {
                 if (!isEnabled()) return;
                 for (const m of mutations) {
@@ -198,12 +227,12 @@
         new MutationObserver(() => {
             if (lastUrl !== location.href) {
                 lastUrl = location.href;
-                setTimeout(init, 500);
+                scheduleInit(500);
             }
         }).observe(document, { subtree: true, childList: true });
 
         // 延迟启动
-        setTimeout(init, 1000);
+        scheduleInit(1000);
 
         // 供设置面板开关后触发重新扫描（与 scChatEmojiPickerRefresh 同模式）
         window.scChatAccessibilityRefresh = () => init();
