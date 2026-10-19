@@ -82,6 +82,7 @@ npm run release -- "<changelog>"
 - **未发布区混用**：多个 WIP 功能共用未发布区时，提交/发布前确认本次发布范围，避免条目与代码归属错位。
 - **分支保护**：`main` 有必需状态检查时，CI 未绿会拒绝合并；本仓库**未启用 auto-merge**（`gh pr merge --auto` 会报 `enablePullRequestAutoMerge` 错误），正确做法是等 CI 变绿（轮询 `gh pr checks`）后再执行 `gh pr merge`。
 - **release 后检查 CHANGELOG 格式**：新版本条目与下一节之间应保留空行（条目通常为"更新说明 + 原未发布明细"）。
+- **发布提示与未发布条目去重**：当确认的插件内提示与 `CHANGELOG.md` 未发布条目文字完全相同时，`release.js` 会在新版本条目中写入两条相同内容；构建后只保留一条版本记录，同时保持正式产物尾部的 `@changelog` 文案不变。
 - **中文 PR 载荷**：`gh pr create` 没有 `--title-file`（只有 `--body-file`）；标题与正文统一用 UTF-8 JSON 文件 + `gh api ... --input` 提交，创建后到 GitHub 核对中文（配合第 6 节编码规则）。
 - **PR 描述必须完整**：不能只写功能摘要；必须明确写出 `pageObserver -> SC_Modules -> 功能模块 -> DOM/异步任务 -> 清理` 调用链、影响范围、验证结果和剩余风险。代码审查修复后同步更新原 PR 描述，不要只追加提交。
 - **更新提示先审阅**：正式发布前，把拟推送的游戏内更新提示（发布说明 / `@changelog` 文案）发给项目负责人审阅确认，确认后再执行 `npm run release`、发布 PR 与标签推送。
