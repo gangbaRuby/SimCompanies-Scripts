@@ -701,6 +701,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     if (key === 'salesOfficeHelper') {
                         window.SC_Modules?.salesOfficeHelper?.init();
                     }
+                    if (key === 'chatInputExpander' && typeof window.scChatInputExpanderApplyStyles === 'function') {
+                        window.scChatInputExpanderApplyStyles();
+                    }
                     if (typeof window.scChatEmojiPickerRefresh === 'function') {
                         window.scChatEmojiPickerRefresh();
                     }
@@ -4433,6 +4436,8 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         'use strict';
 
         var MODULE_KEY = 'chatInputExpander';
+        var activeSession = null;
+        var releaseTimer = null;
 
         function isEnabled() {
             return typeof window.isPageModuleEnabled === 'function' ? window.isPageModuleEnabled(MODULE_KEY) : true;
@@ -4461,7 +4466,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
                 /* 焦点在输入框内时的扩大状态（默认桌面端/平板） */
                 .sc-chat-textarea-focused {
-                    height: ${desktopHeight}px !important;
+                    height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
                     top: 0px !important;
                     bottom: 0px !important;
                     border-color: #2196F3 !important;
@@ -4469,38 +4474,43 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 }
                 /* 使输入框紧邻的前置高亮渲染 div 的高度同步拉伸，防止文本输入层级错位导致输入法定位失灵被覆盖 */
                 .sc-chat-wrap-focused > div {
-                    height: ${desktopHeight}px !important;
-                    min-height: ${desktopHeight}px !important;
+                    height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
+                    min-height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
                 }
                 .sc-chat-input-group-focused {
-                    height: ${desktopHeight}px !important;
+                    height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
                 }
                 /* 发送按钮容器高度扩大，并利用 vertical-align 靠底对齐，保持原有 table-cell 布局不被破坏 */
                 .sc-chat-btn-focused {
-                    height: ${desktopHeight}px !important;
+                    height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
                     vertical-align: bottom !important;
                 }
                 .sc-chat-outer-focused {
-                    height: ${desktopHeight + 8}px !important;
+                    height: calc(var(--sc-chat-input-height, ${desktopHeight}px) + 8px) !important;
+                    flex-shrink: 0;
+                }
+                /* 固定聊天布局无法滚动时，只移动当前输入区，不移动 React 节点。 */
+                .sc-chat-input-lifted {
+                    transform: translateY(var(--sc-chat-input-offset)) !important;
                 }
 
                 /* 移动端/小屏幕适配：防止弹出的虚拟键盘和过大输入框遮挡全部屏幕 */
                 @media (max-width: 767px) {
                     .sc-chat-textarea-focused {
-                        height: ${mobileHeight}px !important;
+                        height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
                     }
                     .sc-chat-wrap-focused > div {
-                        height: ${mobileHeight}px !important;
-                        min-height: ${mobileHeight}px !important;
+                        height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
+                        min-height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
                     }
                     .sc-chat-input-group-focused {
-                        height: ${mobileHeight}px !important;
+                        height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
                     }
                     .sc-chat-btn-focused {
-                        height: ${mobileHeight}px !important;
+                        height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
                     }
                     .sc-chat-outer-focused {
-                        height: ${mobileHeight + 8}px !important;
+                        height: calc(var(--sc-chat-input-height, ${mobileHeight}px) + 8px) !important;
                     }
                 }
             `;
@@ -4614,12 +4624,119 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
         var isClickingInside = false;
 
+        // 监听仅属于本次聚焦；失焦时先停止追随键盘，发送点击完成后再恢复布局。
+        function stopTracking() {
+            var session = activeSession;
+            if (!session) return;
+            if (session.frame !== null) cancelAnimationFrame(session.frame);
+            clearTimeout(session.settleTimer);
+            session.frame = null;
+            session.settleTimer = null;
+            if (session.observer) session.observer.disconnect();
+            session.viewport?.removeEventListener('resize', requestLayout);
+            session.viewport?.removeEventListener('scroll', requestLayout);
+            window.removeEventListener('resize', requestLayout);
+            window.removeEventListener('orientationchange', requestLayout);
+            session.listening = false;
+        }
+
+        function inputBounds(session) {
+            var rect = session.textarea.getBoundingClientRect();
+            var buttonRect = session.containers.btnContainer?.getBoundingClientRect();
+            // 扣除上一次补偿，避免 resize/scroll 连续回调时在两个位置之间跳动。
+            return {
+                top: Math.min(rect.top, buttonRect?.height ? buttonRect.top : rect.top) - session.offset,
+                bottom: Math.max(rect.bottom, buttonRect?.height ? buttonRect.bottom : rect.bottom) - session.offset
+            };
+        }
+
+        function updateLayout() {
+            var session = activeSession;
+            if (!session) return;
+            session.frame = null;
+            if (!isEnabled() || !session.textarea.isConnected || session.url !== location.href) {
+                collapseAll();
+                return;
+            }
+            if (!session.listening || document.activeElement !== session.textarea || isClickingInside) return;
+
+            var viewport = session.viewport;
+            var height = viewport?.height || window.innerHeight;
+            var top = (viewport?.offsetTop || 0) + 8;
+            var bottom = top + height - 16;
+            var mobile = window.matchMedia('(max-width: 767px)').matches;
+            var desired = readCustomHeight(mobile ? 'chatInputExpanderHeightMobile' : 'chatInputExpanderHeight', mobile ? 90 : 130);
+            // 上下各留 8px，外壳另有 8px；不改写用户保存的配置。
+            var fitted = Math.min(desired, Math.max(40, Math.floor(height - 24)));
+            var outer = session.containers.outerContainer || session.containers.inputGroup;
+            if (!outer) return;
+            outer.style.setProperty('--sc-chat-input-height', fitted + 'px');
+
+            var bounds = inputBounds(session);
+            var delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
+            // 优先使用可滚动祖先；instant 避免与键盘动画叠加的平滑滚动来回争抢位置。
+            var ancestor = outer.parentElement;
+            while (ancestor && Math.abs(delta) > 1) {
+                var scrollable = ancestor === document.scrollingElement || /^(auto|scroll|overlay)$/.test(getComputedStyle(ancestor).overflowY);
+                if (scrollable && ancestor.scrollHeight > ancestor.clientHeight) {
+                    ancestor.scrollBy({ top: delta, behavior: 'instant' });
+                    bounds = inputBounds(session);
+                    delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
+                }
+                ancestor = ancestor.parentElement;
+            }
+            // 部分安卓浏览器只缩小 visual viewport，固定页面没有滚动余量。
+            session.offset = Math.abs(delta) > 1 ? -delta : 0;
+            outer.style.setProperty('--sc-chat-input-offset', session.offset + 'px');
+            outer.classList.toggle('sc-chat-input-lifted', session.offset !== 0);
+        }
+
+        function queueLayout() {
+            if (activeSession?.listening && activeSession.frame === null) {
+                activeSession.frame = requestAnimationFrame(updateLayout);
+            }
+        }
+
+        function requestLayout() {
+            if (!activeSession?.listening) return;
+            queueLayout();
+            clearTimeout(activeSession.settleTimer);
+            // 高度过渡结束后补一次测量；之后仍由实际键盘视口事件驱动。
+            activeSession.settleTimer = setTimeout(queueLayout, 250);
+        }
+
+        function startTracking(textarea, containers) {
+            activeSession = {
+                textarea: textarea, containers: containers, parent: textarea.parentElement,
+                viewport: window.visualViewport, url: location.href,
+                offset: 0, frame: null, settleTimer: null, listening: true, observer: null
+            };
+            activeSession.viewport?.addEventListener('resize', requestLayout);
+            activeSession.viewport?.addEventListener('scroll', requestLayout);
+            window.addEventListener('resize', requestLayout);
+            window.addEventListener('orientationchange', requestLayout);
+            // React 移除聚焦节点不一定触发 focusout，保留引用以清理所有原容器。
+            activeSession.observer = new MutationObserver(() => {
+                if (activeSession && (!textarea.isConnected || activeSession.url !== location.href)) collapseAll();
+            });
+            activeSession.observer.observe(document.body, { childList: true, subtree: true });
+            requestLayout();
+        }
+
         // 收缩单个输入框关联的所有容器
         function collapseContainers(textarea) {
-            var containers = findContainers(textarea);
+            var session = activeSession?.textarea === textarea ? activeSession : null;
+            var containers = session ? session.containers : findContainers(textarea);
+            if (session) {
+                stopTracking();
+                activeSession = null;
+                clearTimeout(releaseTimer);
+                releaseTimer = null;
+                isClickingInside = false;
+            }
             textarea.classList.remove('sc-chat-textarea-focused');
 
-            var parent = textarea.parentElement;
+            var parent = session ? session.parent : textarea.parentElement;
             if (parent) {
                 parent.classList.remove('sc-chat-wrap-focused');
             }
@@ -4633,10 +4750,17 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             if (containers.outerContainer) {
                 containers.outerContainer.classList.remove('sc-chat-outer-focused');
             }
+            var outer = containers.outerContainer || containers.inputGroup;
+            if (outer) {
+                outer.classList.remove('sc-chat-input-lifted');
+                outer.style.removeProperty('--sc-chat-input-height');
+                outer.style.removeProperty('--sc-chat-input-offset');
+            }
         }
 
         // 收缩所有已展开的聊天输入框
         function collapseAll() {
+            if (activeSession) collapseContainers(activeSession.textarea);
             var expanded = document.querySelectorAll('.sc-chat-textarea-focused');
             for (var i = 0; i < expanded.length; i++) {
                 collapseContainers(expanded[i]);
@@ -4644,13 +4768,14 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         }
 
         // 监听鼠标按下事件，判断用户点击是否在聊天输入组件内部（例如点击发送按钮），此时不能立刻失焦收缩，避免点击位移失效
-        document.addEventListener('mousedown', function (e) {
+        var downEvent = window.PointerEvent ? 'pointerdown' : 'mousedown';
+        var upEvent = window.PointerEvent ? 'pointerup' : 'mouseup';
+        document.addEventListener(downEvent, function (e) {
             if (!isEnabled()) return;
             var target = e.target;
             if (target) {
-                var inputGroup = target.closest('.input-group');
-                var outerFocused = target.closest('.sc-chat-outer-focused');
-                if (inputGroup || outerFocused) {
+                var outer = activeSession?.containers.outerContainer || activeSession?.containers.inputGroup;
+                if (outer?.contains(target)) {
                     isClickingInside = true;
                     return;
                 }
@@ -4659,22 +4784,29 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         });
 
         // 鼠标松开后延迟重置点击状态，如果此时焦点彻底移出了输入框，则在交互完成后收缩
-        document.addEventListener('mouseup', function () {
-            if (!isEnabled()) return;
-            setTimeout(function () {
+        function releaseInteraction() {
+            if (!isEnabled() || !activeSession) return;
+            clearTimeout(releaseTimer);
+            releaseTimer = setTimeout(function () {
+                releaseTimer = null;
                 isClickingInside = false;
                 var activeEl = document.activeElement;
                 if (!isChatInput(activeEl)) {
                     collapseAll();
+                } else {
+                    requestLayout();
                 }
             }, 150);
-        });
+        }
+        document.addEventListener(upEvent, releaseInteraction);
+        if (window.PointerEvent) document.addEventListener('pointercancel', releaseInteraction);
 
         // 利用全局事件代理监听焦点，避免 React 重新渲染页面导致绑定失效
-        document.addEventListener('focusin', function (e) {
+        function expandInput(target) {
             if (!isEnabled()) return;
-            var target = e.target;
             if (isChatInput(target)) {
+                collapseAll();
+                injectStyles();
                 var containers = findContainers(target);
 
                 target.classList.add('sc-chat-textarea-transition');
@@ -4699,22 +4831,17 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     containers.outerContainer.classList.add('sc-chat-outer-focused');
                 }
 
-                // 解决移动端虚拟键盘弹起时输入框可能被键盘物理覆盖遮挡的问题：平滑将输入框滚动至可视区域中上部
-                setTimeout(function () {
-                    if (document.activeElement === target) {
-                        if (typeof target.scrollIntoViewIfNeeded === 'function') {
-                            target.scrollIntoViewIfNeeded(false);
-                        } else {
-                            target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-                        }
-                    }
-                }, 300);
+                startTracking(target, containers);
             }
+        }
+        document.addEventListener('focusin', function (e) {
+            expandInput(e.target);
         });
 
         document.addEventListener('focusout', function (e) {
             var target = e.target;
             if (isChatInput(target)) {
+                if (activeSession?.textarea === target) stopTracking();
                 // 如果用户当前正在点击输入区内部（如发送按钮），绝不立刻收缩以防止点击丢失
                 if (isClickingInside) return;
                 collapseContainers(target);
@@ -4725,7 +4852,14 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         init();
 
         // 供设置面板在修改自定义高度后立即重新生成样式
-        window.scChatInputExpanderApplyStyles = injectStyles;
+        window.scChatInputExpanderApplyStyles = function () {
+            if (!isEnabled()) {
+                collapseAll();
+                return;
+            }
+            injectStyles();
+            if (isChatInput(document.activeElement)) expandInput(document.activeElement);
+        };
     })();
 
     // ======================
