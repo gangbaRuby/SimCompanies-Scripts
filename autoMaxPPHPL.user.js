@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.14
+// @version      1.33.15
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -5702,7 +5702,7 @@ ${lines.join("\n")}`;
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.14",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.15",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -16614,10 +16614,10 @@ ${lines.join("\n")}`;
         session.frame = null;
         session.settleTimer = null;
         if (session.observer) session.observer.disconnect();
-        session.viewport?.removeEventListener("resize", requestLayout);
-        session.viewport?.removeEventListener("scroll", requestLayout);
-        window.removeEventListener("resize", requestLayout);
-        window.removeEventListener("orientationchange", requestLayout);
+        session.viewport?.removeEventListener("resize", handleViewportChange);
+        session.viewport?.removeEventListener("scroll", handleViewportChange);
+        window.removeEventListener("resize", handleWindowResize);
+        window.removeEventListener("orientationchange", handleOrientationChange);
         session.listening = false;
       }
       function inputBounds(session) {
@@ -16647,6 +16647,7 @@ ${lines.join("\n")}`;
         var outer = session.containers.outerContainer || session.containers.inputGroup;
         if (!outer) return;
         outer.style.setProperty("--sc-chat-input-height", fitted + "px");
+        if (!session.positionInput) return;
         var bounds = inputBounds(session);
         var delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
         var ancestor = outer.parentElement;
@@ -16674,28 +16675,51 @@ ${lines.join("\n")}`;
         clearTimeout(activeSession.settleTimer);
         activeSession.settleTimer = setTimeout(queueLayout, 250);
       }
-      function startTracking(textarea, containers) {
+      function handleViewportChange() {
+        if (!activeSession?.listening) return;
+        activeSession.positionInput = true;
+        requestLayout();
+      }
+      function handleWindowResize() {
+        if (!activeSession?.listening) return;
+        if (!activeSession.viewport && Math.abs(window.innerHeight - activeSession.baselineHeight) > 1) {
+          activeSession.positionInput = true;
+        }
+        requestLayout();
+      }
+      function handleOrientationChange() {
+        if (!activeSession?.listening) return;
+        activeSession.positionInput = true;
+        requestLayout();
+      }
+      function startTracking(textarea, containers, positionInput) {
+        var viewport = window.visualViewport;
+        var baselineHeight = viewport?.height || window.innerHeight;
         activeSession = {
           textarea,
           containers,
           parent: textarea.parentElement,
-          viewport: window.visualViewport,
+          viewport,
           url: location.href,
+          baselineHeight,
+          // 首次聚焦只改变高度，真实视口变化后才允许滚动或位移。
+          positionInput: positionInput === true,
           offset: 0,
           frame: null,
           settleTimer: null,
           listening: true,
           observer: null
         };
-        activeSession.viewport?.addEventListener("resize", requestLayout);
-        activeSession.viewport?.addEventListener("scroll", requestLayout);
-        window.addEventListener("resize", requestLayout);
-        window.addEventListener("orientationchange", requestLayout);
+        activeSession.viewport?.addEventListener("resize", handleViewportChange);
+        activeSession.viewport?.addEventListener("scroll", handleViewportChange);
+        window.addEventListener("resize", handleWindowResize);
+        window.addEventListener("orientationchange", handleOrientationChange);
         activeSession.observer = new MutationObserver(() => {
           if (activeSession && (!textarea.isConnected || activeSession.url !== location.href)) collapseAll();
         });
         activeSession.observer.observe(document.body, { childList: true, subtree: true });
-        requestLayout();
+        updateLayout();
+        if (activeSession.positionInput) requestLayout();
       }
       function collapseContainers(textarea) {
         var session = activeSession?.textarea === textarea ? activeSession : null;
@@ -16765,7 +16789,7 @@ ${lines.join("\n")}`;
       }
       document.addEventListener(upEvent, releaseInteraction);
       if (window.PointerEvent) document.addEventListener("pointercancel", releaseInteraction);
-      function expandInput(target) {
+      function expandInput(target, positionInput) {
         if (!isEnabled3()) return;
         if (isChatInput(target)) {
           collapseAll();
@@ -16790,7 +16814,7 @@ ${lines.join("\n")}`;
             containers.outerContainer.classList.add("sc-chat-container-transition");
             containers.outerContainer.classList.add("sc-chat-outer-focused");
           }
-          startTracking(target, containers);
+          startTracking(target, containers, positionInput);
         }
       }
       document.addEventListener("focusin", function(e) {
@@ -16810,8 +16834,9 @@ ${lines.join("\n")}`;
           collapseAll();
           return;
         }
+        var keepPosition = !!activeSession?.positionInput;
         injectStyles();
-        if (isChatInput(document.activeElement)) expandInput(document.activeElement);
+        if (isChatInput(document.activeElement)) expandInput(document.activeElement, keepPosition);
       };
     })();
     const UPDATE_IGNORE_KEY = "sc_autoMaxPPHPL_ignored_version";
@@ -16969,4 +16994,4 @@ ${lines.join("\n")}`;
   })();
 })();
 
-// @changelog 修复聊天室色弱辅助与全局屏蔽的开关显示冲突，设置即时生效；优化手机聊天输入框自动扩大时的键盘避让，减少输入框被遮挡的情况。
+// @changelog 修复聊天输入框首次自动扩大时背景可能消失的问题。
