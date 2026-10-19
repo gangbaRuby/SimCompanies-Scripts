@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.13
+// @version      1.33.14
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -5702,7 +5702,7 @@ ${lines.join("\n")}`;
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.13",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.14",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -10799,6 +10799,7 @@ ${lines.join("\n")}`;
     const ALLOWED_ROOMS = ["Sales", "Aerospace sales", "[ZH] \u4EA4\u6613"];
     let observer3 = null;
     let styleInjected = false;
+    let initTimer = null;
     function isEnabled3() {
       try {
         const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
@@ -10852,6 +10853,7 @@ ${lines.join("\n")}`;
       wrapper.appendChild(textSpan);
     }
     function scanContainer(container) {
+      if (container.matches?.("img.emoji:not([data-sc-emoji-done])")) processEmoji(container);
       const emojis = container.querySelectorAll("img.emoji:not([data-sc-emoji-done])");
       emojis.forEach(processEmoji);
     }
@@ -10860,23 +10862,39 @@ ${lines.join("\n")}`;
       if (byClass.length > 0) return byClass;
       return document.querySelectorAll('div[style*="column-reverse"][style*="overflow"]');
     }
+    function readRoomName(header) {
+      if (!header) return "";
+      const title = header.cloneNode(true);
+      title.querySelectorAll(".sc-chat-toggle-btn, .sc-chat-block-quick").forEach((btn) => btn.remove());
+      return title.textContent?.trim() || "";
+    }
     function getChatRoom() {
       const roomIndicator = document.querySelector("div.css-13udsys.col-lg-6");
       if (roomIndicator) {
         const header2 = roomIndicator.querySelector("div.well-header.text-uppercase.css-12ztnbp");
-        if (header2) return header2.textContent?.trim() || "";
+        if (header2) return readRoomName(header2);
       }
       const header = document.querySelector("div.well-header.text-uppercase.css-12ztnbp");
-      if (header) return header.textContent?.trim() || "";
-      return "";
+      return readRoomName(header);
+    }
+    function cleanupUI() {
+      document.querySelectorAll(".sc-chat-toggle-btn").forEach((btn) => btn.remove());
+      document.querySelectorAll(".sc-chat-assist").forEach((container) => container.classList.remove("sc-chat-assist"));
+    }
+    function scheduleInit(delay) {
+      if (initTimer !== null) clearTimeout(initTimer);
+      initTimer = setTimeout(init5, delay);
     }
     function addToggleButtons() {
       if (!isEnabled3()) return;
       const headers = document.querySelectorAll("div.well-header.text-uppercase.css-12ztnbp");
       headers.forEach((header) => {
+        const roomName = readRoomName(header);
+        if (!ALLOWED_ROOMS.includes(roomName)) {
+          header.querySelector(".sc-chat-toggle-btn")?.remove();
+          return;
+        }
         if (header.querySelector(".sc-chat-toggle-btn")) return;
-        const roomName = header.textContent?.trim() || "";
-        if (!ALLOWED_ROOMS.includes(roomName)) return;
         const enabled = isEnabled3();
         const btn = document.createElement("button");
         btn.className = "sc-chat-toggle-btn";
@@ -10899,30 +10917,38 @@ ${lines.join("\n")}`;
       });
     }
     function init5() {
+      if (initTimer !== null) {
+        clearTimeout(initTimer);
+        initTimer = null;
+      }
       if (observer3) {
         observer3.disconnect();
         observer3 = null;
       }
+      if (!isEnabled3()) {
+        cleanupUI();
+        return;
+      }
       injectStyles();
       const room = getChatRoom();
       if (!room) {
-        setTimeout(init5, 1e3);
+        cleanupUI();
+        scheduleInit(1e3);
         return;
       }
-      if (!ALLOWED_ROOMS.includes(room)) return;
-      const chatContainers = findChatContainers();
-      if (chatContainers.length === 0) {
-        setTimeout(init5, 1e3);
+      if (!ALLOWED_ROOMS.includes(room)) {
+        cleanupUI();
         return;
-      }
-      if (isEnabled3()) {
-        chatContainers.forEach((container) => {
-          scanContainer(container);
-        });
       }
       addToggleButtons();
+      refreshAllButtons();
+      const chatContainers = findChatContainers();
+      if (chatContainers.length === 0) {
+        scheduleInit(1e3);
+        return;
+      }
+      chatContainers.forEach((container) => scanContainer(container));
       refreshAllContainers();
-      if (observer3) observer3.disconnect();
       observer3 = new MutationObserver((mutations) => {
         if (!isEnabled3()) return;
         for (const m of mutations) {
@@ -10939,10 +10965,10 @@ ${lines.join("\n")}`;
     new MutationObserver(() => {
       if (lastUrl !== location.href) {
         lastUrl = location.href;
-        setTimeout(init5, 500);
+        scheduleInit(500);
       }
     }).observe(document, { subtree: true, childList: true });
-    setTimeout(init5, 1e3);
+    scheduleInit(1e3);
     window.scChatAccessibilityRefresh = () => init5();
     return { init: init5, getChatRoom, EMOJI_TEXT, ALLOWED_ROOMS };
   })();
@@ -13172,6 +13198,9 @@ ${lines.join("\n")}`;
             }
             if (key === "salesOfficeHelper") {
               window.SC_Modules?.salesOfficeHelper?.init();
+            }
+            if (key === "chatInputExpander" && typeof window.scChatInputExpanderApplyStyles === "function") {
+              window.scChatInputExpanderApplyStyles();
             }
             if (typeof window.scChatEmojiPickerRefresh === "function") {
               window.scChatEmojiPickerRefresh();
@@ -16430,6 +16459,8 @@ ${lines.join("\n")}`;
     (function() {
       "use strict";
       var MODULE_KEY3 = "chatInputExpander";
+      var activeSession = null;
+      var releaseTimer = null;
       function isEnabled3() {
         return typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled(MODULE_KEY3) : true;
       }
@@ -16451,7 +16482,7 @@ ${lines.join("\n")}`;
 
                 /* \u7126\u70B9\u5728\u8F93\u5165\u6846\u5185\u65F6\u7684\u6269\u5927\u72B6\u6001\uFF08\u9ED8\u8BA4\u684C\u9762\u7AEF/\u5E73\u677F\uFF09 */
                 .sc-chat-textarea-focused {
-                    height: ${desktopHeight}px !important;
+                    height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
                     top: 0px !important;
                     bottom: 0px !important;
                     border-color: #2196F3 !important;
@@ -16459,38 +16490,43 @@ ${lines.join("\n")}`;
                 }
                 /* \u4F7F\u8F93\u5165\u6846\u7D27\u90BB\u7684\u524D\u7F6E\u9AD8\u4EAE\u6E32\u67D3 div \u7684\u9AD8\u5EA6\u540C\u6B65\u62C9\u4F38\uFF0C\u9632\u6B62\u6587\u672C\u8F93\u5165\u5C42\u7EA7\u9519\u4F4D\u5BFC\u81F4\u8F93\u5165\u6CD5\u5B9A\u4F4D\u5931\u7075\u88AB\u8986\u76D6 */
                 .sc-chat-wrap-focused > div {
-                    height: ${desktopHeight}px !important;
-                    min-height: ${desktopHeight}px !important;
+                    height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
+                    min-height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
                 }
                 .sc-chat-input-group-focused {
-                    height: ${desktopHeight}px !important;
+                    height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
                 }
                 /* \u53D1\u9001\u6309\u94AE\u5BB9\u5668\u9AD8\u5EA6\u6269\u5927\uFF0C\u5E76\u5229\u7528 vertical-align \u9760\u5E95\u5BF9\u9F50\uFF0C\u4FDD\u6301\u539F\u6709 table-cell \u5E03\u5C40\u4E0D\u88AB\u7834\u574F */
                 .sc-chat-btn-focused {
-                    height: ${desktopHeight}px !important;
+                    height: var(--sc-chat-input-height, ${desktopHeight}px) !important;
                     vertical-align: bottom !important;
                 }
                 .sc-chat-outer-focused {
-                    height: ${desktopHeight + 8}px !important;
+                    height: calc(var(--sc-chat-input-height, ${desktopHeight}px) + 8px) !important;
+                    flex-shrink: 0;
+                }
+                /* \u56FA\u5B9A\u804A\u5929\u5E03\u5C40\u65E0\u6CD5\u6EDA\u52A8\u65F6\uFF0C\u53EA\u79FB\u52A8\u5F53\u524D\u8F93\u5165\u533A\uFF0C\u4E0D\u79FB\u52A8 React \u8282\u70B9\u3002 */
+                .sc-chat-input-lifted {
+                    transform: translateY(var(--sc-chat-input-offset)) !important;
                 }
 
                 /* \u79FB\u52A8\u7AEF/\u5C0F\u5C4F\u5E55\u9002\u914D\uFF1A\u9632\u6B62\u5F39\u51FA\u7684\u865A\u62DF\u952E\u76D8\u548C\u8FC7\u5927\u8F93\u5165\u6846\u906E\u6321\u5168\u90E8\u5C4F\u5E55 */
                 @media (max-width: 767px) {
                     .sc-chat-textarea-focused {
-                        height: ${mobileHeight}px !important;
+                        height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
                     }
                     .sc-chat-wrap-focused > div {
-                        height: ${mobileHeight}px !important;
-                        min-height: ${mobileHeight}px !important;
+                        height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
+                        min-height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
                     }
                     .sc-chat-input-group-focused {
-                        height: ${mobileHeight}px !important;
+                        height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
                     }
                     .sc-chat-btn-focused {
-                        height: ${mobileHeight}px !important;
+                        height: var(--sc-chat-input-height, ${mobileHeight}px) !important;
                     }
                     .sc-chat-outer-focused {
-                        height: ${mobileHeight + 8}px !important;
+                        height: calc(var(--sc-chat-input-height, ${mobileHeight}px) + 8px) !important;
                     }
                 }
             `;
@@ -16570,10 +16606,109 @@ ${lines.join("\n")}`;
         injectStyles();
       }
       var isClickingInside = false;
+      function stopTracking() {
+        var session = activeSession;
+        if (!session) return;
+        if (session.frame !== null) cancelAnimationFrame(session.frame);
+        clearTimeout(session.settleTimer);
+        session.frame = null;
+        session.settleTimer = null;
+        if (session.observer) session.observer.disconnect();
+        session.viewport?.removeEventListener("resize", requestLayout);
+        session.viewport?.removeEventListener("scroll", requestLayout);
+        window.removeEventListener("resize", requestLayout);
+        window.removeEventListener("orientationchange", requestLayout);
+        session.listening = false;
+      }
+      function inputBounds(session) {
+        var rect = session.textarea.getBoundingClientRect();
+        var buttonRect = session.containers.btnContainer?.getBoundingClientRect();
+        return {
+          top: Math.min(rect.top, buttonRect?.height ? buttonRect.top : rect.top) - session.offset,
+          bottom: Math.max(rect.bottom, buttonRect?.height ? buttonRect.bottom : rect.bottom) - session.offset
+        };
+      }
+      function updateLayout() {
+        var session = activeSession;
+        if (!session) return;
+        session.frame = null;
+        if (!isEnabled3() || !session.textarea.isConnected || session.url !== location.href) {
+          collapseAll();
+          return;
+        }
+        if (!session.listening || document.activeElement !== session.textarea || isClickingInside) return;
+        var viewport = session.viewport;
+        var height = viewport?.height || window.innerHeight;
+        var top = (viewport?.offsetTop || 0) + 8;
+        var bottom = top + height - 16;
+        var mobile = window.matchMedia("(max-width: 767px)").matches;
+        var desired = readCustomHeight(mobile ? "chatInputExpanderHeightMobile" : "chatInputExpanderHeight", mobile ? 90 : 130);
+        var fitted = Math.min(desired, Math.max(40, Math.floor(height - 24)));
+        var outer = session.containers.outerContainer || session.containers.inputGroup;
+        if (!outer) return;
+        outer.style.setProperty("--sc-chat-input-height", fitted + "px");
+        var bounds = inputBounds(session);
+        var delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
+        var ancestor = outer.parentElement;
+        while (ancestor && Math.abs(delta) > 1) {
+          var scrollable = ancestor === document.scrollingElement || /^(auto|scroll|overlay)$/.test(getComputedStyle(ancestor).overflowY);
+          if (scrollable && ancestor.scrollHeight > ancestor.clientHeight) {
+            ancestor.scrollBy({ top: delta, behavior: "instant" });
+            bounds = inputBounds(session);
+            delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
+          }
+          ancestor = ancestor.parentElement;
+        }
+        session.offset = Math.abs(delta) > 1 ? -delta : 0;
+        outer.style.setProperty("--sc-chat-input-offset", session.offset + "px");
+        outer.classList.toggle("sc-chat-input-lifted", session.offset !== 0);
+      }
+      function queueLayout() {
+        if (activeSession?.listening && activeSession.frame === null) {
+          activeSession.frame = requestAnimationFrame(updateLayout);
+        }
+      }
+      function requestLayout() {
+        if (!activeSession?.listening) return;
+        queueLayout();
+        clearTimeout(activeSession.settleTimer);
+        activeSession.settleTimer = setTimeout(queueLayout, 250);
+      }
+      function startTracking(textarea, containers) {
+        activeSession = {
+          textarea,
+          containers,
+          parent: textarea.parentElement,
+          viewport: window.visualViewport,
+          url: location.href,
+          offset: 0,
+          frame: null,
+          settleTimer: null,
+          listening: true,
+          observer: null
+        };
+        activeSession.viewport?.addEventListener("resize", requestLayout);
+        activeSession.viewport?.addEventListener("scroll", requestLayout);
+        window.addEventListener("resize", requestLayout);
+        window.addEventListener("orientationchange", requestLayout);
+        activeSession.observer = new MutationObserver(() => {
+          if (activeSession && (!textarea.isConnected || activeSession.url !== location.href)) collapseAll();
+        });
+        activeSession.observer.observe(document.body, { childList: true, subtree: true });
+        requestLayout();
+      }
       function collapseContainers(textarea) {
-        var containers = findContainers(textarea);
+        var session = activeSession?.textarea === textarea ? activeSession : null;
+        var containers = session ? session.containers : findContainers(textarea);
+        if (session) {
+          stopTracking();
+          activeSession = null;
+          clearTimeout(releaseTimer);
+          releaseTimer = null;
+          isClickingInside = false;
+        }
         textarea.classList.remove("sc-chat-textarea-focused");
-        var parent = textarea.parentElement;
+        var parent = session ? session.parent : textarea.parentElement;
         if (parent) {
           parent.classList.remove("sc-chat-wrap-focused");
         }
@@ -16586,40 +16721,55 @@ ${lines.join("\n")}`;
         if (containers.outerContainer) {
           containers.outerContainer.classList.remove("sc-chat-outer-focused");
         }
+        var outer = containers.outerContainer || containers.inputGroup;
+        if (outer) {
+          outer.classList.remove("sc-chat-input-lifted");
+          outer.style.removeProperty("--sc-chat-input-height");
+          outer.style.removeProperty("--sc-chat-input-offset");
+        }
       }
       function collapseAll() {
+        if (activeSession) collapseContainers(activeSession.textarea);
         var expanded = document.querySelectorAll(".sc-chat-textarea-focused");
         for (var i = 0; i < expanded.length; i++) {
           collapseContainers(expanded[i]);
         }
       }
-      document.addEventListener("mousedown", function(e) {
+      var downEvent = window.PointerEvent ? "pointerdown" : "mousedown";
+      var upEvent = window.PointerEvent ? "pointerup" : "mouseup";
+      document.addEventListener(downEvent, function(e) {
         if (!isEnabled3()) return;
         var target = e.target;
         if (target) {
-          var inputGroup = target.closest(".input-group");
-          var outerFocused = target.closest(".sc-chat-outer-focused");
-          if (inputGroup || outerFocused) {
+          var outer = activeSession?.containers.outerContainer || activeSession?.containers.inputGroup;
+          if (outer?.contains(target)) {
             isClickingInside = true;
             return;
           }
         }
         isClickingInside = false;
       });
-      document.addEventListener("mouseup", function() {
-        if (!isEnabled3()) return;
-        setTimeout(function() {
+      function releaseInteraction() {
+        if (!isEnabled3() || !activeSession) return;
+        clearTimeout(releaseTimer);
+        releaseTimer = setTimeout(function() {
+          releaseTimer = null;
           isClickingInside = false;
           var activeEl = document.activeElement;
           if (!isChatInput(activeEl)) {
             collapseAll();
+          } else {
+            requestLayout();
           }
         }, 150);
-      });
-      document.addEventListener("focusin", function(e) {
+      }
+      document.addEventListener(upEvent, releaseInteraction);
+      if (window.PointerEvent) document.addEventListener("pointercancel", releaseInteraction);
+      function expandInput(target) {
         if (!isEnabled3()) return;
-        var target = e.target;
         if (isChatInput(target)) {
+          collapseAll();
+          injectStyles();
           var containers = findContainers(target);
           target.classList.add("sc-chat-textarea-transition");
           target.classList.add("sc-chat-textarea-focused");
@@ -16640,26 +16790,29 @@ ${lines.join("\n")}`;
             containers.outerContainer.classList.add("sc-chat-container-transition");
             containers.outerContainer.classList.add("sc-chat-outer-focused");
           }
-          setTimeout(function() {
-            if (document.activeElement === target) {
-              if (typeof target.scrollIntoViewIfNeeded === "function") {
-                target.scrollIntoViewIfNeeded(false);
-              } else {
-                target.scrollIntoView({ block: "nearest", behavior: "smooth" });
-              }
-            }
-          }, 300);
+          startTracking(target, containers);
         }
+      }
+      document.addEventListener("focusin", function(e) {
+        expandInput(e.target);
       });
       document.addEventListener("focusout", function(e) {
         var target = e.target;
         if (isChatInput(target)) {
+          if (activeSession?.textarea === target) stopTracking();
           if (isClickingInside) return;
           collapseContainers(target);
         }
       });
       init5();
-      window.scChatInputExpanderApplyStyles = injectStyles;
+      window.scChatInputExpanderApplyStyles = function() {
+        if (!isEnabled3()) {
+          collapseAll();
+          return;
+        }
+        injectStyles();
+        if (isChatInput(document.activeElement)) expandInput(document.activeElement);
+      };
     })();
     const UPDATE_IGNORE_KEY = "sc_autoMaxPPHPL_ignored_version";
     function compareVersions(v1, v2) {
@@ -16816,4 +16969,4 @@ ${lines.join("\n")}`;
   })();
 })();
 
-// @changelog 1.33.13：新增销售办公室优化（测试中）；修复新版零售ui自定义时长按钮显示，支持单独设置零售按钮开关。<br>*由于作者没有大楼，需要大楼玩家反馈新功能出现的问题
+// @changelog 修复聊天室色弱辅助与全局屏蔽的开关显示冲突，设置即时生效；优化手机聊天输入框自动扩大时的键盘避让，减少输入框被遮挡的情况。
