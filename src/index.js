@@ -4633,10 +4633,10 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             session.frame = null;
             session.settleTimer = null;
             if (session.observer) session.observer.disconnect();
-            session.viewport?.removeEventListener('resize', requestLayout);
-            session.viewport?.removeEventListener('scroll', requestLayout);
-            window.removeEventListener('resize', requestLayout);
-            window.removeEventListener('orientationchange', requestLayout);
+            session.viewport?.removeEventListener('resize', handleViewportChange);
+            session.viewport?.removeEventListener('scroll', handleViewportChange);
+            window.removeEventListener('resize', handleWindowResize);
+            window.removeEventListener('orientationchange', handleOrientationChange);
             session.listening = false;
         }
 
@@ -4671,6 +4671,8 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             var outer = session.containers.outerContainer || session.containers.inputGroup;
             if (!outer) return;
             outer.style.setProperty('--sc-chat-input-height', fitted + 'px');
+            // 首次聚焦只调整高度。等真实视口变化后再移动输入区，避免进入聊天室时布局尚未稳定就触发位移。
+            if (!session.positionInput) return;
 
             var bounds = inputBounds(session);
             var delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
@@ -4705,22 +4707,50 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             activeSession.settleTimer = setTimeout(queueLayout, 250);
         }
 
-        function startTracking(textarea, containers) {
+        function handleViewportChange() {
+            if (!activeSession?.listening) return;
+            activeSession.positionInput = true;
+            requestLayout();
+        }
+
+        function handleWindowResize() {
+            if (!activeSession?.listening) return;
+            // 有 visualViewport 时以它的事件为准；窗口 resize 只同步受限高度，避免页面布局变化触发首次位移。
+            if (!activeSession.viewport &&
+                Math.abs(window.innerHeight - activeSession.baselineHeight) > 1) {
+                activeSession.positionInput = true;
+            }
+            requestLayout();
+        }
+
+        function handleOrientationChange() {
+            if (!activeSession?.listening) return;
+            activeSession.positionInput = true;
+            requestLayout();
+        }
+
+        function startTracking(textarea, containers, positionInput) {
+            var viewport = window.visualViewport;
+            var baselineHeight = viewport?.height || window.innerHeight;
             activeSession = {
                 textarea: textarea, containers: containers, parent: textarea.parentElement,
-                viewport: window.visualViewport, url: location.href,
+                viewport: viewport, url: location.href, baselineHeight: baselineHeight,
+                // 首次聚焦只改变高度，真实视口变化后才允许滚动或位移。
+                positionInput: positionInput === true,
                 offset: 0, frame: null, settleTimer: null, listening: true, observer: null
             };
-            activeSession.viewport?.addEventListener('resize', requestLayout);
-            activeSession.viewport?.addEventListener('scroll', requestLayout);
-            window.addEventListener('resize', requestLayout);
-            window.addEventListener('orientationchange', requestLayout);
+            activeSession.viewport?.addEventListener('resize', handleViewportChange);
+            activeSession.viewport?.addEventListener('scroll', handleViewportChange);
+            window.addEventListener('resize', handleWindowResize);
+            window.addEventListener('orientationchange', handleOrientationChange);
             // React 移除聚焦节点不一定触发 focusout，保留引用以清理所有原容器。
             activeSession.observer = new MutationObserver(() => {
                 if (activeSession && (!textarea.isConnected || activeSession.url !== location.href)) collapseAll();
             });
             activeSession.observer.observe(document.body, { childList: true, subtree: true });
-            requestLayout();
+            // 先同步设置高度，保持首帧背景和圆角由原生输入框绘制。
+            updateLayout();
+            if (activeSession.positionInput) requestLayout();
         }
 
         // 收缩单个输入框关联的所有容器
@@ -4802,7 +4832,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         if (window.PointerEvent) document.addEventListener('pointercancel', releaseInteraction);
 
         // 利用全局事件代理监听焦点，避免 React 重新渲染页面导致绑定失效
-        function expandInput(target) {
+        function expandInput(target, positionInput) {
             if (!isEnabled()) return;
             if (isChatInput(target)) {
                 collapseAll();
@@ -4831,7 +4861,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     containers.outerContainer.classList.add('sc-chat-outer-focused');
                 }
 
-                startTracking(target, containers);
+                startTracking(target, containers, positionInput);
             }
         }
         document.addEventListener('focusin', function (e) {
@@ -4857,8 +4887,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 collapseAll();
                 return;
             }
+            var keepPosition = !!activeSession?.positionInput;
             injectStyles();
-            if (isChatInput(document.activeElement)) expandInput(document.activeElement);
+            if (isChatInput(document.activeElement)) expandInput(document.activeElement, keepPosition);
         };
     })();
 
