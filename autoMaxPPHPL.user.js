@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.33.15
+// @version      1.34.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -5702,7 +5702,7 @@ ${lines.join("\n")}`;
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.33.15",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.0",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -8372,6 +8372,7 @@ ${lines.join("\n")}`;
   };
 
   // src/features/constantsData.js
+  var CONSTANTS_SCHEMA_VERSION = "split-bundle-v1";
   var constantsData = /* @__PURE__ */ (() => {
     let _processedData = null;
     const init = async () => {
@@ -8436,7 +8437,10 @@ ${lines.join("\n")}`;
           'script[type="module"][crossorigin][src^="https://www.simcompanies.com/static/bundle/assets/index-"][src$=".js"]'
         );
         if (!scriptTag) throw new Error("\u672A\u627E\u5230\u57FA\u672C\u6570\u636E\u6587\u4EF6");
-        const rawContent = await Network.requestRaw(scriptTag.src);
+        const mainBundle = await Network.requestRaw(scriptTag.src);
+        const gameChunkName = mainBundle.match(/GamePages-[A-Za-z0-9_-]+\.js/)?.[0];
+        const gameBundle = gameChunkName ? await Network.requestRaw(new URL(gameChunkName, scriptTag.src).href) : "";
+        const rawContent = mainBundle + "\n" + gameBundle;
         const data = {};
         const targetKeys = [
           "AVERAGE_SALARY",
@@ -8527,6 +8531,7 @@ ${lines.join("\n")}`;
         };
         const constantsResources = JSON.parse(JSON.stringify(extractMntFromRaw(rawContent)));
         return {
+          sourceSchema: CONSTANTS_SCHEMA_VERSION,
           data,
           buildingsSalaryModifier,
           retailInfo,
@@ -12526,6 +12531,7 @@ ${lines.join("\n")}`;
       if (!dataStr) return true;
       try {
         const data2 = JSON.parse(dataStr);
+        if (data2.sourceSchema !== CONSTANTS_SCHEMA_VERSION) return true;
         const lastTime = new Date(data2.timestamp).getTime();
         const now = Date.now();
         return now - lastTime > ONE_HOUR;
@@ -14494,7 +14500,9 @@ ${lines.join("\n")}`;
 
         // Utility functions defined inside to use local lwe and zn
         const wv = (e, t, r) => {
-            return r === null ? lwe[e][t] : lwe[e][t].quality[r];
+            const resource = lwe?.[e]?.[t];
+            if (!resource) return null;
+            return r === null ? resource : resource.quality?.[r];
         };
         const Upt = (e, t, r, n) => t + (e + n) / r;
         const Hpt = (e, t, r, n, a) => {
@@ -14535,8 +14543,17 @@ ${lines.join("\n")}`;
 
 
         while (currentPrice > 0) {
-
-            w = zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? weather : void 0);
+            const modeledData = wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null);
+            if (!modeledData) {
+                self.postMessage({
+                    error: '\u672A\u627E\u5230\u8D44\u6E90 ' + resource.dbLetter + ' \u7684\u96F6\u552E\u6A21\u578B\uFF08\u7ECF\u6D4E\u5468\u671F ' + economyState + '\uFF09\uFF0C\u8BF7\u66F4\u65B0\u57FA\u7840\u6570\u636E',
+                    cardIndex,
+                    retryCount,
+                    calcMode
+                });
+                return;
+            }
+            w = zL(buildingKind, modeledData, parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? weather : void 0);
 
             revenue = currentPrice * quantity;
             wagesTotal = Math.ceil(w * wages * acceleration * b / 60 / 60);
@@ -14653,6 +14670,26 @@ ${lines.join("\n")}`;
         });
       }
       profitWorker.onmessage = (event) => {
+        if (event.data?.error) {
+          const card2 = document.querySelectorAll('div[style="overflow: visible;"]')[event.data.cardIndex];
+          const profitDisplay2 = card2?.querySelector(".auto-profit-display");
+          const btnHourly2 = card2?.querySelector(".btn-max-hourly-profit");
+          const btnTotal2 = card2?.querySelector(".btn-max-total-profit");
+          if (profitDisplay2) {
+            profitDisplay2.textContent = event.data.error;
+            profitDisplay2.style.background = "#f44336";
+            profitDisplay2.style.color = "white";
+          }
+          if (btnHourly2) {
+            btnHourly2.textContent = "\u6700\u5927\u65F6\u5229\u6DA6";
+            btnHourly2.disabled = false;
+          }
+          if (btnTotal2) {
+            btnTotal2.textContent = "\u6700\u5927\u5229\u6DA6";
+            btnTotal2.disabled = false;
+          }
+          return;
+        }
         const { bestPrice, maxProfit, calculatedWages, cardIndex, retryCount, calcMode, finalTotalProfit, finalW } = event.data;
         const mode = calcMode || "hourly";
         const card = document.querySelectorAll('div[style="overflow: visible;"]')[cardIndex];
@@ -16539,6 +16576,9 @@ ${lines.join("\n")}`;
           document.head.appendChild(style2);
         }
       }
+      function ensureStyles() {
+        if (!document.getElementById("sc-chat-input-expander-style")) injectStyles();
+      }
       function readCustomHeight(key, fallback) {
         try {
           var cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
@@ -16793,7 +16833,7 @@ ${lines.join("\n")}`;
         if (!isEnabled3()) return;
         if (isChatInput(target)) {
           collapseAll();
-          injectStyles();
+          ensureStyles();
           var containers = findContainers(target);
           target.classList.add("sc-chat-textarea-transition");
           target.classList.add("sc-chat-textarea-focused");
@@ -16994,4 +17034,4 @@ ${lines.join("\n")}`;
   })();
 })();
 
-// @changelog 修复聊天输入框首次自动扩大时背景可能消失的问题。
+// @changelog 修复聊天输入框首次点击和点击回复时背景可能消失的问题；适配游戏前端新版分包加载，修复建筑零售利润计算可能报错的问题。
