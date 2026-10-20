@@ -4487,12 +4487,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             // 依据深浅色模式采用不同的蓝色阴影透明度以保证视觉高级感
             var shadowColor = isDark ? 'rgba(33, 150, 243, 0.5)' : 'rgba(33, 150, 243, 0.3)';
             var styleText = `
-                /* 默认过渡动画，实现平滑的高度伸缩和发光效果 */
+                /* 只过渡视觉状态；textarea 高度必须即时重绘，避免新聊天室首次聚焦时丢背景。 */
                 .sc-chat-textarea-transition {
-                    transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s, border-color 0.2s !important;
-                }
-                .sc-chat-container-transition {
-                    transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                    transition: box-shadow 0.2s, border-color 0.2s !important;
                 }
 
                 /* 焦点在输入框内时的扩大状态（默认桌面端/平板） */
@@ -4880,20 +4877,16 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
                 var parent = target.parentElement;
                 if (parent) {
-                    parent.classList.add('sc-chat-container-transition');
                     parent.classList.add('sc-chat-wrap-focused');
                 }
 
                 if (containers.inputGroup) {
-                    containers.inputGroup.classList.add('sc-chat-container-transition');
                     containers.inputGroup.classList.add('sc-chat-input-group-focused');
                 }
                 if (containers.btnContainer) {
-                    containers.btnContainer.classList.add('sc-chat-container-transition');
                     containers.btnContainer.classList.add('sc-chat-btn-focused');
                 }
                 if (containers.outerContainer) {
-                    containers.outerContainer.classList.add('sc-chat-container-transition');
                     containers.outerContainer.classList.add('sc-chat-outer-focused');
                 }
 
