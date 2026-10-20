@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.34.0
+// @version      1.34.1
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -5702,7 +5702,7 @@ ${lines.join("\n")}`;
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.0",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.1",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -16509,12 +16509,9 @@ ${lines.join("\n")}`;
         var mobileHeight = readCustomHeight("chatInputExpanderHeightMobile", 90);
         var shadowColor = isDark ? "rgba(33, 150, 243, 0.5)" : "rgba(33, 150, 243, 0.3)";
         var styleText = `
-                /* \u9ED8\u8BA4\u8FC7\u6E21\u52A8\u753B\uFF0C\u5B9E\u73B0\u5E73\u6ED1\u7684\u9AD8\u5EA6\u4F38\u7F29\u548C\u53D1\u5149\u6548\u679C */
+                /* \u53EA\u8FC7\u6E21\u89C6\u89C9\u72B6\u6001\uFF1Btextarea \u9AD8\u5EA6\u5FC5\u987B\u5373\u65F6\u91CD\u7ED8\uFF0C\u907F\u514D\u65B0\u804A\u5929\u5BA4\u9996\u6B21\u805A\u7126\u65F6\u4E22\u80CC\u666F\u3002 */
                 .sc-chat-textarea-transition {
-                    transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s, border-color 0.2s !important;
-                }
-                .sc-chat-container-transition {
-                    transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                    transition: box-shadow 0.2s, border-color 0.2s !important;
                 }
 
                 /* \u7126\u70B9\u5728\u8F93\u5165\u6846\u5185\u65F6\u7684\u6269\u5927\u72B6\u6001\uFF08\u9ED8\u8BA4\u684C\u9762\u7AEF/\u5E73\u677F\uFF09 */
@@ -16839,19 +16836,15 @@ ${lines.join("\n")}`;
           target.classList.add("sc-chat-textarea-focused");
           var parent = target.parentElement;
           if (parent) {
-            parent.classList.add("sc-chat-container-transition");
             parent.classList.add("sc-chat-wrap-focused");
           }
           if (containers.inputGroup) {
-            containers.inputGroup.classList.add("sc-chat-container-transition");
             containers.inputGroup.classList.add("sc-chat-input-group-focused");
           }
           if (containers.btnContainer) {
-            containers.btnContainer.classList.add("sc-chat-container-transition");
             containers.btnContainer.classList.add("sc-chat-btn-focused");
           }
           if (containers.outerContainer) {
-            containers.outerContainer.classList.add("sc-chat-container-transition");
             containers.outerContainer.classList.add("sc-chat-outer-focused");
           }
           startTracking(target, containers, positionInput);
@@ -17034,4 +17027,4 @@ ${lines.join("\n")}`;
   })();
 })();
 
-// @changelog 修复聊天输入框首次点击和点击回复时背景可能消失的问题；适配游戏前端新版分包加载，修复建筑零售利润计算可能报错的问题。
+// @changelog 第四次尝试修复安卓输入法遮挡聊天输入框的问题。
