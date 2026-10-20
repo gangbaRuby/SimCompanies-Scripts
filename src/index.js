@@ -4525,6 +4525,11 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             }
         }
 
+        function ensureStyles() {
+            // 聚焦和“回复”会高频触发，已有样式表直接复用；整表重写会让 textarea 背景在首帧重绘时丢失。
+            if (!document.getElementById('sc-chat-input-expander-style')) injectStyles();
+        }
+
         // 读取自定义扩大高度（px），非法值回退默认，仅保留最小下限防止塌陷
         function readCustomHeight(key, fallback) {
             try {
@@ -4836,7 +4841,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             if (!isEnabled()) return;
             if (isChatInput(target)) {
                 collapseAll();
-                injectStyles();
+                ensureStyles();
                 var containers = findContainers(target);
 
                 target.classList.add('sc-chat-textarea-transition');
