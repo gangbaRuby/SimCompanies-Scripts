@@ -2174,7 +2174,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
         // Utility functions defined inside to use local lwe and zn
         const wv = (e, t, r) => {
-            return r === null ? lwe[e][t] : lwe[e][t].quality[r];
+            const resource = lwe?.[e]?.[t];
+            if (!resource) return null;
+            return r === null ? resource : resource.quality?.[r];
         };
         const Upt = (e, t, r, n) => t + (e + n) / r;
         const Hpt = (e, t, r, n, a) => {
@@ -2215,8 +2217,17 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
 
         while (currentPrice > 0) {
-
-            w = zL(buildingKind, wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null), parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? weather : void 0);
+            const modeledData = wv(economyState, resource.dbLetter, (_ = forceQuality) != null ? _ : null);
+            if (!modeledData) {
+                self.postMessage({
+                    error: '未找到资源 ' + resource.dbLetter + ' 的零售模型（经济周期 ' + economyState + '），请更新基础数据',
+                    cardIndex,
+                    retryCount,
+                    calcMode
+                });
+                return;
+            }
+            w = zL(buildingKind, modeledData, parseFloat(quantity), v, currentPrice, forceQuality === void 0 ? quality : 0, saturation, acceleration, size, resource.retailSeason === "Summer" ? weather : void 0);
 
             revenue = currentPrice * quantity;
             wagesTotal = Math.ceil(w * wages * acceleration * b / 60 / 60);
@@ -2321,6 +2332,26 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
         // 注册 Worker 异步回调 (处理结果和校验)
         profitWorker.onmessage = (event) => {
+            if (event.data?.error) {
+                const card = document.querySelectorAll('div[style="overflow: visible;"]')[event.data.cardIndex];
+                const profitDisplay = card?.querySelector('.auto-profit-display');
+                const btnHourly = card?.querySelector('.btn-max-hourly-profit');
+                const btnTotal = card?.querySelector('.btn-max-total-profit');
+                if (profitDisplay) {
+                    profitDisplay.textContent = event.data.error;
+                    profitDisplay.style.background = '#f44336';
+                    profitDisplay.style.color = 'white';
+                }
+                if (btnHourly) {
+                    btnHourly.textContent = '最大时利润';
+                    btnHourly.disabled = false;
+                }
+                if (btnTotal) {
+                    btnTotal.textContent = '最大利润';
+                    btnTotal.disabled = false;
+                }
+                return;
+            }
             // 1. 接收 Worker 返回的数据 (包括计算出的预计工资 calculatedWages)
             const { bestPrice, maxProfit, calculatedWages, cardIndex, retryCount, calcMode, finalTotalProfit, finalW } = event.data;
             const mode = calcMode || 'hourly';

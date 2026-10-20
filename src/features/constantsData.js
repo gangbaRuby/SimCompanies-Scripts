@@ -1,5 +1,7 @@
 
 
+export const CONSTANTS_SCHEMA_VERSION = 'split-bundle-v1';
+
 export const constantsData = (() => {
     // 私有变量存储处理后的内容
     let _processedData = null;
@@ -13,8 +15,13 @@ export const constantsData = (() => {
             );
             if (!scriptTag) throw new Error('未找到基本数据文件');
 
-            // 获取原始内容
-            const rawContent = await Network.requestRaw(scriptTag.src);
+            // 正式版会将游戏常量懒加载到 GamePages 分包，需要与主包一并解析。
+            const mainBundle = await Network.requestRaw(scriptTag.src);
+            const gameChunkName = mainBundle.match(/GamePages-[A-Za-z0-9_-]+\.js/)?.[0];
+            const gameBundle = gameChunkName
+                ? await Network.requestRaw(new URL(gameChunkName, scriptTag.src).href)
+                : '';
+            const rawContent = mainBundle + '\n' + gameBundle;
 
             // 空数据
             const data = {};
@@ -210,6 +217,7 @@ export const constantsData = (() => {
             const constantsResources = JSON.parse(JSON.stringify(extractMntFromRaw(rawContent)));
 
             return {
+                sourceSchema: CONSTANTS_SCHEMA_VERSION,
                 data: data,
                 buildingsSalaryModifier: buildingsSalaryModifier,
                 retailInfo: retailInfo,

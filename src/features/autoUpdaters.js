@@ -1,4 +1,4 @@
-import { constantsData } from './constantsData.js';
+import { constantsData, CONSTANTS_SCHEMA_VERSION } from './constantsData.js';
 import { RegionData } from './regionData.js';
 import { Storage } from './dataStorage.js';
 
@@ -12,6 +12,7 @@ export const ConstantsAutoUpdater = (() => {
 
         try {
             const data = JSON.parse(dataStr);
+            if (data.sourceSchema !== CONSTANTS_SCHEMA_VERSION) return true;
             const lastTime = new Date(data.timestamp).getTime();
             const now = Date.now();
             return now - lastTime > ONE_HOUR;
