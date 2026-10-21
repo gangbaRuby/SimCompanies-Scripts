@@ -57,8 +57,8 @@ registerExportInfo({
     let openButton = null;
     let openInputGroup = null;
     let layoutObserver = null;
-    let layoutTimer = null;
-    let buttonPositionTimer = null;
+    let layoutResizeObserver = null;
+    let layoutFrame = null;
     let variantPopup = null;
     let scanTimer = null;
     let started = false;
@@ -355,8 +355,14 @@ registerExportInfo({
 
     function positionPanel(panel, btn) {
         const rect = btn.getBoundingClientRect();
+        if (!btn.isConnected || !rect.width || !rect.height ||
+            getComputedStyle(btn).visibility === 'hidden') {
+            closePanel();
+            return;
+        }
+        const viewport = getViewportBounds();
         const gap = 6;
-        const panelWidth = Math.min(360, window.innerWidth - 16);
+        const panelWidth = Math.min(360, viewport.width - 16);
         const panelHeight = panel.offsetHeight || 340;
         let input = null;
         if (openInputGroup) {
@@ -370,14 +376,37 @@ registerExportInfo({
             if (!input) input = textareas[0] || null;
         }
         const anchorRect = input ? input.getBoundingClientRect() : rect;
-        const availableAbove = anchorRect.top - gap - 8;
-        const maxHeight = Math.max(0, Math.min(420, availableAbove, window.innerHeight - 16));
-        panel.style.maxHeight = maxHeight + 'px';
-        const top = anchorRect.top - gap - Math.min(panelHeight, maxHeight);
-        const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
-        panel.style.width = panelWidth + 'px';
-        panel.style.left = left + 'px';
-        panel.style.top = top + 'px';
+        // 搜索框获取焦点后聊天区可能恢复高度，锚点也不能超出键盘上方的可见范围。
+        const anchorTop = Math.min(anchorRect.top, viewport.bottom - 8);
+        const availableAbove = anchorTop - viewport.top - gap - 8;
+        const maxHeight = Math.max(0, Math.min(420, availableAbove, viewport.height - 16));
+        const top = Math.max(viewport.top + 8, anchorTop - gap - Math.min(panelHeight, maxHeight));
+        const left = Math.max(viewport.left + 8, Math.min(rect.left, viewport.right - panelWidth - 8));
+        setStyleIfChanged(panel, 'maxHeight', maxHeight + 'px');
+        setStyleIfChanged(panel, 'width', panelWidth + 'px');
+        setStyleIfChanged(panel, 'left', left + 'px');
+        setStyleIfChanged(panel, 'top', top + 'px');
+    }
+
+    function getViewportBounds() {
+        const vv = window.visualViewport;
+        const left = vv?.offsetLeft || 0;
+        const top = vv?.offsetTop || 0;
+        const width = vv?.width || window.innerWidth;
+        const height = vv?.height || window.innerHeight;
+        return { left, top, width, height, right: left + width, bottom: top + height };
+    }
+
+    function setStyleIfChanged(element, name, value) {
+        if (element.style[name] !== value) element.style[name] = value;
+    }
+
+    function requestPanelPosition() {
+        if (!openPanel || layoutFrame !== null) return;
+        layoutFrame = requestAnimationFrame(() => {
+            layoutFrame = null;
+            if (openPanel && openButton) positionPanel(openPanel, openButton);
+        });
     }
 
     function findMentionsComponent(textarea) {
@@ -517,11 +546,12 @@ registerExportInfo({
 
     function openVariantPopup(item, anchor, getTextarea, afterInsert) {
         closeVariantPopup();
+        if (!openPanel || !anchor.isConnected) return;
 
         const popup = document.createElement('div');
         popup.className = 'sc-chat-emoji-variant-popup';
         popup.style.cssText =
-            'position:fixed;z-index:2147483647;display:flex;flex-wrap:wrap;gap:4px;padding:6px;' +
+            'position:fixed;z-index:1021;display:flex;flex-wrap:wrap;gap:4px;padding:6px;' +
             'max-width:190px;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,0.35);';
         applyPanelTheme(popup);
 
@@ -548,13 +578,15 @@ registerExportInfo({
         document.body.appendChild(popup);
         variantPopup = popup;
         requestAnimationFrame(() => {
+            if (variantPopup !== popup || !anchor.isConnected) return;
             const rect = anchor.getBoundingClientRect();
             const popupRect = popup.getBoundingClientRect();
+            const bounds = getViewportBounds();
             let top = rect.bottom + 6;
-            if (top + popupRect.height > window.innerHeight - 8) {
-                top = Math.max(8, rect.top - popupRect.height - 6);
+            if (top + popupRect.height > bounds.bottom - 8) {
+                top = Math.max(bounds.top + 8, rect.top - popupRect.height - 6);
             }
-            const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupRect.width - 8));
+            const left = Math.max(bounds.left + 8, Math.min(rect.left, bounds.right - popupRect.width - 8));
             popup.style.top = top + 'px';
             popup.style.left = left + 'px';
         });
@@ -715,7 +747,7 @@ registerExportInfo({
                     : (search.value.trim()
                         ? `没有匹配“${search.value.trim()}”的表情`
                         : (activeKey === 'other' && items.other.length === 0 ? '其它表情暂未加载成功' : '该分类暂无表情'));
-                empty.style.cssText = 'color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;';
+                empty.style.cssText = 'grid-column:1 / -1;min-width:0;color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;';
                 grid.appendChild(empty);
                 repositionPanel();
                 return;
@@ -745,7 +777,7 @@ registerExportInfo({
 
         function repositionPanel() {
             if (openPanel === panel && openButton) {
-                requestAnimationFrame(() => positionPanel(panel, openButton));
+                requestPanelPosition();
             }
         }
 
@@ -761,7 +793,7 @@ registerExportInfo({
         const panel = document.createElement('div');
         panel.className = 'sc-chat-emoji-picker-panel';
         panel.style.cssText =
-            'position:fixed;z-index:2147483646;display:flex;flex-direction:column;box-sizing:border-box;' +
+            'position:fixed;z-index:1020;display:flex;flex-direction:column;box-sizing:border-box;' +
             'overflow:hidden;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.35);';
         applyPanelTheme(panel);
 
@@ -800,11 +832,11 @@ registerExportInfo({
         const grid = document.createElement('div');
         grid.className = 'sc-chat-emoji-picker-grid';
         grid.style.cssText =
-            'flex:1;overflow:auto;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px;align-content:start;';
+            'flex:1;min-height:0;overflow:auto;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px;align-content:start;';
 
         const loading = document.createElement('div');
         loading.textContent = '加载表情中...';
-        loading.style.cssText = 'color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;';
+        loading.style.cssText = 'grid-column:1 / -1;min-width:0;color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;';
         grid.appendChild(loading);
 
         header.append(search, closeBtn);
@@ -818,10 +850,10 @@ registerExportInfo({
             grid.textContent = '';
             const error = document.createElement('div');
             error.textContent = '表情数据加载失败，请刷新页面重试';
-            error.style.cssText = 'color:var(--sc-fg);opacity:0.8;font-size:12px;padding:16px;text-align:center;';
+            error.style.cssText = 'grid-column:1 / -1;min-width:0;color:var(--sc-fg);opacity:0.8;font-size:12px;padding:16px;text-align:center;';
             grid.appendChild(error);
             if (openPanel === panel && openButton) {
-                requestAnimationFrame(() => positionPanel(panel, openButton));
+                requestPanelPosition();
             }
         });
 
@@ -829,7 +861,11 @@ registerExportInfo({
     }
 
     function ensureButton(inputGroup) {
-        if (inputGroup.dataset.scEmojiPickerGroup === '1') return;
+        const host = inputGroup.querySelector('.input-group-btn') || inputGroup;
+        const existing = inputGroup.querySelector(BUTTON_SELECTOR);
+        host.classList.add('sc-chat-emoji-picker-host');
+        if (existing && existing.parentElement === host) return;
+        if (existing) existing.remove();
 
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -839,7 +875,7 @@ registerExportInfo({
         btn.title = '选择表情';
         btn.textContent = '🙂';
         btn.style.cssText =
-            'position:fixed;z-index:2147483645;display:flex;align-items:center;justify-content:center;' +
+            'position:absolute;z-index:1;bottom:0;right:' + (host === inputGroup ? '8px' : 'calc(100% + 8px)') + ';display:flex;align-items:center;justify-content:center;' +
             'width:34px;height:34px;min-width:34px;max-width:34px;min-height:34px;max-height:34px;padding:0;margin:0;overflow:hidden;' +
             'border:1px solid rgba(128,128,128,0.55);border-radius:4px;' +
             'background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;box-sizing:border-box;';
@@ -852,33 +888,8 @@ registerExportInfo({
         });
 
         inputGroup.dataset.scEmojiPickerGroup = '1';
-        document.body.appendChild(btn);
-        positionButton(btn, inputGroup);
-    }
-
-    function positionButton(btn, inputGroup) {
-        const sendBtn = inputGroup.querySelector('.input-group-btn button');
-        const anchor = sendBtn || inputGroup.querySelector('.input-group-btn') || inputGroup;
-        const rect = anchor.getBoundingClientRect();
-        if (sendBtn) {
-            btn.style.left = Math.max(4, rect.left - 42) + 'px';
-            btn.style.top = Math.max(4, rect.bottom - 34) + 'px';
-        } else {
-            btn.style.left = Math.max(4, rect.right - 42) + 'px';
-            btn.style.top = Math.max(4, rect.bottom - 34) + 'px';
-        }
-    }
-
-    function updateButtonPositions() {
-        document.querySelectorAll(BUTTON_SELECTOR).forEach(btn => {
-            const group = btn._inputGroup;
-            if (!group || !group.isConnected) {
-                if (group) delete group.dataset.scEmojiPickerGroup;
-                btn.remove();
-                return;
-            }
-            positionButton(btn, group);
-        });
+        // 使用原生输入区的局部定位，随布局移动；不再在 body 上逐帧测量按钮。
+        host.appendChild(btn);
     }
 
     function stopLayoutObserver() {
@@ -886,26 +897,28 @@ registerExportInfo({
             layoutObserver.disconnect();
             layoutObserver = null;
         }
-        if (layoutTimer) {
-            clearInterval(layoutTimer);
-            layoutTimer = null;
+        if (layoutResizeObserver) {
+            layoutResizeObserver.disconnect();
+            layoutResizeObserver = null;
+        }
+        if (layoutFrame !== null) {
+            cancelAnimationFrame(layoutFrame);
+            layoutFrame = null;
         }
     }
 
     function startLayoutObserver() {
         stopLayoutObserver();
-        layoutTimer = setInterval(() => {
-            if (openPanel && openButton) positionPanel(openPanel, openButton);
-        }, 250);
-        layoutObserver = new MutationObserver(() => {
-            if (openPanel && openButton) {
-                requestAnimationFrame(() => positionPanel(openPanel, openButton));
-            }
-        });
+        layoutObserver = new MutationObserver(requestPanelPosition);
+        if (typeof ResizeObserver === 'function') {
+            layoutResizeObserver = new ResizeObserver(requestPanelPosition);
+            layoutResizeObserver.observe(openPanel);
+        }
         const seen = new Set();
         let el = openInputGroup;
         while (el && !seen.has(el)) {
             layoutObserver.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
+            layoutResizeObserver?.observe(el);
             seen.add(el);
             el = el.parentElement;
         }
@@ -926,6 +939,8 @@ registerExportInfo({
         document.removeEventListener('keydown', onKeyDown);
         window.removeEventListener('resize', onViewportChange);
         window.removeEventListener('scroll', onViewportChange, true);
+        window.visualViewport?.removeEventListener('resize', onViewportChange);
+        window.visualViewport?.removeEventListener('scroll', onViewportChange);
     }
 
     function onPointerDown(e) {
@@ -943,7 +958,8 @@ registerExportInfo({
     }
 
     function onViewportChange() {
-        if (openPanel && openButton) positionPanel(openPanel, openButton);
+        closeVariantPopup();
+        requestPanelPosition();
     }
 
     function togglePanel(btn, inputGroup) {
@@ -961,30 +977,33 @@ registerExportInfo({
         openInputGroup = inputGroup;
 
         startLayoutObserver();
-        requestAnimationFrame(() => positionPanel(panel, btn));
+        requestPanelPosition();
         document.addEventListener('pointerdown', onPointerDown, true);
         document.addEventListener('keydown', onKeyDown);
         window.addEventListener('resize', onViewportChange);
         window.addEventListener('scroll', onViewportChange, true);
+        window.visualViewport?.addEventListener('resize', onViewportChange);
+        window.visualViewport?.addEventListener('scroll', onViewportChange);
 
         const search = panel.querySelector('.sc-chat-emoji-picker-search');
-        if (search) setTimeout(() => search.focus(), 0);
+        if (search) setTimeout(() => { if (openPanel === panel) search.focus(); }, 0);
     }
 
     function removeAll() {
         closePanel();
         document.querySelectorAll(BUTTON_SELECTOR).forEach(btn => {
             if (btn._inputGroup) delete btn._inputGroup.dataset.scEmojiPickerGroup;
+            btn.parentElement?.classList.remove('sc-chat-emoji-picker-host');
             btn.remove();
         });
     }
 
     function requestScan() {
         if (scanTimer) return;
-        scanTimer = setTimeout(() => {
+        scanTimer = requestAnimationFrame(() => {
             scanTimer = null;
             scan();
-        }, 150);
+        });
     }
 
     function scan() {
@@ -993,13 +1012,12 @@ registerExportInfo({
             return;
         }
 
-        updateButtonPositions();
+        if (openInputGroup && (!openInputGroup.isConnected || !openButton?.isConnected)) closePanel();
         document.querySelectorAll('textarea').forEach(textarea => {
             if (!isChatInput(textarea)) return;
             const inputGroup = textarea.closest('.input-group');
             if (inputGroup) ensureButton(inputGroup);
         });
-        updateButtonPositions();
     }
 
     function start() {
@@ -1010,13 +1028,23 @@ registerExportInfo({
         }
         started = true;
 
-        new MutationObserver(() => requestScan()).observe(document.body, { childList: true, subtree: true });
+        const style = document.createElement('style');
+        style.textContent = '.sc-chat-emoji-picker-host{position:relative;isolation:isolate;}';
+        document.head.appendChild(style);
 
-        new MutationObserver(() => {
+        new MutationObserver(records => {
             if (lastUrl !== location.href) {
                 lastUrl = location.href;
-                closePanel();
-                setTimeout(scan, 400);
+                removeAll();
+                requestScan();
+                return;
+            }
+            if (openInputGroup && (!openInputGroup.isConnected || !openButton?.isConnected)) closePanel();
+            // 表情网格自身的增删不触发全页 textarea 扫描。
+            if (records.some(record => !record.target.closest?.('.sc-chat-emoji-picker-panel,.sc-chat-emoji-variant-popup') &&
+                [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === 1 &&
+                    (node.matches('textarea,.input-group,.input-group-btn,' + BUTTON_SELECTOR) || node.querySelector('textarea,.input-group'))))) {
+                requestScan();
             }
         }).observe(document.body, { childList: true, subtree: true });
 
@@ -1027,17 +1055,12 @@ registerExportInfo({
             themeObserver.observe(target, { attributes: true, attributeFilter: ['class', 'style'] });
         });
 
-        buttonPositionTimer = setInterval(updateButtonPositions, 300);
-        window.addEventListener('scroll', updateButtonPositions, true);
-        window.addEventListener('resize', updateButtonPositions);
-
         window.scChatEmojiPickerRefresh = () => {
             removeAll();
             scan();
         };
 
         scan();
-        loadEmojiData().catch(() => {});
     }
 
     setTimeout(start, 300);
