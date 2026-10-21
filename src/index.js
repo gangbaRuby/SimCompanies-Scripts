@@ -844,7 +844,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             const createRetailStoreButtonControls = () => {
                 const box = document.createElement('div');
                 box.className = 'sc-retail-store-button-controls';
-                box.style.cssText = 'display:flex;flex-direction:column;gap:5px;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);';
+                box.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);';
                 const options = [
                     ['autoPricingHourlyButton', '最大时利润'],
                     ['autoPricingTotalButton', '最大利润'],
@@ -855,7 +855,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
                 options.forEach(([key, label]) => {
                     const row = document.createElement('label');
-                    row.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
+                    row.style.cssText = 'display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer;';
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
                     checkbox.checked = config[key] !== false;
@@ -4124,6 +4124,14 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         'use strict';
 
         var MODULE_KEY = 'snipboardPreview';
+        var HISTORY_KEY = 'sc-snipboard-lightbox';
+        var activeLightbox = null;
+        var closingPageUrl = null;
+        if (history.state?.[HISTORY_KEY]) {
+            var initialHistoryState = Object.assign({}, history.state);
+            delete initialHistoryState[HISTORY_KEY];
+            history.replaceState(initialHistoryState, '', location.href);
+        }
 
         function isEnabled() {
             return window.isPageModuleEnabled ? window.isPageModuleEnabled(MODULE_KEY) : true;
@@ -4202,8 +4210,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             img.style.height = 'auto';
             img.setAttribute('data-sc-original-src', imgUrl);
             img.addEventListener('click', function (e) {
+                e.preventDefault();
                 e.stopPropagation();
-                showLightbox(imgUrl);
+                if (isEnabled()) showLightbox(imgUrl);
             });
 
             // 在链接后面插入图片
@@ -4212,7 +4221,20 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
         // 显示图片放大灯箱
         function showLightbox(url) {
+            if (activeLightbox || closingPageUrl) return;
+            var pageUrl = location.href;
+            var historyToken = null;
+            try {
+                historyToken = 'sc-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+                // 保留游戏 Router 的 usr/key/idx 等状态，只增加本模块的临时标记。
+                history.pushState(Object.assign({}, history.state, { [HISTORY_KEY]: historyToken }), '', pageUrl);
+            } catch (err) {
+                historyToken = null;
+            }
             var overlay = document.createElement('div');
+            overlay.className = 'sc-snipboard-lightbox';
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-label', '图片预览');
             overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:99999;display:flex;justify-content:center;align-items:center;cursor:pointer;overflow:hidden;';
 
             var closeBtn = document.createElement('span');
@@ -4223,10 +4245,20 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 closeLightbox();
             });
 
-            function closeLightbox() {
+            var closed = false;
+            function closeLightbox(fromHistory) {
+                if (closed) return;
+                closed = true;
                 overlay.style.opacity = '0';
+                overlay.style.pointerEvents = 'none';
                 setTimeout(function () { overlay.remove(); }, 200);
                 document.removeEventListener('keydown', onKeyDown);
+                activeLightbox = null;
+                if (fromHistory !== true && historyToken && location.href === pageUrl &&
+                    history.state?.[HISTORY_KEY] === historyToken) {
+                    closingPageUrl = pageUrl;
+                    history.back();
+                }
             }
 
             function onKeyDown(e) {
@@ -4235,6 +4267,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
             overlay.addEventListener('click', closeLightbox);
             document.addEventListener('keydown', onKeyDown);
+            activeLightbox = { close: closeLightbox, pageUrl: pageUrl, historyToken: historyToken };
 
             var viewport = document.createElement('div');
             viewport.style.cssText = 'width:90vw;height:90vh;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:default;';
@@ -4388,6 +4421,22 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             requestAnimationFrame(function () { overlay.style.opacity = '1'; });
         }
 
+        // 浏览器/Android 返回键只消费当前图片的历史项，不拦截正常页面返回。
+        window.addEventListener('popstate', function (event) {
+            var lightbox = activeLightbox;
+            if (lightbox && event.state?.[HISTORY_KEY] !== lightbox.historyToken) {
+                lightbox.close(true);
+            } else if (closingPageUrl) {
+                closingPageUrl = null;
+            }
+            // 前进或重载到已关闭的临时项时，不复活图片，也不保留失效标记。
+            if (!activeLightbox && history.state?.[HISTORY_KEY]) {
+                var state = Object.assign({}, history.state);
+                delete state[HISTORY_KEY];
+                history.replaceState(state, '', location.href);
+            }
+        });
+
         // 扫描容器中的 snipboard 链接
         function scanContainer(container) {
             if (!isEnabled()) return;
@@ -4456,6 +4505,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         // SPA 导航监听
         var lastUrl = location.href;
         new MutationObserver(function () {
+            if (activeLightbox && (!isEnabled() || activeLightbox.pageUrl !== location.href)) {
+                activeLightbox.close();
+            }
             if (lastUrl !== location.href) {
                 lastUrl = location.href;
                 initAttempted = false;
