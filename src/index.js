@@ -472,15 +472,20 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             };
             const clampPosition = (left, top) => {
                 const { w, h } = getPanelBounds();
+                const viewport = window.visualViewport;
+                const visibleTop = viewport?.offsetTop || 0;
+                const visibleBottom = visibleTop + (viewport?.height || window.innerHeight);
                 return {
                     left: Math.max(0, Math.min(window.innerWidth - w, left)),
-                    top: Math.max(0, Math.min(window.innerHeight - h, top))
+                    top: Math.max(visibleTop, Math.min(visibleBottom - h, top))
                 };
             };
             const saveDragPosition = () => {
                 const rect = panel.getBoundingClientRect();
+                const viewport = window.visualViewport;
+                const visibleBottom = (viewport?.offsetTop || 0) + (viewport?.height || window.innerHeight);
                 intendedLeft = Math.round(rect.left);
-                intendedBottom = Math.round(window.innerHeight - rect.bottom);
+                intendedBottom = Math.round(visibleBottom - rect.bottom);
                 savePos(intendedLeft, intendedBottom);
             };
 
@@ -489,11 +494,14 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 if (intendedLeft === null || !panel) return;
                 const vw = window.innerWidth;
                 const vh = window.innerHeight;
+                const viewport = window.visualViewport;
+                const visibleTop = viewport?.offsetTop || 0;
+                const visibleBottom = visibleTop + (viewport?.height || vh);
                 const btnW = panel.offsetWidth || 32;
                 const btnH = panel.offsetHeight || 32;
-                const intendedTop = vh - intendedBottom - btnH;
+                const intendedTop = visibleBottom - intendedBottom - btnH;
                 const left = Math.max(0, Math.min(vw - btnW, intendedLeft));
-                const top = Math.max(0, Math.min(vh - btnH, intendedTop));
+                const top = Math.max(visibleTop, Math.min(visibleBottom - btnH, intendedTop));
                 panel.style.left = left + 'px';
                 panel.style.bottom = (vh - top - btnH) + 'px';
                 panel.style.top = 'auto';
@@ -511,6 +519,8 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             applyClampedPosition();
 
             window.addEventListener('resize', applyClampedPosition);
+            window.visualViewport?.addEventListener('resize', applyClampedPosition);
+            window.visualViewport?.addEventListener('scroll', applyClampedPosition);
 
             const onDragStart = (e) => {
                 // 鼠标：只响应左键
@@ -4517,9 +4527,10 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     height: calc(var(--sc-chat-input-height, ${desktopHeight}px) + 8px) !important;
                     flex-shrink: 0;
                 }
-                /* 固定聊天布局无法滚动时，只移动当前输入区，不移动 React 节点。 */
-                .sc-chat-input-lifted {
-                    transform: translateY(var(--sc-chat-input-offset)) !important;
+                /* 手机限制页面外壳；无外壳时限制聊天室，保留原生 flex 排布。 */
+                .sc-chat-room-constrained {
+                    max-height: var(--sc-chat-room-max-height) !important;
+                    box-sizing: border-box;
                 }
 
                 /* 移动端/小屏幕适配：防止弹出的虚拟键盘和过大输入框遮挡全部屏幕 */
@@ -4642,7 +4653,29 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             });
             */
 
+            // 消息区是输入区的兄弟项；新版游戏的滚动容器外还有一层 flex 包装。
+            var messageArea = chatRoom && Array.from(chatRoom.children).find(function (child) {
+                return child !== outerContainer && (child.matches('.e1llepen2, div[style*="column-reverse"]') ||
+                    child.querySelector('.e1llepen2, div[style*="column-reverse"]'));
+            });
+            // 原生页面外壳包含主内容与底部菜单；只限制中间聊天室会留下侧栏/导航遮挡。
+            var pageShell = chatRoom;
+            while (pageShell && pageShell !== document.body) {
+                var shellStyle = getComputedStyle(pageShell);
+                var mainContent = Array.from(pageShell.children).find(function (child) {
+                    return child !== chatRoom && child.contains(chatRoom);
+                });
+                var mainStyle = mainContent && getComputedStyle(mainContent);
+                // 游戏在键盘激活时可能尚未挂载或主动隐藏菜单，仍可由主内容的 flex/滚动结构识别外壳。
+                if (shellStyle.display === 'flex' && shellStyle.flexDirection === 'column' &&
+                    ((pageShell.querySelector('#menu-chat') && pageShell.querySelector('#menu-map')) ||
+                        (mainStyle?.overflowY === 'auto' && Number(mainStyle.flexGrow) > 0))) break;
+                pageShell = pageShell.parentElement;
+            }
             return {
+                chatRoom: chatRoom,
+                pageShell: pageShell !== document.body ? pageShell : null,
+                messageArea: messageArea,
                 inputGroup: inputGroup,
                 btnContainer: btnContainer,
                 outerContainer: outerContainer
@@ -4665,22 +4698,37 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             clearTimeout(session.settleTimer);
             session.frame = null;
             session.settleTimer = null;
-            if (session.observer) session.observer.disconnect();
-            session.viewport?.removeEventListener('resize', handleViewportChange);
-            session.viewport?.removeEventListener('scroll', handleViewportChange);
-            window.removeEventListener('resize', handleWindowResize);
-            window.removeEventListener('orientationchange', handleOrientationChange);
+            session.resizeObserver?.disconnect();
+            session.viewport?.removeEventListener('resize', requestLayout);
+            session.viewport?.removeEventListener('scroll', requestLayout);
+            window.removeEventListener('resize', requestLayout);
+            window.removeEventListener('orientationchange', requestLayout);
+            window.removeEventListener('scroll', queueLayout, true);
             session.listening = false;
         }
 
-        function inputBounds(session) {
-            var rect = session.textarea.getBoundingClientRect();
-            var buttonRect = session.containers.btnContainer?.getBoundingClientRect();
-            // 扣除上一次补偿，避免 resize/scroll 连续回调时在两个位置之间跳动。
-            return {
-                top: Math.min(rect.top, buttonRect?.height ? buttonRect.top : rect.top) - session.offset,
-                bottom: Math.max(rect.bottom, buttonRect?.height ? buttonRect.bottom : rect.bottom) - session.offset
-            };
+        function setLayoutProperty(element, name, value) {
+            // ResizeObserver 会观察自身引起的布局变化；相同值不重复写入，避免反馈循环。
+            if (element.style.getPropertyValue(name) !== value) element.style.setProperty(name, value);
+        }
+
+        function clearLayoutConstraint(element) {
+            if (!element) return;
+            if (element.classList.contains('sc-chat-room-constrained')) element.classList.remove('sc-chat-room-constrained');
+            if (element.style.getPropertyValue('--sc-chat-room-max-height')) element.style.removeProperty('--sc-chat-room-max-height');
+        }
+
+        function observeRoomChildren(session) {
+            var room = session.containers.chatRoom;
+            if (!room || !session.resizeObserver) return;
+            var children = new Set(room.children);
+            session.observedChildren.forEach(function (child) {
+                if (!children.has(child)) session.resizeObserver.unobserve(child);
+            });
+            children.forEach(function (child) {
+                if (!session.observedChildren.has(child)) session.resizeObserver.observe(child);
+            });
+            session.observedChildren = children;
         }
 
         function updateLayout() {
@@ -4695,35 +4743,45 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
             var viewport = session.viewport;
             var height = viewport?.height || window.innerHeight;
-            var top = (viewport?.offsetTop || 0) + 8;
-            var bottom = top + height - 16;
+            var viewportTop = viewport?.offsetTop || 0;
+            var viewportBottom = viewportTop + height;
+            var top = viewportTop + 8;
+            var bottom = viewportBottom - 8;
             var mobile = window.matchMedia('(max-width: 767px)').matches;
             var desired = readCustomHeight(mobile ? 'chatInputExpanderHeightMobile' : 'chatInputExpanderHeight', mobile ? 90 : 130);
-            // 上下各留 8px，外壳另有 8px；不改写用户保存的配置。
-            var fitted = Math.min(desired, Math.max(40, Math.floor(height - 24)));
             var outer = session.containers.outerContainer || session.containers.inputGroup;
             if (!outer) return;
-            outer.style.setProperty('--sc-chat-input-height', fitted + 'px');
-            // 首次聚焦只调整高度。等真实视口变化后再移动输入区，避免进入聊天室时布局尚未稳定就触发位移。
-            if (!session.positionInput) return;
-
-            var bounds = inputBounds(session);
-            var delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
-            // 优先使用可滚动祖先；instant 避免与键盘动画叠加的平滑滚动来回争抢位置。
-            var ancestor = outer.parentElement;
-            while (ancestor && Math.abs(delta) > 1) {
-                var scrollable = ancestor === document.scrollingElement || /^(auto|scroll|overlay)$/.test(getComputedStyle(ancestor).overflowY);
-                if (scrollable && ancestor.scrollHeight > ancestor.clientHeight) {
-                    ancestor.scrollBy({ top: delta, behavior: 'instant' });
-                    bounds = inputBounds(session);
-                    delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
-                }
-                ancestor = ancestor.parentElement;
+            var room = session.containers.chatRoom;
+            var available = height - 24;
+            var shell = session.containers.pageShell;
+            if (mobile && shell?.isConnected) {
+                var shellTop = shell.getBoundingClientRect().top;
+                // 页面外壳直接贴合可见底边；输入区的留白不能变成菜单下方的空白条。
+                // 保留可见视口的小数尺寸，避免缩放/键盘动画后取整留下细缝。
+                setLayoutProperty(shell, '--sc-chat-room-max-height', Math.max(0, viewportBottom - shellTop) + 'px');
+                if (!shell.classList.contains('sc-chat-room-constrained')) shell.classList.add('sc-chat-room-constrained');
+                // 外壳已为底部菜单预留空间，聊天室恢复原生100%填满主内容。
+                clearLayoutConstraint(room);
+            } else {
+                // 横竖屏切换跨过手机断点时，不沿用手机页面外壳的限制。
+                clearLayoutConstraint(shell);
             }
-            // 部分安卓浏览器只缩小 visual viewport，固定页面没有滚动余量。
-            session.offset = Math.abs(delta) > 1 ? -delta : 0;
-            outer.style.setProperty('--sc-chat-input-offset', session.offset + 'px');
-            outer.classList.toggle('sc-chat-input-lifted', session.offset !== 0);
+            if (room?.isConnected) {
+                var roomTop = room.getBoundingClientRect().top;
+                // rect 与 offsetTop 均为布局视口坐标。顶部已被浏览器滚出屏幕时也使用真实 roomTop。
+                // max-height 保留原生 height:100%，父容器随后缩放时不会沿用过期的自然高度。
+                if (!mobile || !shell?.isConnected) {
+                    setLayoutProperty(room, '--sc-chat-room-max-height', Math.max(0, Math.floor(bottom - roomTop)) + 'px');
+                    if (!room.classList.contains('sc-chat-room-constrained')) room.classList.add('sc-chat-room-constrained');
+                }
+                var roomRect = room.getBoundingClientRect();
+                var messageArea = session.containers.messageArea;
+                var contentTop = messageArea?.isConnected ? messageArea.getBoundingClientRect().top : roomRect.top;
+                // 扣除标题/置顶区、输入区外壳与至少两行消息的空间，不覆盖用户保存的高度。
+                available = Math.min(bottom, roomRect.bottom) - Math.max(top, contentTop) - 8 - 48;
+            }
+            var fitted = Math.min(desired, Math.max(40, Math.floor(available)));
+            setLayoutProperty(outer, '--sc-chat-input-height', fitted + 'px');
         }
 
         function queueLayout() {
@@ -4736,54 +4794,66 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             if (!activeSession?.listening) return;
             queueLayout();
             clearTimeout(activeSession.settleTimer);
-            // 高度过渡结束后补一次测量；之后仍由实际键盘视口事件驱动。
+            // 复核键盘动画后的布局；更晚的游戏重排由 ResizeObserver 继续跟踪。
             activeSession.settleTimer = setTimeout(queueLayout, 250);
         }
 
-        function handleViewportChange() {
-            if (!activeSession?.listening) return;
-            activeSession.positionInput = true;
-            requestLayout();
-        }
-
-        function handleWindowResize() {
-            if (!activeSession?.listening) return;
-            // 有 visualViewport 时以它的事件为准；窗口 resize 只同步受限高度，避免页面布局变化触发首次位移。
-            if (!activeSession.viewport &&
-                Math.abs(window.innerHeight - activeSession.baselineHeight) > 1) {
-                activeSession.positionInput = true;
-            }
-            requestLayout();
-        }
-
-        function handleOrientationChange() {
-            if (!activeSession?.listening) return;
-            activeSession.positionInput = true;
-            requestLayout();
-        }
-
-        function startTracking(textarea, containers, positionInput) {
-            var viewport = window.visualViewport;
-            var baselineHeight = viewport?.height || window.innerHeight;
+        function startTracking(textarea, containers) {
+            if (!document.body || !textarea.isConnected) return;
             activeSession = {
                 textarea: textarea, containers: containers, parent: textarea.parentElement,
-                viewport: viewport, url: location.href, baselineHeight: baselineHeight,
-                // 首次聚焦只改变高度，真实视口变化后才允许滚动或位移。
-                positionInput: positionInput === true,
-                offset: 0, frame: null, settleTimer: null, listening: true, observer: null
+                viewport: window.visualViewport, url: location.href,
+                frame: null, settleTimer: null, listening: true, observer: null, resizeObserver: null,
+                observedChildren: new Set()
             };
-            activeSession.viewport?.addEventListener('resize', handleViewportChange);
-            activeSession.viewport?.addEventListener('scroll', handleViewportChange);
-            window.addEventListener('resize', handleWindowResize);
-            window.addEventListener('orientationchange', handleOrientationChange);
+            var session = activeSession;
+            session.viewport?.addEventListener('resize', requestLayout);
+            session.viewport?.addEventListener('scroll', requestLayout);
+            window.addEventListener('resize', requestLayout);
+            window.addEventListener('orientationchange', requestLayout);
+            window.addEventListener('scroll', queueLayout, true);
             // React 移除聚焦节点不一定触发 focusout，保留引用以清理所有原容器。
-            activeSession.observer = new MutationObserver(() => {
-                if (activeSession && (!textarea.isConnected || activeSession.url !== location.href)) collapseAll();
+            // 发送按钮按下后的短暂失焦仍保留此清理观察器，直到点击结束。
+            session.observer = new MutationObserver(records => {
+                if (activeSession !== session) return;
+                if (!textarea.isConnected || session.url !== location.href) {
+                    collapseAll();
+                    return;
+                }
+                if (!session.listening) return;
+                if (textarea.parentElement !== session.parent ||
+                    (containers.chatRoom && !containers.chatRoom.contains(textarea))) {
+                    expandInput(textarea);
+                    return;
+                }
+                if (records.some(record => record.type === 'attributes' ||
+                    record.target.contains(textarea) || containers.chatRoom?.contains(record.target))) {
+                    var nextContainers = findContainers(textarea);
+                    if (nextContainers.chatRoom !== containers.chatRoom || nextContainers.outerContainer !== containers.outerContainer ||
+                        nextContainers.pageShell !== containers.pageShell) {
+                        expandInput(textarea);
+                        return;
+                    }
+                    containers.messageArea = nextContainers.messageArea;
+                    observeRoomChildren(session);
+                    queueLayout();
+                }
             });
-            activeSession.observer.observe(document.body, { childList: true, subtree: true });
-            // 先同步设置高度，保持首帧背景和圆角由原生输入框绘制。
+            session.observer.observe(document.body, { childList: true, subtree: true });
+            if (typeof ResizeObserver === 'function') session.resizeObserver = new ResizeObserver(queueLayout);
+            // 覆盖父容器尺寸改变与标题/置顶消息增高；不依赖下一次键盘事件。
+            var ancestor = containers.chatRoom;
+            while (ancestor) {
+                session.resizeObserver?.observe(ancestor);
+                if (ancestor !== document.body) {
+                    session.observer.observe(ancestor, { attributes: true, attributeFilter: ['class', 'style'] });
+                }
+                ancestor = ancestor.parentElement;
+            }
+            observeRoomChildren(session);
+            // 首次聚焦立即按当前视口适配，涵盖键盘已经打开后的回复/重新聚焦。
             updateLayout();
-            if (activeSession.positionInput) requestLayout();
+            requestLayout();
         }
 
         // 收缩单个输入框关联的所有容器
@@ -4792,6 +4862,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             var containers = session ? session.containers : findContainers(textarea);
             if (session) {
                 stopTracking();
+                session.observer?.disconnect();
+                clearLayoutConstraint(containers.pageShell);
+                clearLayoutConstraint(containers.chatRoom);
                 activeSession = null;
                 clearTimeout(releaseTimer);
                 releaseTimer = null;
@@ -4815,9 +4888,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             }
             var outer = containers.outerContainer || containers.inputGroup;
             if (outer) {
-                outer.classList.remove('sc-chat-input-lifted');
                 outer.style.removeProperty('--sc-chat-input-height');
-                outer.style.removeProperty('--sc-chat-input-offset');
             }
         }
 
@@ -4865,7 +4936,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         if (window.PointerEvent) document.addEventListener('pointercancel', releaseInteraction);
 
         // 利用全局事件代理监听焦点，避免 React 重新渲染页面导致绑定失效
-        function expandInput(target, positionInput) {
+        function expandInput(target) {
             if (!isEnabled()) return;
             if (isChatInput(target)) {
                 collapseAll();
@@ -4890,7 +4961,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     containers.outerContainer.classList.add('sc-chat-outer-focused');
                 }
 
-                startTracking(target, containers, positionInput);
+                startTracking(target, containers);
             }
         }
         document.addEventListener('focusin', function (e) {
@@ -4916,9 +4987,8 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 collapseAll();
                 return;
             }
-            var keepPosition = !!activeSession?.positionInput;
             injectStyles();
-            if (isChatInput(document.activeElement)) expandInput(document.activeElement, keepPosition);
+            if (isChatInput(document.activeElement)) expandInput(document.activeElement);
         };
     })();
 
