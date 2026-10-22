@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.34.1
+// @version      1.34.2
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -2755,7 +2755,7 @@
       }
       ta.remove();
     }
-    function copyText2(text) {
+    function copyText3(text) {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).catch(() => fallbackCopy3(text));
       } else {
@@ -2835,7 +2835,7 @@
           if (shortfall) {
             const raw = shortfall.getAttribute("data-sc-shortfall-raw");
             if (raw !== null && raw !== "") {
-              copyText2(raw);
+              copyText3(raw);
               shortfall.dataset.scCopied = "1";
               shortfall.textContent = `\u2713 ${Number(raw).toLocaleString()}`;
               setTimeout(() => {
@@ -3081,23 +3081,197 @@ ${materials.join("\n")}`;
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.buildingUpgradeMaterialCopy = { init: init2, destroy };
 
+  // src/utils/salesOfficeOptimizer.js
+  var SALES_SEARCH_MS = 47 * 60 * 60 * 1e3;
+  var finite = (value) => typeof value === "number" && Number.isFinite(value);
+  var positiveId = (value) => Number.isSafeInteger(value) && value > 0;
+  function normalizeSalesOrders(data2, building, now = Date.now()) {
+    if (!Array.isArray(data2)) throw new Error("\u8BA2\u5355\u6570\u636E\u683C\u5F0F\u4E0D\u5B8C\u6574\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5\u3002");
+    const ids = /* @__PURE__ */ new Set();
+    const result = [];
+    for (const order of data2) {
+      if (!order || !positiveId(order.id) || ids.has(order.id) || !Number.isFinite(Date.parse(order.datetime))) {
+        throw new Error("\u8BA2\u5355\u7F16\u53F7\u6216\u5BFB\u5355\u65F6\u95F4\u65E0\u6CD5\u8BC6\u522B\u3002");
+      }
+      ids.add(order.id);
+      if (Date.parse(order.datetime) + SALES_SEARCH_MS >= now) continue;
+      if (!Array.isArray(order.resources) || !order.resources.length || order.resources.length > 2 || !finite(order.qualityBonus) || order.qualityBonus < 0 || !finite(order.searchCost) || order.searchCost < 0) {
+        throw new Error("\u8BA2\u5355\u6761\u6B3E\u4E0D\u5B8C\u6574\uFF0C\u6682\u4E0D\u80FD\u8BA1\u7B97\u3002");
+      }
+      const kinds = /* @__PURE__ */ new Set();
+      const resources = order.resources.map((resource) => {
+        if (!resource || !positiveId(resource.kind) || !positiveId(resource.amount) || !finite(resource.price) || resource.price < 0 || kinds.has(resource.kind)) {
+          throw new Error("\u8BA2\u5355\u8D27\u7269\u6570\u636E\u65E0\u6CD5\u8BC6\u522B\u3002");
+        }
+        kinds.add(resource.kind);
+        return { kind: resource.kind, amount: resource.amount, price: resource.price };
+      });
+      result.push({
+        id: order.id,
+        buildingId: building.id,
+        buildingName: building.name || `\u5927\u697C #${building.id}`,
+        ordinal: result.length + 1,
+        resources,
+        qualityBonus: order.qualityBonus,
+        searchCost: order.searchCost
+      });
+    }
+    return result;
+  }
+  function normalizeSalesStock(data2, kinds, requireCost = true) {
+    if (!Array.isArray(data2)) throw new Error("\u4ED3\u5E93\u6570\u636E\u4E0D\u5B8C\u6574\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5\u3002");
+    const seen = /* @__PURE__ */ new Set();
+    const stock = [];
+    for (const entry of data2) {
+      if (!entry || !positiveId(entry.kind)) throw new Error("\u4ED3\u5E93\u8D27\u7269\u7C7B\u578B\u65E0\u6CD5\u8BC6\u522B\u3002");
+      if (entry.blocked || !kinds.has(entry.kind)) continue;
+      if (!finite(entry.amount) || entry.amount < 0) throw new Error("\u4ED3\u5E93\u6570\u91CF\u65E0\u6CD5\u8BC6\u522B\u3002");
+      if (entry.amount === 0) continue;
+      let unitCost = 0;
+      if (requireCost) {
+        if (!Number.isSafeInteger(entry.quality) || entry.quality < 0 || !entry.cost || typeof entry.cost !== "object" || Array.isArray(entry.cost) || !Object.keys(entry.cost).length || !Object.values(entry.cost).every((value) => finite(value) && value >= 0)) {
+          throw new Error("\u4ED3\u5E93\u54C1\u8D28\u6216\u6210\u672C\u4E0D\u5B8C\u6574\uFF0C\u6682\u4E0D\u80FD\u8BA1\u7B97\u5229\u6DA6\u3002");
+        }
+        const key = `${entry.kind}:${entry.quality}`;
+        if (seen.has(key)) throw new Error("\u540C\u79CD\u540C\u54C1\u8D28\u5E93\u5B58\u51FA\u73B0\u91CD\u590D\u8BB0\u5F55\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5\u3002");
+        seen.add(key);
+        unitCost = Object.values(entry.cost).reduce((sum, value) => sum + value, 0) / entry.amount;
+      }
+      stock.push({ kind: entry.kind, quality: entry.quality, amount: entry.amount, unitCost });
+    }
+    return stock.sort((a, b) => a.kind - b.kind || b.quality - a.quality);
+  }
+  function calculateSalesShortage(orders2, stock) {
+    const totals = /* @__PURE__ */ new Map();
+    for (const order of orders2) {
+      for (const resource of order.resources) {
+        totals.set(resource.kind, (totals.get(resource.kind) || 0) + resource.amount);
+      }
+    }
+    for (const entry of stock) {
+      if (totals.has(entry.kind)) totals.set(entry.kind, totals.get(entry.kind) - entry.amount);
+    }
+    return [...totals].sort(([a], [b]) => a - b).map(([kind, amount]) => ({ kind, amount: Math.ceil(Math.max(0, amount)) })).filter((entry) => entry.amount > 0);
+  }
+  function simulateSalesOrder(order, stock, lowestQualityFirst = false) {
+    const next = stock.map((entry) => ({ ...entry }));
+    let base = 0;
+    let bonus = 0;
+    let cost = 0;
+    const deliveries = [];
+    for (const resource of order.resources) {
+      let remaining = resource.amount;
+      const lots = next.filter((entry) => entry.kind === resource.kind && entry.amount > 0).sort((a, b) => lowestQualityFirst ? a.quality - b.quality : b.quality - a.quality);
+      let qualitySum = 0;
+      for (const lot of lots) {
+        const amount = Math.min(remaining, lot.amount);
+        if (amount <= 0) break;
+        remaining -= amount;
+        lot.amount -= amount;
+        qualitySum += amount * lot.quality;
+        cost += amount * lot.unitCost;
+        deliveries.push({ kind: lot.kind, quality: lot.quality, amount });
+      }
+      if (remaining > 1e-9) return null;
+      base += resource.price * resource.amount;
+      bonus += resource.price * qualitySum * order.qualityBonus / 100;
+    }
+    return { stock: next, profit: base + bonus - cost - order.searchCost, base, bonus, cost, deliveries, lowestQualityFirst };
+  }
+  function upperBound(order, stock) {
+    let profit = -order.searchCost;
+    for (const resource of order.resources) {
+      const lots = stock.filter((entry) => entry.kind === resource.kind && entry.amount > 0);
+      if (lots.reduce((sum, entry) => sum + entry.amount, 0) + 1e-9 < resource.amount) return -Infinity;
+      const quality = Math.max(...lots.map((entry) => entry.quality));
+      const cost = Math.min(...lots.map((entry) => entry.unitCost));
+      profit += resource.amount * (resource.price * (1 + quality * order.qualityBonus / 100) - cost);
+    }
+    return profit;
+  }
+  async function optimizeSalesOrders(orders2, stock, {
+    isCancelled = () => false,
+    shouldStop = () => false,
+    onProgress = () => {
+    },
+    maxNodes = 3e5,
+    maxMilliseconds = 15e3,
+    yieldEvery = 128
+  } = {}) {
+    const start = performance.now();
+    const stack = [{ remaining: orders2.map((_, index) => index), stock, profit: 0, steps: [] }];
+    const memo = /* @__PURE__ */ new Map();
+    let best = { profit: 0, steps: [] };
+    let visited = 0;
+    while (stack.length) {
+      if (isCancelled()) return { ...best, exact: false, cancelled: true, visited };
+      if (shouldStop() || visited >= maxNodes || performance.now() - start >= maxMilliseconds) break;
+      const state3 = stack.pop();
+      visited++;
+      if (state3.profit > best.profit + 1e-8 || Math.abs(state3.profit - best.profit) <= 1e-8 && state3.steps.length > best.steps.length) {
+        best = { profit: state3.profit, steps: state3.steps };
+      }
+      const key = `${state3.remaining.join(",")}|${state3.stock.map((entry) => entry.amount).join(",")}`;
+      const previous = memo.get(key);
+      if (previous === void 0 || previous < state3.profit - 1e-8) {
+        if (memo.size < 5e4 || previous !== void 0) memo.set(key, state3.profit);
+        const bound = state3.profit + state3.remaining.reduce((sum, index) => sum + Math.max(0, upperBound(orders2[index], state3.stock)), 0);
+        if (bound >= best.profit - 1e-8) {
+          const choices = [];
+          for (const index of state3.remaining) {
+            const order = orders2[index];
+            const high = simulateSalesOrder(order, state3.stock, false);
+            if (!high) continue;
+            const low = simulateSalesOrder(order, state3.stock, true);
+            const options = [high];
+            if (low && (Math.abs(high.profit - low.profit) > 1e-8 || high.stock.some((entry, position) => entry.amount !== low.stock[position].amount))) options.push(low);
+            for (const option of options) {
+              const { stock: next, ...step } = option;
+              choices.push({
+                remaining: state3.remaining.filter((value) => value !== index),
+                stock: next,
+                profit: state3.profit + option.profit,
+                steps: [...state3.steps, { order, ...step }]
+              });
+            }
+          }
+          choices.sort((a, b) => a.profit - b.profit);
+          stack.push(...choices);
+        }
+      }
+      if (visited % yieldEvery === 0) {
+        onProgress({ visited, profit: best.profit });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+    return { ...best, exact: stack.length === 0, cancelled: false, visited };
+  }
+
   // src/features/salesOfficeHelper.js
   var MODULE_KEY2 = "salesOfficeHelper";
   var PANEL_ID = "sc-sales-office-helper";
   var SLOT_ATTR = "data-sc-sales-office-slot";
   var TABLE_SELECTOR = "table.ebrfvjt2";
-  var GROUPS = ["profit", "loss"];
+  var SUMMARY_SELECTOR = ".exewzot8:not(#sc-sales-office-helper)";
   var observer2 = null;
   var resizeObserver = null;
   var scanTimer = null;
-  var pendingTimer = null;
   var frame = null;
   var route = "";
   var panel = null;
   var style = null;
   var geometryStyle = null;
   var orders = [];
-  var pending = null;
+  var pending = /* @__PURE__ */ new Map();
+  var slots = /* @__PURE__ */ new Map();
+  var nextSlot = 0;
+  var job = null;
+  var generation = 0;
+  var snapshotSignature = "";
+  var profitSignature = "";
+  var qualitySignature = "";
+  var resultVisible = false;
+  var ownerRealm = null;
   var lastMessage = "";
   var resourceRaw = null;
   var resourceImages = /* @__PURE__ */ new Map();
@@ -3148,6 +3322,7 @@ ${materials.join("\n")}`;
       const validProfit = /^(?:\(-\)\s*)?\$\s*[\d\s.,\u00a0\u202f\u0660-\u0669\u06f0-\u06f9\u066b\u066c]+$/.test(profitText);
       return {
         row,
+        card: row.parentElement?.parentElement,
         controls,
         requirements,
         profitText,
@@ -3192,7 +3367,7 @@ ${materials.join("\n")}`;
   }
   async function copyRequirements(missingOnly) {
     scan();
-    if (!panel || pending) return;
+    if (!panel || pending.size) return;
     const snapshot = aggregateRequirements();
     if (!snapshot.valid || missingOnly && !snapshot.consistent) return;
     const lines = [...snapshot.totals].sort(([a], [b]) => a - b).map(([id, item]) => {
@@ -3204,10 +3379,14 @@ ${materials.join("\n")}`;
       scan();
       return;
     }
-    const text = `BUYING
-${lines.join("\n")}`;
+    await copyText2(`BUYING
+${lines.join("\n")}`, `\u5DF2\u590D\u5236${missingOnly ? "\u7F3A\u8D27" : "\u8D27\u7269\u603B\u9700\u6C42"}\uFF0C\u5171 ${lines.length} \u79CD\u8D27\u7269\u3002`);
+  }
+  async function copyText2(text, message, valid = () => true) {
     const owner = panel;
+    const version = generation;
     let copied = false;
+    if (!valid()) return;
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
@@ -3215,38 +3394,44 @@ ${lines.join("\n")}`;
       }
     } catch {
     }
-    if (panel !== owner || currentRoute() !== route || !isEnabled2()) return;
+    if (panel !== owner || version !== generation || currentRoute() !== route || !isEnabled2() || !valid()) return;
     if (!copied) copied = fallbackCopy2(text);
-    lastMessage = copied ? `\u5DF2\u590D\u5236${missingOnly ? "\u7F3A\u8D27\u91C7\u8D2D\u5355" : "\u8D27\u7269\u603B\u9700\u6C42"}\uFF0C\u5171 ${lines.length} \u79CD\u8D27\u7269\u3002` : "\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u526A\u8D34\u677F\u6743\u9650\u3002";
+    lastMessage = copied ? message : "\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u526A\u8D34\u677F\u6743\u9650\u3002";
     scan();
   }
   function addStyle() {
     style = document.createElement("style");
     style.id = "sc-sales-office-style";
     style.textContent = `
-        #${PANEL_ID} { position:fixed; right:16px; bottom:16px; width:360px; max-width:calc(100vw - 16px);
-            box-sizing:border-box; padding:12px; border:1px solid var(--sc-so-border); border-radius:8px;
-            background:var(--sc-so-bg); color:var(--sc-so-fg); z-index:900; box-shadow:0 3px 16px #0003;
-            font-size:13px; line-height:1.4; }
-        #${PANEL_ID}.sc-sales-office-hidden { display:none; }
-        #${PANEL_ID} .sc-sales-office-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+        #${PANEL_ID} { position:relative; width:100%; box-sizing:border-box; padding:12px; margin:8px 0 16px;
+            border:1px solid var(--sc-so-border,#8886); border-radius:4px;
+            color:inherit; font-size:13px; line-height:1.4; text-align:left; }
+        #${PANEL_ID}.sc-sales-office-hidden, #${PANEL_ID} .sc-sales-office-hidden { display:none; }
+        #${PANEL_ID} .sc-sales-office-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
         #${PANEL_ID} .sc-sales-office-header strong { font-size:15px; }
-        #${PANEL_ID} .sc-sales-office-copy, #${PANEL_ID} .sc-sales-office-groups { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-        #${PANEL_ID} .sc-sales-office-copy { margin-bottom:10px; }
-        #${PANEL_ID} .sc-sales-office-copy button { margin:0; min-width:0; padding:7px 4px; white-space:normal; font-size:13px; }
-        #${PANEL_ID} .sc-sales-office-group { min-width:0; border-top:3px solid var(--sc-so-profit); padding-top:6px; }
-        #${PANEL_ID} .sc-sales-office-group[data-group="loss"] { border-color:var(--sc-so-loss); }
-        #${PANEL_ID} .sc-sales-office-label { font-weight:bold; }
-        #${PANEL_ID} .sc-sales-office-next { height:20px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+        #${PANEL_ID} .sc-sales-office-notice { font-size:12px; }
+        #${PANEL_ID} .sc-sales-office-count { flex-shrink:0; }
+        #${PANEL_ID} .sc-sales-office-copy { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
+        #${PANEL_ID} .sc-sales-office-copy button { margin:0; min-width:0; padding:7px 8px; white-space:normal; font-size:13px; }
+        #${PANEL_ID} select { color:inherit; background:transparent; border:1px solid #888; padding:6px; max-width:100%; }
+        #${PANEL_ID} select option { color:#222; background:#fff; }
+        #${PANEL_ID} .sc-sales-office-orders { display:grid; grid-template-columns:repeat(auto-fill,minmax(135px,1fr)); gap:10px; }
+        #${PANEL_ID} .sc-sales-office-order { min-width:0; border-top:3px solid var(--sc-so-profit,#388e3c); padding-top:6px; }
+        #${PANEL_ID} .sc-sales-office-order[data-group="loss"] { border-color:var(--sc-so-loss,#c83b3b); }
+        #${PANEL_ID} .sc-sales-office-order[data-group="unknown"] { border-color:#888; }
+        #${PANEL_ID} .sc-sales-office-label { height:38px; font-weight:bold; overflow-wrap:anywhere; }
         #${PANEL_ID} .sc-sales-office-slot { height:36px; display:flex; align-items:center; justify-content:center;
-            border:1px dashed var(--sc-so-border); border-radius:4px; margin-top:4px; }
-        #${PANEL_ID} .sc-sales-office-status { height:38px; overflow:auto; margin-top:8px; font-size:12px; }
+            border:1px dashed #8888; border-radius:4px; margin-top:4px; }
+        #${PANEL_ID} .sc-sales-office-status { min-height:20px; margin-top:8px; font-size:12px; overflow-wrap:anywhere; }
+        #${PANEL_ID} .sc-sales-office-result { margin-top:10px; max-height:360px; overflow:auto; }
+        #${PANEL_ID} table { width:100%; border-collapse:collapse; font-size:12px; }
+        #${PANEL_ID} th, #${PANEL_ID} td { padding:6px; text-align:left; border-bottom:1px solid #8885; }
+        #${PANEL_ID} .sc-sales-office-result-note { margin:6px 0; }
         button[${SLOT_ATTR}] { position:fixed!important; margin:0!important; box-sizing:border-box!important;
             z-index:901!important; min-width:0!important; max-width:none!important; padding:6px!important; }
-        button[${SLOT_ATTR}="profit"] { outline:2px solid var(--sc-so-profit,#388e3c); }
-        button[${SLOT_ATTR}="loss"] { outline:2px solid var(--sc-so-loss,#c83b3b); }
         button[${SLOT_ATTR}][data-sc-sales-office-wait] { pointer-events:none!important; }
-        @media(max-width:767px) { #${PANEL_ID} { left:8px; right:8px; width:auto; bottom:calc(64px + env(safe-area-inset-bottom,0px)); padding:10px; } }
+        @media(max-width:767px) { #${PANEL_ID} { padding:8px; } #${PANEL_ID} .sc-sales-office-header { flex-wrap:wrap; gap:4px; }
+            #${PANEL_ID} .sc-sales-office-orders { grid-template-columns:repeat(auto-fill,minmax(115px,1fr)); } }
     `;
     geometryStyle = document.createElement("style");
     geometryStyle.id = "sc-sales-office-geometry";
@@ -3254,17 +3439,16 @@ ${lines.join("\n")}`;
   }
   function createPanel() {
     if (!style) addStyle();
-    panel = document.createElement("section");
+    const summary = document.querySelector(SUMMARY_SELECTOR);
+    panel = summary ? summary.cloneNode(false) : document.createElement("section");
     panel.id = PANEL_ID;
-    panel.setAttribute("aria-label", "\u9500\u552E\u529E\u516C\u5BA4\u4F18\u5316\uFF08\u6D4B\u8BD5\u4E2D\uFF09");
+    panel.setAttribute("aria-label", "\u9500\u552E\u529E\u516C\u5BA4\u4F18\u5316\uFF08\u6D4B\u8BD5\u4E2D\uFF0C\u6709\u95EE\u9898\u8BF7\u53CA\u65F6\u53CD\u9988\uFF09");
     panel.innerHTML = `
-        <div class="sc-sales-office-header"><strong>\u9500\u552E\u529E\u516C\u5BA4\u4F18\u5316\uFF08\u6D4B\u8BD5\u4E2D\uFF09</strong><span class="sc-sales-office-count"></span></div>
+        <div class="sc-sales-office-header"><div><strong>\u9500\u552E\u529E\u516C\u5BA4\u4F18\u5316\uFF08\u6D4B\u8BD5\u4E2D\uFF0C\u6709\u95EE\u9898\u8BF7\u53CA\u65F6\u53CD\u9988\uFF09</strong> <span class="sc-sales-office-notice">\u5BFB\u4F18\u529F\u80FD\u672A\u6D4B\u8BD5\uFF0C\u8BF7\u52FF\u5B8C\u5168\u4F9D\u8D56\u7ED3\u679C\uFF0C\u6B22\u8FCE\u53CD\u9988\u3002</span></div><span class="sc-sales-office-count"></span></div>
         <div class="sc-sales-office-copy"></div>
-        <div class="sc-sales-office-groups">
-            <div class="sc-sales-office-group" data-group="profit"><div class="sc-sales-office-label">\u76C8\u5229\uFF0F\u6301\u5E73 <span></span></div><div class="sc-sales-office-next"></div><div class="sc-sales-office-slot"></div></div>
-            <div class="sc-sales-office-group" data-group="loss"><div class="sc-sales-office-label">\u4E8F\u635F <span></span></div><div class="sc-sales-office-next"></div><div class="sc-sales-office-slot"></div></div>
-        </div>
-        <div class="sc-sales-office-status" role="status" aria-live="polite"></div>`;
+        <div class="sc-sales-office-orders"></div>
+        <div class="sc-sales-office-status" role="status" aria-live="polite"></div>
+        <div class="sc-sales-office-result sc-sales-office-hidden"></div>`;
     const native = orders[0]?.controls.querySelector("button.btn-secondary");
     [false, true].forEach((missing) => {
       const button = native ? native.cloneNode(false) : document.createElement("button");
@@ -3274,11 +3458,35 @@ ${lines.join("\n")}`;
       button.className = native?.className || "btn btn-secondary";
       button.type = "button";
       button.dataset.scSalesOfficeCopy = missing ? "missing" : "total";
-      button.textContent = missing ? "\u590D\u5236\u7F3A\u8D27\u91C7\u8D2D\u5355" : "\u590D\u5236\u603B\u9700\u6C42";
+      button.textContent = missing ? "\u590D\u5236\u7F3A\u8D27" : "\u590D\u5236\u603B\u9700\u6C42";
       button.addEventListener("click", () => copyRequirements(missing));
       panel.querySelector(".sc-sales-office-copy").appendChild(button);
     });
-    document.body.appendChild(panel);
+    const actions = panel.querySelector(".sc-sales-office-copy");
+    const makeButton = (text, action, handler) => {
+      const button = actions.firstElementChild.cloneNode(false);
+      delete button.dataset.scSalesOfficeCopy;
+      button.dataset.scSalesOfficeAction = action;
+      button.textContent = text;
+      button.addEventListener("click", handler);
+      actions.appendChild(button);
+      return button;
+    };
+    makeButton("\u590D\u5236\u6240\u6709\u5927\u697C\u7F3A\u8D27", "all", () => runDataAction(false));
+    const label = document.createElement("label");
+    label.textContent = "\u5BFB\u4F18\u8303\u56F4 ";
+    const scope = document.createElement("select");
+    scope.dataset.scSalesOfficeScope = "";
+    scope.innerHTML = '<option value="current">\u5F53\u524D\u5927\u697C</option><option value="all">\u5168\u90E8\u5927\u697C</option>';
+    scope.addEventListener("change", () => invalidateCalculation("\u8303\u56F4\u5DF2\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u8BA1\u7B97\u3002"));
+    label.appendChild(scope);
+    actions.appendChild(label);
+    makeButton("\u8BA1\u7B97\u6700\u4F18\u4EA4\u5355", "optimize", () => runDataAction(true));
+    makeButton("\u505C\u6B62\u8BA1\u7B97", "stop", () => {
+      if (job) job.stop = true;
+    }).classList.add("sc-sales-office-hidden");
+    if (summary) summary.after(panel);
+    else orders[0]?.card?.before(panel);
     resizeObserver = new ResizeObserver(scheduleLayout);
     resizeObserver.observe(panel);
   }
@@ -3286,7 +3494,7 @@ ${lines.join("\n")}`;
     if (element.textContent !== text) element.textContent = text;
   }
   function releaseButtons() {
-    docked.forEach((button) => {
+    docked.forEach(({ button }) => {
       button.removeAttribute(SLOT_ATTR);
       button.removeAttribute("data-sc-sales-office-wait");
     });
@@ -3314,34 +3522,38 @@ ${lines.join("\n")}`;
     panel.style.setProperty("--sc-so-profit", dark ? "#81c784" : "#388e3c");
     panel.style.setProperty("--sc-so-loss", dark ? "#ef9a9a" : "#c83b3b");
     const rules = [];
-    docked.forEach((button, group) => {
-      const rect = panel.querySelector(`[data-group="${group}"] .sc-sales-office-slot`).getBoundingClientRect();
-      rules.push(`button[${SLOT_ATTR}="${group}"] { left:${rect.left}px!important; top:${rect.top}px!important; width:${rect.width}px!important; height:${rect.height}px!important; }`);
+    docked.forEach(({ button, slot }, id) => {
+      const rect = slot.getBoundingClientRect();
+      button.setAttribute(SLOT_ATTR, id);
+      rules.push(`button[${SLOT_ATTR}="${id}"] { left:${rect.left}px!important; top:${rect.top}px!important; width:${rect.width}px!important; height:${rect.height}px!important; }`);
     });
     const css = rules.join("\n");
     if (geometryStyle.textContent !== css) geometryStyle.textContent = css;
-    let obscured = false;
-    docked.forEach((button) => {
+    docked.forEach(({ button, slot }) => {
       const rect = button.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= innerHeight || rect.right <= 0 || rect.left >= innerWidth) return;
       const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      if (!hit || !button.contains(hit)) obscured = true;
+      if (!hit || !button.contains(hit)) {
+        button.removeAttribute(SLOT_ATTR);
+        setText(slot, "\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE");
+      } else setText(slot, "");
     });
-    if (obscured) {
-      releaseButtons();
-      panel.querySelectorAll(".sc-sales-office-slot").forEach((slot) => setText(slot, "\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE"));
-      setText(panel.querySelector(".sc-sales-office-status"), "\u96C6\u4E2D\u6309\u94AE\u88AB\u9875\u9762\u5176\u4ED6\u5185\u5BB9\u906E\u6321\uFF0C\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE\u3002");
-    }
   }
   function scheduleLayout() {
     if (frame === null) frame = requestAnimationFrame(layout);
   }
-  function clearPending() {
-    clearTimeout(pendingTimer);
-    pendingTimer = null;
-    pending = null;
+  function clearPending(row) {
+    if (row) {
+      clearTimeout(pending.get(row)?.timer);
+      pending.delete(row);
+    } else {
+      pending.forEach((entry) => clearTimeout(entry.timer));
+      pending.clear();
+    }
   }
   function onNativeClick(event) {
     const button = event.target.closest?.("button.btn-primary");
+    if (!button) return;
     const order = orders.find((item) => item.button === button);
     if (!order || button.disabled) return;
     if (currentRoute() !== route || !isEnabled2()) {
@@ -3352,94 +3564,298 @@ ${lines.join("\n")}`;
     }
     if (button.hasAttribute(SLOT_ATTR)) {
       const latest = readOrders().find((item) => item.button === button);
-      if (!latest || latest.group !== button.getAttribute(SLOT_ATTR)) {
+      if (!latest || latest.group !== order.group) {
         event.preventDefault();
         event.stopImmediatePropagation();
         scheduleScan();
         return;
       }
     }
-    if (pending || button.hasAttribute(SLOT_ATTR) && event.detail > 1) {
+    if (pending.has(order.row)) {
       event.preventDefault();
       event.stopImmediatePropagation();
       return;
     }
-    pending = { row: order.row, button };
+    invalidateCalculation("\u8BA2\u5355\u5DF2\u63D0\u4EA4\uFF0C\u8BF7\u5728\u4EA4\u4ED8\u5B8C\u6210\u540E\u91CD\u65B0\u8BA1\u7B97\u3002");
     lastMessage = "";
-    docked.forEach((item) => item.setAttribute("data-sc-sales-office-wait", "true"));
-    if (panel) setText(panel.querySelector(".sc-sales-office-status"), "\u4EA4\u4ED8\u5904\u7406\u4E2D\uFF0C\u8BF7\u7B49\u5F85\u6E38\u620F\u8FD4\u56DE\u7ED3\u679C\u3002");
-    pendingTimer = setTimeout(() => {
-      if (pending?.button.isConnected && !pending.button.disabled) {
-        clearPending();
-        lastMessage = "\u672A\u68C0\u6D4B\u5230\u4EA4\u4ED8\u8FDB\u5EA6\uFF0C\u8BF7\u91CD\u8BD5\u539F\u751F\u4EA4\u4ED8\u6309\u94AE\u3002";
+    button.setAttribute("data-sc-sales-office-wait", "true");
+    const timer2 = setTimeout(() => {
+      if (button.isConnected && !button.disabled) {
+        clearPending(order.row);
+        button.removeAttribute("data-sc-sales-office-wait");
+        lastMessage = "\u6709\u8BA2\u5355\u672A\u68C0\u6D4B\u5230\u4EA4\u4ED8\u8FDB\u5EA6\uFF0C\u53EF\u91CD\u8BD5\u8BE5\u8BA2\u5355\u3002";
         scheduleScan();
       }
     }, 1500);
+    pending.set(order.row, { button, timer: timer2 });
     scheduleScan();
   }
   function scan() {
     clearTimeout(scanTimer);
     scanTimer = null;
-    if (!isEnabled2() || currentRoute() !== route) {
+    if (!isEnabled2() || currentRoute() !== route || getRealmIdFromLink() !== ownerRealm) {
       destroy2();
       return;
     }
     orders = readOrders();
-    if (pending) {
-      if (!pending.row.isConnected) {
-        clearPending();
-        lastMessage = "\u8BA2\u5355\u5DF2\u79FB\u9664\uFF0C\u5DF2\u66F4\u65B0\u5269\u4F59\u8BA2\u5355\u3002";
+    pending.forEach((entry, row) => {
+      if (!row.isConnected) {
+        clearPending(row);
       } else {
-        const current = orders.find((order) => order.row === pending.row);
+        const current = orders.find((order) => order.row === row);
         if (current?.error && current.button) {
-          clearPending();
+          clearPending(row);
           lastMessage = `\u4EA4\u4ED8\u5931\u8D25\uFF1A${current.error}`;
         }
       }
-    }
+    });
     if (!panel?.isConnected && orders.length) {
+      invalidateCalculation("\u9875\u9762\u5DF2\u5237\u65B0\uFF0C\u8BF7\u91CD\u65B0\u8BA1\u7B97\u3002");
       releaseButtons();
       resizeObserver?.disconnect();
+      slots.clear();
       createPanel();
     }
     if (!panel) return;
+    const summary = document.querySelector(SUMMARY_SELECTOR);
+    if (summary && summary.nextElementSibling !== panel) summary.after(panel);
     releaseButtons();
     const hidden = hasDialog();
     panel.classList.toggle("sc-sales-office-hidden", hidden);
     const snapshot = aggregateRequirements();
-    panel.querySelector('[data-sc-sales-office-copy="total"]').disabled = !!pending || !snapshot.valid;
-    panel.querySelector('[data-sc-sales-office-copy="missing"]').disabled = !!pending || !snapshot.valid || !snapshot.consistent;
+    panel.querySelector('[data-sc-sales-office-copy="total"]').disabled = pending.size > 0 || !snapshot.valid;
+    panel.querySelector('[data-sc-sales-office-copy="missing"]').disabled = pending.size > 0 || !snapshot.valid || !snapshot.consistent;
+    panel.querySelector('[data-sc-sales-office-action="all"]').disabled = !!job || pending.size > 0;
+    panel.querySelector('[data-sc-sales-office-action="optimize"]').disabled = !!job || pending.size > 0;
+    panel.querySelector('[data-sc-sales-office-action="stop"]').classList.toggle("sc-sales-office-hidden", job?.phase !== "calculating");
     setText(panel.querySelector(".sc-sales-office-count"), `${orders.length} \u7B14\u5F85\u4EA4\u4ED8`);
     let unsafeLayout = false;
-    GROUPS.forEach((group) => {
-      const available = orders.filter((order) => order.group === group && order.button && !order.button.disabled);
-      const block = panel.querySelector(`[data-group="${group}"]`);
-      setText(block.querySelector(".sc-sales-office-label span"), `(${available.length})`);
-      const next = pending ? null : available[0];
-      setText(block.querySelector(".sc-sales-office-next"), next ? `\u4E0B\u4E00\u7B14\uFF1A${next.profitText}` : "\u2014");
-      const slot = block.querySelector(".sc-sales-office-slot");
-      setText(slot, pending ? "\u4EA4\u4ED8\u5904\u7406\u4E2D" : "\u6682\u65E0\u53EF\u4EA4\u4ED8\u8BA2\u5355");
-      if (next && !hidden) {
-        if (canDock(next.button)) {
-          next.button.setAttribute(SLOT_ATTR, group);
-          docked.set(group, next.button);
+    orders.forEach((order) => {
+      let entry = slots.get(order.row);
+      if (!entry) {
+        const block2 = document.createElement("div");
+        block2.className = "sc-sales-office-order";
+        block2.innerHTML = '<div class="sc-sales-office-label"></div><div class="sc-sales-office-slot"></div>';
+        entry = { id: String(++nextSlot), block: block2, slot: block2.lastElementChild };
+        slots.set(order.row, entry);
+        panel.querySelector(".sc-sales-office-orders").appendChild(block2);
+      }
+      const { id, block, slot } = entry;
+      block.dataset.group = order.group || "unknown";
+      block.title = order.requirements.map((item) => `${resourceIdNameMap[item.id] || item.id || "?"} \xD7${item.required}`).join("\u3001");
+      const label = order.button?.disabled ? "\u7F3A\u8D27" : order.group === "loss" ? "\u4E8F\u635F" : order.group === "profit" ? "\u76C8\u5229\uFF0F\u6301\u5E73" : "\u5229\u6DA6\u672A\u77E5";
+      setText(block.firstElementChild, `${id} \xB7 ${label} ${order.profitText}`);
+      setText(slot, pending.has(order.row) || !order.button ? "\u5904\u7406\u4E2D" : "\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE");
+      if (order.button && !hidden && !pending.has(order.row)) {
+        if (canDock(order.button)) {
+          order.button.setAttribute(SLOT_ATTR, id);
+          docked.set(id, { button: order.button, slot });
           setText(slot, "");
         } else {
           unsafeLayout = true;
-          setText(slot, "\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE");
         }
       }
     });
+    slots.forEach((entry, row) => {
+      if (!orders.some((order) => order.row === row)) {
+        setText(entry.block.firstElementChild, `${entry.id} \xB7 \u8BA2\u5355\u5DF2\u79FB\u9664`);
+        setText(entry.slot, "\u2014");
+      }
+    });
+    const signature = JSON.stringify(orders.map((order) => [slots.get(order.row)?.id, order.requirements, !!order.button]));
+    const profits = JSON.stringify(orders.map((order) => order.profitText));
+    const qualities = JSON.stringify(orders.map((order) => order.card?.querySelector('input[type="checkbox"]')?.checked));
+    if (snapshotSignature && (signature !== snapshotSignature || profits !== profitSignature && qualities === qualitySignature)) invalidateCalculation("\u8BA2\u5355\u3001\u5E93\u5B58\u6216\u6210\u672C\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u8BA1\u7B97\u3002");
+    snapshotSignature = signature;
+    profitSignature = profits;
+    qualitySignature = qualities;
     const missing = orders.filter((order) => order.button?.disabled).length;
     const unknown = orders.filter((order) => !order.group).length;
-    const message = pending ? "\u4EA4\u4ED8\u5904\u7406\u4E2D\uFF0C\u8BF7\u7B49\u5F85\u6E38\u620F\u8FD4\u56DE\u7ED3\u679C\u3002" : unsafeLayout ? "\u9875\u9762\u5E03\u5C40\u4E0D\u652F\u6301\u96C6\u4E2D\u4EA4\u4ED8\uFF0C\u8BF7\u4F7F\u7528\u539F\u8BA2\u5355\u6309\u94AE\u3002" : !orders.length ? "\u6682\u65E0\u5DF2\u5B8C\u6210\u5BFB\u5355\u7684\u8BA2\u5355\u3002" : !snapshot.valid ? "\u8D27\u7269\u6570\u636E\u672A\u8BC6\u522B\u5B8C\u6574\uFF0C\u6682\u4E0D\u80FD\u590D\u5236\u3002\u8BF7\u786E\u8BA4\u63D2\u4EF6\u57FA\u7840\u6570\u636E\u5DF2\u66F4\u65B0\u3002" : !snapshot.consistent ? "\u5E93\u5B58\u6B63\u5728\u66F4\u65B0\uFF0C\u6682\u4E0D\u80FD\u590D\u5236\u7F3A\u8D27\u91C7\u8D2D\u5355\u3002" : lastMessage || `\u6BCF\u6B21\u70B9\u51FB\u4EA4\u4ED8\u4E00\u7B14\u3002${missing ? ` ${missing} \u7B14\u5E93\u5B58\u4E0D\u8DB3\u3002` : ""}${unknown ? ` ${unknown} \u7B14\u5229\u6DA6\u672A\u8BC6\u522B\uFF0C\u4FDD\u7559\u539F\u6309\u94AE\u3002` : ""}`;
+    const message = pending.size ? `${pending.size} \u7B14\u4EA4\u4ED8\u5904\u7406\u4E2D\uFF0C\u5176\u4F59\u8BA2\u5355\u53EF\u7EE7\u7EED\u70B9\u51FB\u3002` : unsafeLayout ? "\u90E8\u5206\u6309\u94AE\u65E0\u6CD5\u96C6\u4E2D\u663E\u793A\uFF0C\u8BF7\u4F7F\u7528\u5BF9\u5E94\u7684\u539F\u8BA2\u5355\u6309\u94AE\u3002" : !orders.length ? "\u6682\u65E0\u5DF2\u5B8C\u6210\u5BFB\u5355\u7684\u8BA2\u5355\u3002" : !snapshot.valid ? "\u8D27\u7269\u6570\u636E\u672A\u8BC6\u522B\u5B8C\u6574\uFF0C\u6682\u4E0D\u80FD\u590D\u5236\u3002\u8BF7\u786E\u8BA4\u63D2\u4EF6\u57FA\u7840\u6570\u636E\u5DF2\u66F4\u65B0\u3002" : !snapshot.consistent ? "\u5E93\u5B58\u6B63\u5728\u66F4\u65B0\uFF0C\u6682\u4E0D\u80FD\u590D\u5236\u7F3A\u8D27\u91C7\u8D2D\u5355\u3002" : lastMessage || `\u6BCF\u7B14\u8BA2\u5355\u72EC\u7ACB\u4EA4\u4ED8\u3002${missing ? ` ${missing} \u7B14\u5E93\u5B58\u4E0D\u8DB3\u3002` : ""}${unknown ? ` ${unknown} \u7B14\u5229\u6DA6\u672A\u8BC6\u522B\u3002` : ""}`;
     setText(panel.querySelector(".sc-sales-office-status"), message);
     layout();
   }
   function scheduleScan() {
     if (scanTimer === null) scanTimer = setTimeout(scan, 60);
   }
+  function invalidateCalculation(message) {
+    const hadWork = !!job || resultVisible;
+    generation++;
+    job = null;
+    if (hadWork) lastMessage = message;
+    if (resultVisible && panel) {
+      const result = panel.querySelector(".sc-sales-office-result");
+      result.replaceChildren();
+      setText(result, message);
+      resultVisible = false;
+    }
+    scheduleScan();
+  }
+  function assertJob(owner) {
+    if (job !== owner || owner.generation !== generation || currentRoute() !== route || !isEnabled2() || ownerRealm !== getRealmIdFromLink()) throw new Error("\u64CD\u4F5C\u5DF2\u53D6\u6D88\u3002");
+  }
+  async function getData(owner, url) {
+    assertJob(owner);
+    const network = window.__SC_Network;
+    if (!network?.requestJson) throw new Error("\u6570\u636E\u670D\u52A1\u5C1A\u672A\u5C31\u7EEA\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002");
+    const data2 = await network.requestJson(url, 0);
+    assertJob(owner);
+    return data2;
+  }
+  async function loadSalesData(owner, all, requireCost) {
+    const auth = await getData(owner, "/api/v3/companies/auth-data/");
+    const company = auth?.authCompany;
+    if (!Number.isSafeInteger(company?.companyId) || company.realmId !== ownerRealm) {
+      throw new Error("\u516C\u53F8\u6216\u9886\u57DF\u5DF2\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u8FDB\u5165\u5927\u697C\u3002");
+    }
+    let region;
+    try {
+      region = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${ownerRealm}`) || "null");
+    } catch {
+      throw new Error("\u5EFA\u7B51\u6570\u636E\u65E0\u6CD5\u8BFB\u53D6\uFF0C\u8BF7\u5148\u8FDB\u5165\u5730\u56FE\u5E76\u5237\u65B0\uFF0C\u518D\u8FD4\u56DE\u5927\u697C\u91CD\u8BD5\u3002");
+    }
+    const buildings = region?.buildings;
+    if (!Array.isArray(buildings) || !buildings.length) {
+      throw new Error("\u5C1A\u672A\u83B7\u53D6\u5EFA\u7B51\u6570\u636E\uFF0C\u8BF7\u5148\u8FDB\u5165\u5730\u56FE\u5E76\u5237\u65B0\uFF0C\u518D\u8FD4\u56DE\u5927\u697C\u91CD\u8BD5\u3002");
+    }
+    if (region.companyId != null && Number(region.companyId) !== company.companyId) {
+      throw new Error("\u5EFA\u7B51\u6570\u636E\u6240\u5C5E\u516C\u53F8\u5C1A\u672A\u540C\u6B65\uFF0C\u8BF7\u5148\u8FDB\u5165\u5730\u56FE\u5E76\u5237\u65B0\uFF0C\u518D\u8FD4\u56DE\u5927\u697C\u91CD\u8BD5\u3002");
+    }
+    const currentId = Number(route.match(/\/b\/(\d+)/)?.[1]);
+    const offices = buildings.filter((building) => building?.kind === "B" && (all || building.id === currentId));
+    if (!offices.some((building) => building.id === currentId)) {
+      throw new Error("\u5EFA\u7B51\u6570\u636E\u4E2D\u6CA1\u6709\u5F53\u524D\u9500\u552E\u529E\u516C\u5BA4\uFF0C\u8BF7\u5148\u8FDB\u5165\u5730\u56FE\u5E76\u5237\u65B0\uFF0C\u518D\u8FD4\u56DE\u5927\u697C\u91CD\u8BD5\u3002");
+    }
+    const seenBuildings = /* @__PURE__ */ new Set();
+    const sales = [];
+    for (const building of offices) {
+      if (!Number.isSafeInteger(building.id) || building.id <= 0 || seenBuildings.has(building.id)) {
+        throw new Error("\u5EFA\u7B51\u7F16\u53F7\u65E0\u6CD5\u8BC6\u522B\u3002");
+      }
+      seenBuildings.add(building.id);
+      lastMessage = `\u6B63\u5728\u8BFB\u53D6\u5927\u697C ${seenBuildings.size}/${offices.length}\u2026`;
+      scan();
+      try {
+        const data2 = await getData(owner, `/api/v2/companies/buildings/${building.id}/sales-orders/`);
+        sales.push(...normalizeSalesOrders(data2, building));
+      } catch (error) {
+        assertJob(owner);
+        throw new Error(`${building.name || `\u5927\u697C #${building.id}`}\uFF1A${error.message}`);
+      }
+    }
+    const resources = await getData(owner, `/api/v3/resources/${company.companyId}/`);
+    const kinds = new Set(sales.flatMap((order) => order.resources.map((resource) => resource.kind)));
+    const stock = normalizeSalesStock(resources, kinds, requireCost);
+    const currentSales = sales.filter((order) => order.buildingId === currentId);
+    const currentDom = readOrders();
+    const fingerprint = (entries) => entries.map((entry) => `${entry.kind}:${entry.amount}`).sort().join("|");
+    if (currentSales.length !== currentDom.length || currentSales.some((order, index) => fingerprint(order.resources) !== fingerprint(currentDom[index].requirements.map((entry) => ({ kind: entry.id, amount: entry.required }))))) {
+      throw new Error("\u5F53\u524D\u9875\u9762\u4E0E\u8BA2\u5355\u6570\u636E\u5C1A\u672A\u540C\u6B65\uFF0C\u8BF7\u5237\u65B0\u5927\u697C\u540E\u91CD\u8BD5\u3002");
+    }
+    for (let index = 0; index < currentSales.length; index++) {
+      currentSales[index].displayNumber = slots.get(currentDom[index].row)?.id || currentSales[index].ordinal;
+    }
+    const finalAuth = await getData(owner, "/api/v3/companies/auth-data/");
+    if (finalAuth?.authCompany?.companyId !== company.companyId || finalAuth?.authCompany?.realmId !== company.realmId) {
+      throw new Error("\u516C\u53F8\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u3002");
+    }
+    return { sales, stock, offices };
+  }
+  function money(value) {
+    return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  }
+  function showOptimization(result, data2) {
+    const block = panel.querySelector(".sc-sales-office-result");
+    block.replaceChildren();
+    block.classList.remove("sc-sales-office-hidden");
+    resultVisible = true;
+    const note = document.createElement("p");
+    note.className = "sc-sales-office-result-note";
+    note.textContent = `${result.exact ? "\u6700\u4F18\u65B9\u6848" : "\u5F53\u524D\u6700\u4F73\uFF08\u641C\u7D22\u672A\u5B8C\u6210\uFF09"}\uFF1A${result.steps.length}/${data2.sales.length} \u7B14\uFF0C\u5408\u8BA1\u51C0\u5229\u6DA6 ${money(result.profit)}\u3002`;
+    block.appendChild(note);
+    if (!result.steps.length) {
+      const empty = document.createElement("p");
+      empty.textContent = data2.sales.length ? "\u73B0\u6709\u5E93\u5B58\u4E0B\u672A\u627E\u5230\u5408\u8BA1\u51C0\u5229\u6DA6\u66F4\u9AD8\u7684\u53EF\u4EA4\u4ED8\u65B9\u6848\u3002" : "\u6682\u65E0\u5DF2\u5B8C\u6210\u5BFB\u5355\u7684\u8BA2\u5355\u3002";
+      block.appendChild(empty);
+      return;
+    }
+    const table = document.createElement("table");
+    table.innerHTML = "<thead><tr><th>\u987A\u5E8F\uFF0F\u8BA2\u5355</th><th>\u54C1\u8D28\u4F18\u5148</th><th>\u9884\u8BA1\u51C0\u5229\u6DA6</th></tr></thead><tbody></tbody>";
+    result.steps.forEach((step, index) => {
+      const row = document.createElement("tr");
+      const identity = document.createElement("td");
+      const link = document.createElement("a");
+      const prefix = location.pathname.match(/^(\/[a-z]{2}(?:-[a-z]+)?)\/b\//)?.[1] || "";
+      link.href = `${prefix}/b/${step.order.buildingId}/`;
+      link.textContent = `${index + 1}. ${step.order.buildingName} \xB7 \u7B2C ${step.order.displayNumber || step.order.ordinal} \u5355`;
+      identity.appendChild(link);
+      const details = document.createElement("div");
+      details.textContent = step.order.resources.map((resource) => `${resourceIdNameMap[resource.kind] || `#${resource.kind}`} \xD7${resource.amount}`).join("\u3001");
+      details.title = `\u8BA2\u5355 #${step.order.id}\uFF1B` + step.deliveries.map((entry) => `${resourceIdNameMap[entry.kind] || entry.kind} Q${entry.quality} \xD7${entry.amount}`).join("\u3001");
+      identity.appendChild(details);
+      const quality = document.createElement("td");
+      quality.textContent = step.lowestQualityFirst ? "\u4F4E\u54C1\u8D28\uFF08\u53D6\u6D88\u52FE\u9009\uFF09" : "\u9AD8\u54C1\u8D28\uFF08\u52FE\u9009\uFF09";
+      const profit = document.createElement("td");
+      profit.textContent = money(step.profit);
+      row.append(identity, quality, profit);
+      table.tBodies[0].appendChild(row);
+    });
+    block.appendChild(table);
+    const hint = document.createElement("p");
+    hint.textContent = "\u6309\u5F53\u524D\u5E93\u5B58\u53CA\u6210\u672C\u4F30\u7B97\uFF0C\u5DF2\u6263\u5BFB\u5355\u8D39\u7528\u3002\u8BF7\u6309\u987A\u5E8F\u8BBE\u7F6E\u539F\u8BA2\u5355\u7684\u54C1\u8D28\u9009\u9879\u5E76\u4EA4\u4ED8\uFF1B\u5FEB\u901F\u540C\u65F6\u63D0\u4EA4\u65F6\uFF0C\u5B9E\u9645\u53D6\u8D27\u987A\u5E8F\u53EF\u80FD\u4E0D\u540C\u3002";
+    block.appendChild(hint);
+  }
+  async function runDataAction(optimize) {
+    scan();
+    if (!panel || job || pending.size) return;
+    invalidateCalculation("\u6B63\u5728\u8BFB\u53D6\u6700\u65B0\u8BA2\u5355\u4E0E\u5E93\u5B58\u2026");
+    const owner = { generation, phase: "loading", stop: false };
+    job = owner;
+    lastMessage = "\u6B63\u5728\u8BFB\u53D6\u6700\u65B0\u8BA2\u5355\u4E0E\u5E93\u5B58\u2026";
+    scan();
+    try {
+      const all = !optimize || panel.querySelector("[data-sc-sales-office-scope]").value === "all";
+      const data2 = await loadSalesData(owner, all, optimize);
+      assertJob(owner);
+      if (optimize) {
+        owner.phase = "calculating";
+        lastMessage = "\u6B63\u5728\u6BD4\u8F83\u4EA4\u5355\u987A\u5E8F\u548C\u54C1\u8D28\u9009\u62E9\u2026";
+        scan();
+        const result = await optimizeSalesOrders(data2.sales, data2.stock, {
+          isCancelled: () => job !== owner || owner.generation !== generation,
+          shouldStop: () => owner.stop,
+          onProgress: (progress) => {
+            if (job !== owner) return;
+            lastMessage = `\u5DF2\u6BD4\u8F83 ${progress.visited.toLocaleString("en-US")} \u4E2A\u72B6\u6001\uFF0C\u5F53\u524D\u6700\u4F73 ${money(progress.profit)}\u3002`;
+            setText(panel.querySelector(".sc-sales-office-status"), lastMessage);
+          }
+        });
+        assertJob(owner);
+        if (!result.cancelled) {
+          showOptimization(result, data2);
+          lastMessage = `\u5DF2\u8BFB\u53D6 ${data2.offices.length} \u680B\u5927\u697C\uFF1B${result.exact ? "\u641C\u7D22\u5B8C\u6210" : "\u641C\u7D22\u5DF2\u505C\u6B62\uFF0C\u7ED3\u679C\u4E3A\u5F53\u524D\u6700\u4F73"}\u3002`;
+        }
+      } else {
+        const shortage = calculateSalesShortage(data2.sales, data2.stock);
+        if (!shortage.length) lastMessage = `\u5DF2\u68C0\u67E5 ${data2.offices.length} \u680B\u5927\u697C\uFF0C\u6682\u65E0\u7F3A\u8D27\u3002`;
+        else await copyText2(
+          `BUYING
+${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en-US")}`).join("\n")}`,
+          `\u5DF2\u590D\u5236 ${data2.offices.length} \u680B\u5927\u697C\u7F3A\u8D27\uFF0C\u5171 ${shortage.length} \u79CD\u8D27\u7269\u3002`,
+          () => job === owner && owner.generation === generation
+        );
+      }
+    } catch (error) {
+      if (job === owner) lastMessage = `\u8BFB\u53D6\u6216\u8BA1\u7B97\u5931\u8D25\uFF1A${error.message}`;
+    } finally {
+      if (job === owner) {
+        job = null;
+        scan();
+      }
+    }
+  }
   function onStorage(event) {
+    if (event.key?.startsWith("SimcompaniesRetailCalculation_")) invalidateCalculation("\u4ED3\u5E93\u6216\u516C\u53F8\u6570\u636E\u5DF2\u66F4\u65B0\uFF0C\u8BF7\u91CD\u65B0\u8BA1\u7B97\u3002");
     if (event.key === "SC_PageActions_Settings" || event.key === "SimcompaniesConstantsData") scheduleScan();
   }
   function init3() {
@@ -3453,8 +3869,9 @@ ${lines.join("\n")}`;
     }
     destroy2();
     route = currentRoute();
+    ownerRealm = getRealmIdFromLink();
     observer2 = new MutationObserver((records) => {
-      if (records.some((record) => !panel?.contains(record.target))) scheduleScan();
+      if (records.some((record) => !panel?.contains(record.target) && record.target !== geometryStyle && record.target !== style && record.target.parentElement !== geometryStyle)) scheduleScan();
     });
     observer2.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["disabled", "class", "style", "src", "aria-hidden"] });
     document.addEventListener("click", onNativeClick, true);
@@ -3465,6 +3882,8 @@ ${lines.join("\n")}`;
     scan();
   }
   function destroy2() {
+    generation++;
+    job = null;
     if (route && currentRoute() !== route) orders.forEach((order) => staleRows.add(order.row));
     observer2?.disconnect();
     observer2 = null;
@@ -3486,6 +3905,12 @@ ${lines.join("\n")}`;
     geometryStyle?.remove();
     panel = style = geometryStyle = null;
     orders = [];
+    slots.clear();
+    nextSlot = 0;
+    snapshotSignature = "";
+    profitSignature = qualitySignature = "";
+    resultVisible = false;
+    ownerRealm = null;
     lastMessage = route = "";
     resourceRaw = null;
     resourceImages = /* @__PURE__ */ new Map();
@@ -5702,7 +6127,7 @@ ${lines.join("\n")}`;
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.1",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.2",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -11670,8 +12095,8 @@ ${lines.join("\n")}`;
     let openButton = null;
     let openInputGroup = null;
     let layoutObserver = null;
-    let layoutTimer = null;
-    let buttonPositionTimer = null;
+    let layoutResizeObserver = null;
+    let layoutFrame = null;
     let variantPopup = null;
     let scanTimer2 = null;
     let started = false;
@@ -11947,8 +12372,13 @@ ${lines.join("\n")}`;
     }
     function positionPanel(panel2, btn) {
       const rect = btn.getBoundingClientRect();
+      if (!btn.isConnected || !rect.width || !rect.height || getComputedStyle(btn).visibility === "hidden") {
+        closePanel();
+        return;
+      }
+      const viewport = getViewportBounds();
       const gap = 6;
-      const panelWidth = Math.min(360, window.innerWidth - 16);
+      const panelWidth = Math.min(360, viewport.width - 16);
       const panelHeight = panel2.offsetHeight || 340;
       let input = null;
       if (openInputGroup) {
@@ -11962,14 +12392,33 @@ ${lines.join("\n")}`;
         if (!input) input = textareas[0] || null;
       }
       const anchorRect = input ? input.getBoundingClientRect() : rect;
-      const availableAbove = anchorRect.top - gap - 8;
-      const maxHeight = Math.max(0, Math.min(420, availableAbove, window.innerHeight - 16));
-      panel2.style.maxHeight = maxHeight + "px";
-      const top = anchorRect.top - gap - Math.min(panelHeight, maxHeight);
-      const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
-      panel2.style.width = panelWidth + "px";
-      panel2.style.left = left + "px";
-      panel2.style.top = top + "px";
+      const anchorTop = Math.min(anchorRect.top, viewport.bottom - 8);
+      const availableAbove = anchorTop - viewport.top - gap - 8;
+      const maxHeight = Math.max(0, Math.min(420, availableAbove, viewport.height - 16));
+      const top = Math.max(viewport.top + 8, anchorTop - gap - Math.min(panelHeight, maxHeight));
+      const left = Math.max(viewport.left + 8, Math.min(rect.left, viewport.right - panelWidth - 8));
+      setStyleIfChanged(panel2, "maxHeight", maxHeight + "px");
+      setStyleIfChanged(panel2, "width", panelWidth + "px");
+      setStyleIfChanged(panel2, "left", left + "px");
+      setStyleIfChanged(panel2, "top", top + "px");
+    }
+    function getViewportBounds() {
+      const vv = window.visualViewport;
+      const left = vv?.offsetLeft || 0;
+      const top = vv?.offsetTop || 0;
+      const width = vv?.width || window.innerWidth;
+      const height = vv?.height || window.innerHeight;
+      return { left, top, width, height, right: left + width, bottom: top + height };
+    }
+    function setStyleIfChanged(element, name, value) {
+      if (element.style[name] !== value) element.style[name] = value;
+    }
+    function requestPanelPosition() {
+      if (!openPanel || layoutFrame !== null) return;
+      layoutFrame = requestAnimationFrame(() => {
+        layoutFrame = null;
+        if (openPanel && openButton) positionPanel(openPanel, openButton);
+      });
     }
     function findMentionsComponent(textarea) {
       const fiberKey = Object.keys(textarea).find(
@@ -12089,9 +12538,10 @@ ${lines.join("\n")}`;
     }
     function openVariantPopup(item, anchor, getTextarea, afterInsert) {
       closeVariantPopup();
+      if (!openPanel || !anchor.isConnected) return;
       const popup = document.createElement("div");
       popup.className = "sc-chat-emoji-variant-popup";
-      popup.style.cssText = "position:fixed;z-index:2147483647;display:flex;flex-wrap:wrap;gap:4px;padding:6px;max-width:190px;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,0.35);";
+      popup.style.cssText = "position:fixed;z-index:1021;display:flex;flex-wrap:wrap;gap:4px;padding:6px;max-width:190px;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,0.35);";
       applyPanelTheme(popup);
       const choices = [item, ...item.variants || []];
       choices.forEach((choice) => {
@@ -12113,13 +12563,15 @@ ${lines.join("\n")}`;
       document.body.appendChild(popup);
       variantPopup = popup;
       requestAnimationFrame(() => {
+        if (variantPopup !== popup || !anchor.isConnected) return;
         const rect = anchor.getBoundingClientRect();
         const popupRect = popup.getBoundingClientRect();
+        const bounds = getViewportBounds();
         let top = rect.bottom + 6;
-        if (top + popupRect.height > window.innerHeight - 8) {
-          top = Math.max(8, rect.top - popupRect.height - 6);
+        if (top + popupRect.height > bounds.bottom - 8) {
+          top = Math.max(bounds.top + 8, rect.top - popupRect.height - 6);
         }
-        const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupRect.width - 8));
+        const left = Math.max(bounds.left + 8, Math.min(rect.left, bounds.right - popupRect.width - 8));
         popup.style.top = top + "px";
         popup.style.left = left + "px";
       });
@@ -12248,7 +12700,7 @@ ${lines.join("\n")}`;
         if (list.length === 0) {
           const empty = document.createElement("div");
           empty.textContent = activeKey === "recent" ? "\u8FD8\u6CA1\u6709\u6700\u8FD1\u4F7F\u7528\u7684\u8868\u60C5" : search.value.trim() ? `\u6CA1\u6709\u5339\u914D\u201C${search.value.trim()}\u201D\u7684\u8868\u60C5` : activeKey === "other" && items.other.length === 0 ? "\u5176\u5B83\u8868\u60C5\u6682\u672A\u52A0\u8F7D\u6210\u529F" : "\u8BE5\u5206\u7C7B\u6682\u65E0\u8868\u60C5";
-          empty.style.cssText = "color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;";
+          empty.style.cssText = "grid-column:1 / -1;min-width:0;color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;";
           grid.appendChild(empty);
           repositionPanel();
           return;
@@ -12272,7 +12724,7 @@ ${lines.join("\n")}`;
       }
       function repositionPanel() {
         if (openPanel === panel2 && openButton) {
-          requestAnimationFrame(() => positionPanel(panel2, openButton));
+          requestPanelPosition();
         }
       }
       search.addEventListener("input", () => {
@@ -12285,7 +12737,7 @@ ${lines.join("\n")}`;
     function buildPanel(btn, inputGroup) {
       const panel2 = document.createElement("div");
       panel2.className = "sc-chat-emoji-picker-panel";
-      panel2.style.cssText = "position:fixed;z-index:2147483646;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.35);";
+      panel2.style.cssText = "position:fixed;z-index:1020;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.35);";
       applyPanelTheme(panel2);
       const hint = document.createElement("div");
       hint.className = "sc-chat-emoji-picker-hint";
@@ -12309,10 +12761,10 @@ ${lines.join("\n")}`;
       tabs.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;padding:8px 8px 4px;";
       const grid = document.createElement("div");
       grid.className = "sc-chat-emoji-picker-grid";
-      grid.style.cssText = "flex:1;overflow:auto;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px;align-content:start;";
+      grid.style.cssText = "flex:1;min-height:0;overflow:auto;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px;align-content:start;";
       const loading = document.createElement("div");
       loading.textContent = "\u52A0\u8F7D\u8868\u60C5\u4E2D...";
-      loading.style.cssText = "color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;";
+      loading.style.cssText = "grid-column:1 / -1;min-width:0;color:var(--sc-fg);opacity:0.75;font-size:12px;padding:16px;text-align:center;";
       grid.appendChild(loading);
       header.append(search, closeBtn);
       panel2.append(hint, header, tabs, grid);
@@ -12324,16 +12776,20 @@ ${lines.join("\n")}`;
         grid.textContent = "";
         const error = document.createElement("div");
         error.textContent = "\u8868\u60C5\u6570\u636E\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u91CD\u8BD5";
-        error.style.cssText = "color:var(--sc-fg);opacity:0.8;font-size:12px;padding:16px;text-align:center;";
+        error.style.cssText = "grid-column:1 / -1;min-width:0;color:var(--sc-fg);opacity:0.8;font-size:12px;padding:16px;text-align:center;";
         grid.appendChild(error);
         if (openPanel === panel2 && openButton) {
-          requestAnimationFrame(() => positionPanel(panel2, openButton));
+          requestPanelPosition();
         }
       });
       return panel2;
     }
     function ensureButton(inputGroup) {
-      if (inputGroup.dataset.scEmojiPickerGroup === "1") return;
+      const host = inputGroup.querySelector(".input-group-btn") || inputGroup;
+      const existing = inputGroup.querySelector(BUTTON_SELECTOR);
+      host.classList.add("sc-chat-emoji-picker-host");
+      if (existing && existing.parentElement === host) return;
+      if (existing) existing.remove();
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "sc-chat-emoji-picker-btn";
@@ -12341,7 +12797,7 @@ ${lines.join("\n")}`;
       btn._inputGroup = inputGroup;
       btn.title = "\u9009\u62E9\u8868\u60C5";
       btn.textContent = "\u{1F642}";
-      btn.style.cssText = "position:fixed;z-index:2147483645;display:flex;align-items:center;justify-content:center;width:34px;height:34px;min-width:34px;max-width:34px;min-height:34px;max-height:34px;padding:0;margin:0;overflow:hidden;border:1px solid rgba(128,128,128,0.55);border-radius:4px;background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;box-sizing:border-box;";
+      btn.style.cssText = "position:absolute;z-index:1;bottom:0;right:" + (host === inputGroup ? "8px" : "calc(100% + 8px)") + ";display:flex;align-items:center;justify-content:center;width:34px;height:34px;min-width:34px;max-width:34px;min-height:34px;max-height:34px;padding:0;margin:0;overflow:hidden;border:1px solid rgba(128,128,128,0.55);border-radius:4px;background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;box-sizing:border-box;";
       btn.addEventListener("mouseenter", () => {
         btn.style.background = "rgba(128,128,128,0.18)";
       });
@@ -12354,56 +12810,34 @@ ${lines.join("\n")}`;
         togglePanel(btn, inputGroup);
       });
       inputGroup.dataset.scEmojiPickerGroup = "1";
-      document.body.appendChild(btn);
-      positionButton(btn, inputGroup);
-    }
-    function positionButton(btn, inputGroup) {
-      const sendBtn = inputGroup.querySelector(".input-group-btn button");
-      const anchor = sendBtn || inputGroup.querySelector(".input-group-btn") || inputGroup;
-      const rect = anchor.getBoundingClientRect();
-      if (sendBtn) {
-        btn.style.left = Math.max(4, rect.left - 42) + "px";
-        btn.style.top = Math.max(4, rect.bottom - 34) + "px";
-      } else {
-        btn.style.left = Math.max(4, rect.right - 42) + "px";
-        btn.style.top = Math.max(4, rect.bottom - 34) + "px";
-      }
-    }
-    function updateButtonPositions() {
-      document.querySelectorAll(BUTTON_SELECTOR).forEach((btn) => {
-        const group = btn._inputGroup;
-        if (!group || !group.isConnected) {
-          if (group) delete group.dataset.scEmojiPickerGroup;
-          btn.remove();
-          return;
-        }
-        positionButton(btn, group);
-      });
+      host.appendChild(btn);
     }
     function stopLayoutObserver() {
       if (layoutObserver) {
         layoutObserver.disconnect();
         layoutObserver = null;
       }
-      if (layoutTimer) {
-        clearInterval(layoutTimer);
-        layoutTimer = null;
+      if (layoutResizeObserver) {
+        layoutResizeObserver.disconnect();
+        layoutResizeObserver = null;
+      }
+      if (layoutFrame !== null) {
+        cancelAnimationFrame(layoutFrame);
+        layoutFrame = null;
       }
     }
     function startLayoutObserver() {
       stopLayoutObserver();
-      layoutTimer = setInterval(() => {
-        if (openPanel && openButton) positionPanel(openPanel, openButton);
-      }, 250);
-      layoutObserver = new MutationObserver(() => {
-        if (openPanel && openButton) {
-          requestAnimationFrame(() => positionPanel(openPanel, openButton));
-        }
-      });
+      layoutObserver = new MutationObserver(requestPanelPosition);
+      if (typeof ResizeObserver === "function") {
+        layoutResizeObserver = new ResizeObserver(requestPanelPosition);
+        layoutResizeObserver.observe(openPanel);
+      }
       const seen = /* @__PURE__ */ new Set();
       let el = openInputGroup;
       while (el && !seen.has(el)) {
         layoutObserver.observe(el, { attributes: true, attributeFilter: ["class", "style"] });
+        layoutResizeObserver?.observe(el);
         seen.add(el);
         el = el.parentElement;
       }
@@ -12423,6 +12857,8 @@ ${lines.join("\n")}`;
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", onViewportChange);
       window.removeEventListener("scroll", onViewportChange, true);
+      window.visualViewport?.removeEventListener("resize", onViewportChange);
+      window.visualViewport?.removeEventListener("scroll", onViewportChange);
     }
     function onPointerDown(e) {
       if (variantPopup && variantPopup.contains(e.target)) return;
@@ -12437,7 +12873,8 @@ ${lines.join("\n")}`;
       }
     }
     function onViewportChange() {
-      if (openPanel && openButton) positionPanel(openPanel, openButton);
+      closeVariantPopup();
+      requestPanelPosition();
     }
     function togglePanel(btn, inputGroup) {
       if (openButton === btn && openPanel) {
@@ -12452,40 +12889,44 @@ ${lines.join("\n")}`;
       openButton = btn;
       openInputGroup = inputGroup;
       startLayoutObserver();
-      requestAnimationFrame(() => positionPanel(panel2, btn));
+      requestPanelPosition();
       document.addEventListener("pointerdown", onPointerDown, true);
       document.addEventListener("keydown", onKeyDown);
       window.addEventListener("resize", onViewportChange);
       window.addEventListener("scroll", onViewportChange, true);
+      window.visualViewport?.addEventListener("resize", onViewportChange);
+      window.visualViewport?.addEventListener("scroll", onViewportChange);
       const search = panel2.querySelector(".sc-chat-emoji-picker-search");
-      if (search) setTimeout(() => search.focus(), 0);
+      if (search) setTimeout(() => {
+        if (openPanel === panel2) search.focus();
+      }, 0);
     }
     function removeAll() {
       closePanel();
       document.querySelectorAll(BUTTON_SELECTOR).forEach((btn) => {
         if (btn._inputGroup) delete btn._inputGroup.dataset.scEmojiPickerGroup;
+        btn.parentElement?.classList.remove("sc-chat-emoji-picker-host");
         btn.remove();
       });
     }
     function requestScan() {
       if (scanTimer2) return;
-      scanTimer2 = setTimeout(() => {
+      scanTimer2 = requestAnimationFrame(() => {
         scanTimer2 = null;
         scan2();
-      }, 150);
+      });
     }
     function scan2() {
       if (!isEnabled3()) {
         removeAll();
         return;
       }
-      updateButtonPositions();
+      if (openInputGroup && (!openInputGroup.isConnected || !openButton?.isConnected)) closePanel();
       document.querySelectorAll("textarea").forEach((textarea) => {
         if (!isChatInput(textarea)) return;
         const inputGroup = textarea.closest(".input-group");
         if (inputGroup) ensureButton(inputGroup);
       });
-      updateButtonPositions();
     }
     function start() {
       if (started) return;
@@ -12494,12 +12935,19 @@ ${lines.join("\n")}`;
         return;
       }
       started = true;
-      new MutationObserver(() => requestScan()).observe(document.body, { childList: true, subtree: true });
-      new MutationObserver(() => {
+      const style2 = document.createElement("style");
+      style2.textContent = ".sc-chat-emoji-picker-host{position:relative;isolation:isolate;}";
+      document.head.appendChild(style2);
+      new MutationObserver((records) => {
         if (lastUrl !== location.href) {
           lastUrl = location.href;
-          closePanel();
-          setTimeout(scan2, 400);
+          removeAll();
+          requestScan();
+          return;
+        }
+        if (openInputGroup && (!openInputGroup.isConnected || !openButton?.isConnected)) closePanel();
+        if (records.some((record) => !record.target.closest?.(".sc-chat-emoji-picker-panel,.sc-chat-emoji-variant-popup") && [...record.addedNodes, ...record.removedNodes].some((node) => node.nodeType === 1 && (node.matches("textarea,.input-group,.input-group-btn," + BUTTON_SELECTOR) || node.querySelector("textarea,.input-group"))))) {
+          requestScan();
         }
       }).observe(document.body, { childList: true, subtree: true });
       const themeObserver = new MutationObserver(() => {
@@ -12508,16 +12956,11 @@ ${lines.join("\n")}`;
       [document.documentElement, document.body].forEach((target) => {
         themeObserver.observe(target, { attributes: true, attributeFilter: ["class", "style"] });
       });
-      buttonPositionTimer = setInterval(updateButtonPositions, 300);
-      window.addEventListener("scroll", updateButtonPositions, true);
-      window.addEventListener("resize", updateButtonPositions);
       window.scChatEmojiPickerRefresh = () => {
         removeAll();
         scan2();
       };
       scan2();
-      loadEmojiData().catch(() => {
-      });
     }
     setTimeout(start, 300);
   })();
@@ -13018,26 +13461,34 @@ ${lines.join("\n")}`;
         };
         const clampPosition = (left, top) => {
           const { w, h } = getPanelBounds();
+          const viewport = window.visualViewport;
+          const visibleTop = viewport?.offsetTop || 0;
+          const visibleBottom = visibleTop + (viewport?.height || window.innerHeight);
           return {
             left: Math.max(0, Math.min(window.innerWidth - w, left)),
-            top: Math.max(0, Math.min(window.innerHeight - h, top))
+            top: Math.max(visibleTop, Math.min(visibleBottom - h, top))
           };
         };
         const saveDragPosition = () => {
           const rect = panel2.getBoundingClientRect();
+          const viewport = window.visualViewport;
+          const visibleBottom = (viewport?.offsetTop || 0) + (viewport?.height || window.innerHeight);
           intendedLeft = Math.round(rect.left);
-          intendedBottom = Math.round(window.innerHeight - rect.bottom);
+          intendedBottom = Math.round(visibleBottom - rect.bottom);
           savePos(intendedLeft, intendedBottom);
         };
         const applyClampedPosition = () => {
           if (intendedLeft === null || !panel2) return;
           const vw = window.innerWidth;
           const vh = window.innerHeight;
+          const viewport = window.visualViewport;
+          const visibleTop = viewport?.offsetTop || 0;
+          const visibleBottom = visibleTop + (viewport?.height || vh);
           const btnW = panel2.offsetWidth || 32;
           const btnH = panel2.offsetHeight || 32;
-          const intendedTop = vh - intendedBottom - btnH;
+          const intendedTop = visibleBottom - intendedBottom - btnH;
           const left = Math.max(0, Math.min(vw - btnW, intendedLeft));
-          const top = Math.max(0, Math.min(vh - btnH, intendedTop));
+          const top = Math.max(visibleTop, Math.min(visibleBottom - btnH, intendedTop));
           panel2.style.left = left + "px";
           panel2.style.bottom = vh - top - btnH + "px";
           panel2.style.top = "auto";
@@ -13052,6 +13503,8 @@ ${lines.join("\n")}`;
         }
         applyClampedPosition();
         window.addEventListener("resize", applyClampedPosition);
+        window.visualViewport?.addEventListener("resize", applyClampedPosition);
+        window.visualViewport?.addEventListener("scroll", applyClampedPosition);
         const onDragStart = (e) => {
           if (e.button !== void 0 && e.button !== 0) return;
           const isTouch = !!e.touches;
@@ -13330,7 +13783,7 @@ ${lines.join("\n")}`;
         const createRetailStoreButtonControls = () => {
           const box = document.createElement("div");
           box.className = "sc-retail-store-button-controls";
-          box.style.cssText = "display:flex;flex-direction:column;gap:5px;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);";
+          box.style.cssText = "display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);";
           const options = [
             ["autoPricingHourlyButton", "\u6700\u5927\u65F6\u5229\u6DA6"],
             ["autoPricingTotalButton", "\u6700\u5927\u5229\u6DA6"],
@@ -13344,7 +13797,7 @@ ${lines.join("\n")}`;
           }
           options.forEach(([key, label]) => {
             const row = document.createElement("label");
-            row.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;";
+            row.style.cssText = "display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer;";
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
             checkbox.checked = config[key] !== false;
@@ -16207,6 +16660,14 @@ ${lines.join("\n")}`;
     (function() {
       "use strict";
       var MODULE_KEY3 = "snipboardPreview";
+      var HISTORY_KEY = "sc-snipboard-lightbox";
+      var activeLightbox = null;
+      var closingPageUrl = null;
+      if (history.state?.[HISTORY_KEY]) {
+        var initialHistoryState = Object.assign({}, history.state);
+        delete initialHistoryState[HISTORY_KEY];
+        history.replaceState(initialHistoryState, "", location.href);
+      }
       function isEnabled3() {
         return window.isPageModuleEnabled ? window.isPageModuleEnabled(MODULE_KEY3) : true;
       }
@@ -16267,13 +16728,26 @@ ${lines.join("\n")}`;
         img.style.height = "auto";
         img.setAttribute("data-sc-original-src", imgUrl);
         img.addEventListener("click", function(e) {
+          e.preventDefault();
           e.stopPropagation();
-          showLightbox(imgUrl);
+          if (isEnabled3()) showLightbox(imgUrl);
         });
         link.parentNode.insertBefore(img, link.nextSibling);
       }
       function showLightbox(url) {
+        if (activeLightbox || closingPageUrl) return;
+        var pageUrl = location.href;
+        var historyToken = null;
+        try {
+          historyToken = "sc-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+          history.pushState(Object.assign({}, history.state, { [HISTORY_KEY]: historyToken }), "", pageUrl);
+        } catch (err) {
+          historyToken = null;
+        }
         var overlay = document.createElement("div");
+        overlay.className = "sc-snipboard-lightbox";
+        overlay.setAttribute("role", "dialog");
+        overlay.setAttribute("aria-label", "\u56FE\u7247\u9884\u89C8");
         overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:99999;display:flex;justify-content:center;align-items:center;cursor:pointer;overflow:hidden;";
         var closeBtn = document.createElement("span");
         closeBtn.textContent = "\xD7";
@@ -16282,18 +16756,28 @@ ${lines.join("\n")}`;
           e.stopPropagation();
           closeLightbox();
         });
-        function closeLightbox() {
+        var closed = false;
+        function closeLightbox(fromHistory) {
+          if (closed) return;
+          closed = true;
           overlay.style.opacity = "0";
+          overlay.style.pointerEvents = "none";
           setTimeout(function() {
             overlay.remove();
           }, 200);
           document.removeEventListener("keydown", onKeyDown);
+          activeLightbox = null;
+          if (fromHistory !== true && historyToken && location.href === pageUrl && history.state?.[HISTORY_KEY] === historyToken) {
+            closingPageUrl = pageUrl;
+            history.back();
+          }
         }
         function onKeyDown(e) {
           if (e.key === "Escape") closeLightbox();
         }
         overlay.addEventListener("click", closeLightbox);
         document.addEventListener("keydown", onKeyDown);
+        activeLightbox = { close: closeLightbox, pageUrl, historyToken };
         var viewport = document.createElement("div");
         viewport.style.cssText = "width:90vw;height:90vh;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:default;";
         var img = document.createElement("img");
@@ -16432,6 +16916,19 @@ ${lines.join("\n")}`;
           overlay.style.opacity = "1";
         });
       }
+      window.addEventListener("popstate", function(event) {
+        var lightbox = activeLightbox;
+        if (lightbox && event.state?.[HISTORY_KEY] !== lightbox.historyToken) {
+          lightbox.close(true);
+        } else if (closingPageUrl) {
+          closingPageUrl = null;
+        }
+        if (!activeLightbox && history.state?.[HISTORY_KEY]) {
+          var state3 = Object.assign({}, history.state);
+          delete state3[HISTORY_KEY];
+          history.replaceState(state3, "", location.href);
+        }
+      });
       function scanContainer(container) {
         if (!isEnabled3()) return;
         var links = container.querySelectorAll('a[href*="snipboard.io"]');
@@ -16480,6 +16977,9 @@ ${lines.join("\n")}`;
       }
       var lastUrl = location.href;
       new MutationObserver(function() {
+        if (activeLightbox && (!isEnabled3() || activeLightbox.pageUrl !== location.href)) {
+          activeLightbox.close();
+        }
         if (lastUrl !== location.href) {
           lastUrl = location.href;
           initAttempted = false;
@@ -16539,9 +17039,10 @@ ${lines.join("\n")}`;
                     height: calc(var(--sc-chat-input-height, ${desktopHeight}px) + 8px) !important;
                     flex-shrink: 0;
                 }
-                /* \u56FA\u5B9A\u804A\u5929\u5E03\u5C40\u65E0\u6CD5\u6EDA\u52A8\u65F6\uFF0C\u53EA\u79FB\u52A8\u5F53\u524D\u8F93\u5165\u533A\uFF0C\u4E0D\u79FB\u52A8 React \u8282\u70B9\u3002 */
-                .sc-chat-input-lifted {
-                    transform: translateY(var(--sc-chat-input-offset)) !important;
+                /* \u624B\u673A\u9650\u5236\u9875\u9762\u5916\u58F3\uFF1B\u65E0\u5916\u58F3\u65F6\u9650\u5236\u804A\u5929\u5BA4\uFF0C\u4FDD\u7559\u539F\u751F flex \u6392\u5E03\u3002 */
+                .sc-chat-room-constrained {
+                    max-height: var(--sc-chat-room-max-height) !important;
+                    box-sizing: border-box;
                 }
 
                 /* \u79FB\u52A8\u7AEF/\u5C0F\u5C4F\u5E55\u9002\u914D\uFF1A\u9632\u6B62\u5F39\u51FA\u7684\u865A\u62DF\u952E\u76D8\u548C\u8FC7\u5927\u8F93\u5165\u6846\u906E\u6321\u5168\u90E8\u5C4F\u5E55 */
@@ -16632,7 +17133,23 @@ ${lines.join("\n")}`;
             outerContainer = outerContainer.parentElement;
           }
         }
+        var messageArea = chatRoom && Array.from(chatRoom.children).find(function(child) {
+          return child !== outerContainer && (child.matches('.e1llepen2, div[style*="column-reverse"]') || child.querySelector('.e1llepen2, div[style*="column-reverse"]'));
+        });
+        var pageShell = chatRoom;
+        while (pageShell && pageShell !== document.body) {
+          var shellStyle = getComputedStyle(pageShell);
+          var mainContent = Array.from(pageShell.children).find(function(child) {
+            return child !== chatRoom && child.contains(chatRoom);
+          });
+          var mainStyle = mainContent && getComputedStyle(mainContent);
+          if (shellStyle.display === "flex" && shellStyle.flexDirection === "column" && (pageShell.querySelector("#menu-chat") && pageShell.querySelector("#menu-map") || mainStyle?.overflowY === "auto" && Number(mainStyle.flexGrow) > 0)) break;
+          pageShell = pageShell.parentElement;
+        }
         return {
+          chatRoom,
+          pageShell: pageShell !== document.body ? pageShell : null,
+          messageArea,
           inputGroup,
           btnContainer,
           outerContainer
@@ -16650,20 +17167,33 @@ ${lines.join("\n")}`;
         clearTimeout(session.settleTimer);
         session.frame = null;
         session.settleTimer = null;
-        if (session.observer) session.observer.disconnect();
-        session.viewport?.removeEventListener("resize", handleViewportChange);
-        session.viewport?.removeEventListener("scroll", handleViewportChange);
-        window.removeEventListener("resize", handleWindowResize);
-        window.removeEventListener("orientationchange", handleOrientationChange);
+        session.resizeObserver?.disconnect();
+        session.viewport?.removeEventListener("resize", requestLayout);
+        session.viewport?.removeEventListener("scroll", requestLayout);
+        window.removeEventListener("resize", requestLayout);
+        window.removeEventListener("orientationchange", requestLayout);
+        window.removeEventListener("scroll", queueLayout, true);
         session.listening = false;
       }
-      function inputBounds(session) {
-        var rect = session.textarea.getBoundingClientRect();
-        var buttonRect = session.containers.btnContainer?.getBoundingClientRect();
-        return {
-          top: Math.min(rect.top, buttonRect?.height ? buttonRect.top : rect.top) - session.offset,
-          bottom: Math.max(rect.bottom, buttonRect?.height ? buttonRect.bottom : rect.bottom) - session.offset
-        };
+      function setLayoutProperty(element, name, value) {
+        if (element.style.getPropertyValue(name) !== value) element.style.setProperty(name, value);
+      }
+      function clearLayoutConstraint(element) {
+        if (!element) return;
+        if (element.classList.contains("sc-chat-room-constrained")) element.classList.remove("sc-chat-room-constrained");
+        if (element.style.getPropertyValue("--sc-chat-room-max-height")) element.style.removeProperty("--sc-chat-room-max-height");
+      }
+      function observeRoomChildren(session) {
+        var room = session.containers.chatRoom;
+        if (!room || !session.resizeObserver) return;
+        var children = new Set(room.children);
+        session.observedChildren.forEach(function(child) {
+          if (!children.has(child)) session.resizeObserver.unobserve(child);
+        });
+        children.forEach(function(child) {
+          if (!session.observedChildren.has(child)) session.resizeObserver.observe(child);
+        });
+        session.observedChildren = children;
       }
       function updateLayout() {
         var session = activeSession;
@@ -16676,30 +17206,38 @@ ${lines.join("\n")}`;
         if (!session.listening || document.activeElement !== session.textarea || isClickingInside) return;
         var viewport = session.viewport;
         var height = viewport?.height || window.innerHeight;
-        var top = (viewport?.offsetTop || 0) + 8;
-        var bottom = top + height - 16;
+        var viewportTop = viewport?.offsetTop || 0;
+        var viewportBottom = viewportTop + height;
+        var top = viewportTop + 8;
+        var bottom = viewportBottom - 8;
         var mobile = window.matchMedia("(max-width: 767px)").matches;
         var desired = readCustomHeight(mobile ? "chatInputExpanderHeightMobile" : "chatInputExpanderHeight", mobile ? 90 : 130);
-        var fitted = Math.min(desired, Math.max(40, Math.floor(height - 24)));
         var outer = session.containers.outerContainer || session.containers.inputGroup;
         if (!outer) return;
-        outer.style.setProperty("--sc-chat-input-height", fitted + "px");
-        if (!session.positionInput) return;
-        var bounds = inputBounds(session);
-        var delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
-        var ancestor = outer.parentElement;
-        while (ancestor && Math.abs(delta) > 1) {
-          var scrollable = ancestor === document.scrollingElement || /^(auto|scroll|overlay)$/.test(getComputedStyle(ancestor).overflowY);
-          if (scrollable && ancestor.scrollHeight > ancestor.clientHeight) {
-            ancestor.scrollBy({ top: delta, behavior: "instant" });
-            bounds = inputBounds(session);
-            delta = bounds.bottom > bottom ? bounds.bottom - bottom : bounds.top < top ? bounds.top - top : 0;
-          }
-          ancestor = ancestor.parentElement;
+        var room = session.containers.chatRoom;
+        var available = height - 24;
+        var shell = session.containers.pageShell;
+        if (mobile && shell?.isConnected) {
+          var shellTop = shell.getBoundingClientRect().top;
+          setLayoutProperty(shell, "--sc-chat-room-max-height", Math.max(0, viewportBottom - shellTop) + "px");
+          if (!shell.classList.contains("sc-chat-room-constrained")) shell.classList.add("sc-chat-room-constrained");
+          clearLayoutConstraint(room);
+        } else {
+          clearLayoutConstraint(shell);
         }
-        session.offset = Math.abs(delta) > 1 ? -delta : 0;
-        outer.style.setProperty("--sc-chat-input-offset", session.offset + "px");
-        outer.classList.toggle("sc-chat-input-lifted", session.offset !== 0);
+        if (room?.isConnected) {
+          var roomTop = room.getBoundingClientRect().top;
+          if (!mobile || !shell?.isConnected) {
+            setLayoutProperty(room, "--sc-chat-room-max-height", Math.max(0, Math.floor(bottom - roomTop)) + "px");
+            if (!room.classList.contains("sc-chat-room-constrained")) room.classList.add("sc-chat-room-constrained");
+          }
+          var roomRect = room.getBoundingClientRect();
+          var messageArea = session.containers.messageArea;
+          var contentTop = messageArea?.isConnected ? messageArea.getBoundingClientRect().top : roomRect.top;
+          available = Math.min(bottom, roomRect.bottom) - Math.max(top, contentTop) - 8 - 48;
+        }
+        var fitted = Math.min(desired, Math.max(40, Math.floor(available)));
+        setLayoutProperty(outer, "--sc-chat-input-height", fitted + "px");
       }
       function queueLayout() {
         if (activeSession?.listening && activeSession.frame === null) {
@@ -16712,57 +17250,71 @@ ${lines.join("\n")}`;
         clearTimeout(activeSession.settleTimer);
         activeSession.settleTimer = setTimeout(queueLayout, 250);
       }
-      function handleViewportChange() {
-        if (!activeSession?.listening) return;
-        activeSession.positionInput = true;
-        requestLayout();
-      }
-      function handleWindowResize() {
-        if (!activeSession?.listening) return;
-        if (!activeSession.viewport && Math.abs(window.innerHeight - activeSession.baselineHeight) > 1) {
-          activeSession.positionInput = true;
-        }
-        requestLayout();
-      }
-      function handleOrientationChange() {
-        if (!activeSession?.listening) return;
-        activeSession.positionInput = true;
-        requestLayout();
-      }
-      function startTracking(textarea, containers, positionInput) {
-        var viewport = window.visualViewport;
-        var baselineHeight = viewport?.height || window.innerHeight;
+      function startTracking(textarea, containers) {
+        if (!document.body || !textarea.isConnected) return;
         activeSession = {
           textarea,
           containers,
           parent: textarea.parentElement,
-          viewport,
+          viewport: window.visualViewport,
           url: location.href,
-          baselineHeight,
-          // 首次聚焦只改变高度，真实视口变化后才允许滚动或位移。
-          positionInput: positionInput === true,
-          offset: 0,
           frame: null,
           settleTimer: null,
           listening: true,
-          observer: null
+          observer: null,
+          resizeObserver: null,
+          observedChildren: /* @__PURE__ */ new Set()
         };
-        activeSession.viewport?.addEventListener("resize", handleViewportChange);
-        activeSession.viewport?.addEventListener("scroll", handleViewportChange);
-        window.addEventListener("resize", handleWindowResize);
-        window.addEventListener("orientationchange", handleOrientationChange);
-        activeSession.observer = new MutationObserver(() => {
-          if (activeSession && (!textarea.isConnected || activeSession.url !== location.href)) collapseAll();
+        var session = activeSession;
+        session.viewport?.addEventListener("resize", requestLayout);
+        session.viewport?.addEventListener("scroll", requestLayout);
+        window.addEventListener("resize", requestLayout);
+        window.addEventListener("orientationchange", requestLayout);
+        window.addEventListener("scroll", queueLayout, true);
+        session.observer = new MutationObserver((records) => {
+          if (activeSession !== session) return;
+          if (!textarea.isConnected || session.url !== location.href) {
+            collapseAll();
+            return;
+          }
+          if (!session.listening) return;
+          if (textarea.parentElement !== session.parent || containers.chatRoom && !containers.chatRoom.contains(textarea)) {
+            expandInput(textarea);
+            return;
+          }
+          if (records.some((record) => record.type === "attributes" || record.target.contains(textarea) || containers.chatRoom?.contains(record.target))) {
+            var nextContainers = findContainers(textarea);
+            if (nextContainers.chatRoom !== containers.chatRoom || nextContainers.outerContainer !== containers.outerContainer || nextContainers.pageShell !== containers.pageShell) {
+              expandInput(textarea);
+              return;
+            }
+            containers.messageArea = nextContainers.messageArea;
+            observeRoomChildren(session);
+            queueLayout();
+          }
         });
-        activeSession.observer.observe(document.body, { childList: true, subtree: true });
+        session.observer.observe(document.body, { childList: true, subtree: true });
+        if (typeof ResizeObserver === "function") session.resizeObserver = new ResizeObserver(queueLayout);
+        var ancestor = containers.chatRoom;
+        while (ancestor) {
+          session.resizeObserver?.observe(ancestor);
+          if (ancestor !== document.body) {
+            session.observer.observe(ancestor, { attributes: true, attributeFilter: ["class", "style"] });
+          }
+          ancestor = ancestor.parentElement;
+        }
+        observeRoomChildren(session);
         updateLayout();
-        if (activeSession.positionInput) requestLayout();
+        requestLayout();
       }
       function collapseContainers(textarea) {
         var session = activeSession?.textarea === textarea ? activeSession : null;
         var containers = session ? session.containers : findContainers(textarea);
         if (session) {
           stopTracking();
+          session.observer?.disconnect();
+          clearLayoutConstraint(containers.pageShell);
+          clearLayoutConstraint(containers.chatRoom);
           activeSession = null;
           clearTimeout(releaseTimer);
           releaseTimer = null;
@@ -16784,9 +17336,7 @@ ${lines.join("\n")}`;
         }
         var outer = containers.outerContainer || containers.inputGroup;
         if (outer) {
-          outer.classList.remove("sc-chat-input-lifted");
           outer.style.removeProperty("--sc-chat-input-height");
-          outer.style.removeProperty("--sc-chat-input-offset");
         }
       }
       function collapseAll() {
@@ -16826,7 +17376,7 @@ ${lines.join("\n")}`;
       }
       document.addEventListener(upEvent, releaseInteraction);
       if (window.PointerEvent) document.addEventListener("pointercancel", releaseInteraction);
-      function expandInput(target, positionInput) {
+      function expandInput(target) {
         if (!isEnabled3()) return;
         if (isChatInput(target)) {
           collapseAll();
@@ -16847,7 +17397,7 @@ ${lines.join("\n")}`;
           if (containers.outerContainer) {
             containers.outerContainer.classList.add("sc-chat-outer-focused");
           }
-          startTracking(target, containers, positionInput);
+          startTracking(target, containers);
         }
       }
       document.addEventListener("focusin", function(e) {
@@ -16867,9 +17417,8 @@ ${lines.join("\n")}`;
           collapseAll();
           return;
         }
-        var keepPosition = !!activeSession?.positionInput;
         injectStyles();
-        if (isChatInput(document.activeElement)) expandInput(document.activeElement, keepPosition);
+        if (isChatInput(document.activeElement)) expandInput(document.activeElement);
       };
     })();
     const UPDATE_IGNORE_KEY = "sc_autoMaxPPHPL_ignored_version";
@@ -17027,4 +17576,4 @@ ${lines.join("\n")}`;
   })();
 })();
 
-// @changelog 第四次尝试修复安卓输入法遮挡聊天输入框的问题。
+// @changelog <strong>销售办公室优化</strong><br>复制按钮和全部交单按钮移至货物需求下方，支持连续点击不同订单；新增复制所有大楼缺货，以及交单顺序和品质选择建议。<br><br><strong>测试提醒：有问题请及时反馈。寻优功能未测试，请勿完全依赖结果，欢迎反馈。</strong><br><br><strong>手机聊天体验</strong><br>改善键盘遮挡输入框、聊天室布局错位和底部空白问题；修复表情按钮浮到其他页面、跟随迟缓及空提示显示异常。<br><br><strong>其他调整</strong><br>打开 Snipboard 大图后，手机返回键优先关闭图片预览；零售商店按钮的子设置改为横向排列，小屏自动换行。
