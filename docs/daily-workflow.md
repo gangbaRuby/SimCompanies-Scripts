@@ -43,6 +43,14 @@ npm run check
 
 涉及页面 UI 或 SPA 时，额外在浏览器实际检查：首次进入、离开再返回、React 重绘、重复初始化、桌面、手机、深色、浅色和功能开关。
 
+需要在 staging 服务器测试时，另行构建：
+
+```powershell
+npm run build:staging
+```
+
+安装 `dist/autoMaxPPHPL_STAGING_DEV.user.js`，然后刷新 `https://staging.simcompanies.com/`。该包名称带 `(STAGING DEV)`，安装身份独立，仅匹配 staging；构建时将游戏请求、链接、路由匹配和基础数据分包定位切换到 staging，并停用正式版自动更新。重复运行此命令可更新 staging 开发包。普通开发包仍由 `npm run build` 生成，正式发布仍走 release 流程。
+
 ### 4. 提交并创建 PR
 
 ```powershell
