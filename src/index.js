@@ -704,7 +704,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     }
                     if (key === 'autoPricing' && typeof window.refreshAutoPricingButtons === 'function') {
                         window.refreshAutoPricingButtons();
-                        if (newState && /\/b\/\d+\/?$/.test(location.href) && typeof window.initAutoPricing === 'function') {
+                        if (newState && /\/b\/\d+(?:\/retail\/[^\/?#]+)?\/?(?:[?#].*)?$/.test(location.href) && typeof window.initAutoPricing === 'function') {
                             window.initAutoPricing();
                         }
                     }
@@ -847,7 +847,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 box.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);';
                 const options = [
                     ['autoPricingHourlyButton', '最大时利润'],
-                    ['autoPricingTotalButton', '最大利润'],
+                    ['autoPricingTotalButton', '最大总利润'],
                     ['autoPricingUnitCostInput', '假设单位成本'],
                 ];
                 let config = {};
@@ -2103,6 +2103,11 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
     // ======================
     (function () {
         const RETAIL_BUTTON_HIDDEN_CLASS = 'sc-retail-store-button-hidden';
+        const LEGACY_RETAIL_CARD_SELECTOR = 'div[style="overflow: visible;"]';
+        const NEW_RETAIL_ROW_SELECTOR = 'div[class*="test-resource-row-"]:not(.row)';
+        const NEW_RETAIL_PRICE_SELECTOR = 'input[name="price"][id^="retail-price-"]';
+        const RETAIL_DECAY_TICK_MINUTES = 4;
+        let retailPricingTargetSequence = 0;
 
         function getRetailStoreButtonConfig() {
             let config = {};
@@ -2119,7 +2124,117 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             if (document.getElementById('sc-retail-store-button-settings-style')) return;
             const style = document.createElement('style');
             style.id = 'sc-retail-store-button-settings-style';
-            style.textContent = `.${RETAIL_BUTTON_HIDDEN_CLASS}{display:none !important;}`;
+            style.textContent = `
+                .${RETAIL_BUTTON_HIDDEN_CLASS}{display:none !important;}
+                .sc-retail-pricing-native{
+                    flex:1 0 100%;
+                    width:100%;
+                    display:grid;
+                    gap:6px;
+                    margin-top:2px;
+                }
+                .sc-retail-pricing-native .sc-retail-store-button-row{
+                    display:grid;
+                    grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+                    gap:6px;
+                    width:100%;
+                }
+                .sc-retail-pricing-native .auto-profit-display{
+                    min-height:42px;
+                    padding:0;
+                    color:var(--sc-retail-text);
+                    background:transparent;
+                    border:0;
+                    font-weight:normal;
+                }
+                .sc-retail-pricing-native .sc-retail-pricing-metrics{
+                    display:grid;
+                    grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+                    gap:6px;
+                }
+                .sc-retail-pricing-metric{
+                    display:flex;
+                    min-width:0;
+                    flex-direction:column;
+                    justify-content:center;
+                    gap:2px;
+                    padding:5px 9px;
+                    border:1px solid var(--sc-retail-border);
+                    border-radius:3px;
+                    background:var(--sc-retail-surface);
+                }
+                .sc-retail-pricing-metric span{
+                    color:var(--sc-retail-muted);
+                    font-size:11px;
+                    line-height:1.2;
+                }
+                .sc-retail-pricing-metric strong{
+                    overflow:hidden;
+                    color:var(--sc-retail-positive);
+                    font-size:14px;
+                    font-variant-numeric:tabular-nums;
+                    line-height:1.25;
+                    text-overflow:ellipsis;
+                    white-space:nowrap;
+                }
+                .sc-retail-pricing-metric strong.is-negative{
+                    color:var(--sc-retail-negative);
+                }
+                .sc-retail-pricing-native .sc-retail-status-message{
+                    display:flex;
+                    min-height:34px;
+                    align-items:center;
+                    justify-content:center;
+                    padding:5px 9px;
+                    border:1px solid var(--sc-retail-border);
+                    border-radius:3px;
+                    background:var(--sc-retail-surface);
+                    font-size:12px;
+                    text-align:center;
+                }
+                .sc-retail-pricing-native .sc-retail-status-empty{
+                    display:none !important;
+                }
+                .sc-retail-pricing-native .sc-retail-status-message.is-busy{
+                    color:var(--sc-retail-busy);
+                    border-color:color-mix(in srgb,var(--sc-retail-busy) 55%,transparent);
+                }
+                .sc-retail-pricing-native .sc-retail-status-message.is-error{
+                    color:var(--sc-retail-negative);
+                    border-color:color-mix(in srgb,var(--sc-retail-negative) 55%,transparent);
+                }
+                .sc-retail-pricing-native .sc-retail-status-message.is-success{
+                    color:var(--sc-retail-positive);
+                    border-color:color-mix(in srgb,var(--sc-retail-positive) 55%,transparent);
+                }
+                .sc-retail-cost-field{
+                    display:grid;
+                    grid-template-columns:minmax(100px,1fr) minmax(120px,170px);
+                    align-items:center;
+                    gap:8px;
+                    min-width:0;
+                    color:var(--sc-retail-muted);
+                    font-size:12px;
+                }
+                .sc-retail-cost-field > span{
+                    min-width:0;
+                    overflow:hidden;
+                    text-overflow:ellipsis;
+                    white-space:nowrap;
+                }
+                .sc-retail-cost-field .custom-unit-cost-input{
+                    min-width:0;
+                }
+                @media (max-width:420px){
+                    .sc-retail-pricing-native .sc-retail-store-button-row{
+                        grid-template-columns:1fr;
+                    }
+                    .sc-retail-cost-field{
+                        grid-template-columns:1fr;
+                        gap:4px;
+                    }
+                }
+            `;
             document.head.appendChild(style);
         }
 
@@ -2131,10 +2246,14 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 const btnHourly = card.querySelector('.btn-max-hourly-profit');
                 const btnTotal = card.querySelector('.btn-max-total-profit');
                 const customCostInput = card.querySelector('.custom-unit-cost-input');
+                const costField = card.querySelector('.sc-retail-cost-field');
+                const profitDisplay = card.querySelector('.auto-profit-display');
                 if (btnHourly) btnHourly.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.hourly);
                 if (btnTotal) btnTotal.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.total);
                 if (customCostInput) customCostInput.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.unitCost);
+                if (costField) costField.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.unitCost);
                 if (btnContainer) btnContainer.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || (!config.hourly && !config.total));
+                if (profitDisplay) profitDisplay.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || (!config.hourly && !config.total));
             });
         }
 
@@ -2171,6 +2290,314 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             return null;
         }
 
+        // 旧版卡片内也可能出现 test-resource-row-*，只有 retail-price-* 输入框才是新版。
+        function isExplicitNewRetailPricingInput(priceInput) {
+            return Boolean(priceInput?.id?.startsWith('retail-price-'));
+        }
+
+        function getRetailPricingHost(priceInput) {
+            if (!priceInput) return null;
+            const legacyHost = priceInput.closest(LEGACY_RETAIL_CARD_SELECTOR);
+            const newHost = priceInput.closest(NEW_RETAIL_ROW_SELECTOR);
+            if (isExplicitNewRetailPricingInput(priceInput) && !findReactComponent(priceInput)) {
+                return newHost || legacyHost;
+            }
+            return legacyHost || newHost;
+        }
+
+        function isNewRetailPricingHost(priceInput, host) {
+            if (!host || !isExplicitNewRetailPricingInput(priceInput)) return false;
+            return !findReactComponent(priceInput);
+        }
+
+        function getRetailPricingTargetKey(priceInput, host) {
+            const inputId = priceInput.id || '';
+            if (!host.dataset.scRetailPricingTarget || host.dataset.scRetailPricingInputId !== inputId) {
+                const targetLabel = priceInput.id || 'sc-retail-price-target';
+                host.dataset.scRetailPricingTarget = `${targetLabel}-${++retailPricingTargetSequence}`;
+                host.dataset.scRetailPricingInputId = inputId;
+            }
+            return host.dataset.scRetailPricingTarget;
+        }
+
+        function findPricingInputByTargetKey(targetKey) {
+            if (!targetKey) return null;
+            const byId = document.getElementById(targetKey);
+            if (byId?.matches('input[name="price"]')) return byId;
+            const host = Array.from(document.querySelectorAll('[data-sc-retail-pricing-target]'))
+                .find(node => node.dataset.scRetailPricingTarget === targetKey);
+            return host?.querySelector('input[name="price"]') || null;
+        }
+
+        function findFunctionalRetailFiber(element) {
+            const reactKeys = Object.keys(element).filter(key =>
+                key.startsWith('__reactInternalInstance') ||
+                key.startsWith('__reactFiber')
+            );
+            for (const key of reactKeys) {
+                let fiberNode = element[key];
+                while (fiberNode) {
+                    const props = fiberNode.memoizedProps;
+                    if (
+                        props &&
+                        props.resource?.dbLetter !== undefined &&
+                        props.buildingKind !== undefined &&
+                        props.size !== undefined
+                    ) {
+                        return fiberNode;
+                    }
+                    fiberNode = fiberNode.return;
+                }
+            }
+            return null;
+        }
+
+        function parseExplicitRetailQuantity(rawValue) {
+            const normalized = String(rawValue ?? '').replace(/\s/g, '');
+            let numericText = normalized;
+            if (/^\d{1,3}(?:,\d{3})+$/.test(numericText)) {
+                numericText = numericText.replace(/,/g, '');
+            } else if (/^\d+,\d+$/.test(numericText)) {
+                numericText = numericText.replace(',', '.');
+            }
+            if (!/^\d+(?:\.\d+)?$/.test(numericText)) return null;
+            const quantity = Math.floor(Number(numericText));
+            return Number.isFinite(quantity) && quantity > 0 ? quantity : null;
+        }
+
+        function parseRetailDurationSeconds(rawValue) {
+            const text = String(rawValue ?? '').trim().toLowerCase();
+            if (!text) return null;
+
+            let match = /^(\d+):([0-5]\d):([0-5]\d)$/.exec(text);
+            if (match) {
+                return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+            }
+
+            match = /^(\d+)(min|s)$/.exec(text);
+            if (match) {
+                return match[2] === 'min' ? Number(match[1]) * 60 : Number(match[1]);
+            }
+
+            const count = parseInt(text, 10);
+            if (Number.isNaN(count)) return null;
+            if (text.endsWith('hr')) return count * 3600;
+            if (text.endsWith('m')) return count * 60;
+            if (text.endsWith('s')) return count;
+
+            const clockMatch = text.match(/(am|pm)$/);
+            if (!clockMatch) return null;
+            const minuteMatch = text.match(/:(\d{2})(?:am|pm)$/);
+            const minutes = minuteMatch ? parseInt(minuteMatch[1], 10) : 0;
+            const now = new Date();
+            const target = new Date(now);
+            target.setMinutes(minutes);
+            target.setSeconds(0, 0);
+            if (clockMatch[1] === 'pm') {
+                target.setHours(count === 12 ? 12 : (count + 12) % 24);
+            } else {
+                target.setHours(count === 12 ? 24 : count % 24);
+            }
+            let targetTime = target.getTime();
+            if (targetTime < now.getTime()) targetTime += 24 * 60 * 60 * 1000;
+            return (targetTime - now.getTime()) / 1000;
+        }
+
+        function getRetailModel(retailInfo, economyState, resourceId, forceQuality) {
+            const economyData = retailInfo?.[economyState] ?? retailInfo?.[String(economyState)];
+            const resourceModel = economyData?.[resourceId];
+            if (!resourceModel) return null;
+            if (forceQuality === null || forceQuality === undefined) return resourceModel;
+            return resourceModel.quality?.[forceQuality] || null;
+        }
+
+        function getRetailStacks(props, constantsResources, now) {
+            const resourceId = props.resource?.dbLetter;
+            const decay = Number(constantsResources?.[resourceId]?.decay ?? 0);
+            return (props.resources || [])
+                .filter(stack => !stack.blocked)
+                .filter(stack => String(stack.kind) === String(resourceId))
+                .filter(stack => props.forceQuality === undefined || stack.quality === props.forceQuality)
+                .map(stack => {
+                    let amountConsideringDecay = Number(stack.amount) || 0;
+                    if (decay > 0 && stack.datetime) {
+                        const elapsedHours = Math.round(
+                            Math.abs(now - Date.parse(stack.datetime)) / (1000 * 60) / RETAIL_DECAY_TICK_MINUTES
+                        ) * RETAIL_DECAY_TICK_MINUTES / 60;
+                        amountConsideringDecay = Math.floor(amountConsideringDecay * Math.pow(1 - decay, elapsedHours));
+                    }
+                    return { ...stack, amountConsideringDecay };
+                })
+                .sort((a, b) => b.quality - a.quality);
+        }
+
+        function getRetailCostState(stacks, quantity) {
+            let remaining = quantity;
+            let qualityTotal = 0;
+            let cogs = 0;
+            for (const stack of stacks) {
+                const amount = Math.min(remaining, stack.amountConsideringDecay);
+                if (amount <= 0) continue;
+                const costTotal = Object.values(stack.cost || {})
+                    .reduce((sum, value) => sum + (typeof value === 'number' ? value : 0), 0);
+                const unitCost = stack.amountConsideringDecay > 0 ? costTotal / stack.amountConsideringDecay : 0;
+                cogs += amount * unitCost;
+                qualityTotal += amount * stack.quality;
+                remaining -= amount;
+            }
+            if (remaining > 0) {
+                const available = quantity - remaining;
+                if (available > 0) {
+                    const scale = quantity / available;
+                    cogs *= scale;
+                    qualityTotal *= scale;
+                }
+            }
+            return {
+                cogs,
+                quality: quantity > 0 ? qualityTotal / quantity : 0,
+                missing: remaining
+            };
+        }
+
+        function calculateRetailSellSeconds(buildingKind, modeledData, quantity, salesModifier, price, quality, saturation, acceleration, size, weather, qualityWeight) {
+            if (!modeledData) return NaN;
+            const retailAdjustment = RETAIL_ADJUSTMENT[buildingKind] ?? 1;
+            const saturationFactor = Math.min(Math.max(2 - saturation, 0), 2);
+            const speedFactor = Math.max(0.9, saturationFactor / 2 + 0.5);
+            const qualityFactor = saturationFactor / 2 *
+                (1 + (quality / 12) * (qualityWeight || 0));
+            const fixedCost = PROFIT_PER_BUILDING_LEVEL *
+                (modeledData.buildingLevelsNeededPerUnitPerHour * modeledData.modeledUnitsSoldAnHour + 1) *
+                retailAdjustment *
+                qualityFactor +
+                (modeledData.modeledStoreWages ?? 0) * SCXXCS;
+            const unitsSold = modeledData.modeledUnitsSoldAnHour * speedFactor;
+            const productionCost = modeledData.modeledProductionCostPerUnit +
+                (fixedCost + (modeledData.modeledStoreWages ?? 0)) / unitsSold;
+            const overhead = (modeledData.modeledStoreWages ?? 0) / Math.pow(productionCost - modeledData.modeledProductionCostPerUnit, 2);
+            const adjusted = fixedCost -
+                (price - productionCost) * (price - productionCost) * overhead;
+            const seconds = (quantity * ((price - modeledData.modeledProductionCostPerUnit) * 3600) - (modeledData.modeledStoreWages ?? 0)) /
+                (adjusted + (modeledData.modeledStoreWages ?? 0));
+            if (!Number.isFinite(seconds) || seconds <= 0) return NaN;
+            let duration = seconds / acceleration / size;
+            duration -= duration * salesModifier / 100;
+            if (weather?.sellingSpeedMultiplier) duration /= weather.sellingSpeedMultiplier;
+            return duration;
+        }
+
+        function calculateRetailQuantityFromDuration(durationSeconds, currentPrice, props, stacks, constantsData) {
+            const forceQuality = props.forceQuality ?? null;
+            const modeledData = getRetailModel(constantsData?.retailInfo, props.economyState, props.resource?.dbLetter, forceQuality);
+            if (!modeledData?.modeledUnitsSoldAnHour || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+
+            const averagePrice = Number(props.averagePrice) || 0;
+            const price = Number(currentPrice) || averagePrice;
+            if (!price) return null;
+
+            const salesModifier = (props.salesModifierWithRecreationBonus || 0) + Math.floor((props.skillCMO || 0) / 3);
+            const weather = props.resource?.retailSeason === 'Summer' ? props.weather : undefined;
+            const estimateUnits = Math.ceil(modeledData.modeledUnitsSoldAnHour * durationSeconds / 3600);
+            const estimateSeconds = quality => calculateRetailSellSeconds(
+                props.buildingKind,
+                modeledData,
+                estimateUnits,
+                salesModifier,
+                price,
+                props.forceQuality === undefined ? quality : 0,
+                props.saturation,
+                props.acceleration,
+                props.size,
+                weather,
+                constantsData?.data?.RETAIL_MODELING_QUALITY_WEIGHT
+            );
+            const minQuality = stacks.length > 0 ? Math.min(...stacks.map(stack => stack.quality)) : 0;
+            const maxQuality = stacks.length > 0 ? Math.max(...stacks.map(stack => stack.quality)) : 12;
+            const minSeconds = estimateSeconds(minQuality);
+            const maxSeconds = estimateSeconds(maxQuality);
+            if (!Number.isFinite(minSeconds) || !Number.isFinite(maxSeconds)) return null;
+
+            let low = Math.floor(durationSeconds * estimateUnits / minSeconds);
+            let high = Math.floor(durationSeconds * estimateUnits / maxSeconds);
+            if (minQuality === maxQuality) return low;
+            if ((stacks[0]?.amountConsideringDecay || 0) >= high) return high;
+
+            let best = low;
+            for (let i = 0; low <= high && i < 13; i++) {
+                const candidate = Math.floor((low + high) / 2);
+                let remaining = candidate;
+                let qualityTotal = 0;
+                let counted = 0;
+                for (const stack of stacks) {
+                    const amount = Math.min(remaining, stack.amountConsideringDecay);
+                    qualityTotal += amount * stack.quality;
+                    counted += amount;
+                    remaining -= amount;
+                }
+                const weightedQuality = counted > 0 ? qualityTotal / counted : 0;
+                const seconds = estimateSeconds(weightedQuality);
+                if (!Number.isFinite(seconds)) return null;
+                const remainder = durationSeconds - seconds * candidate / estimateUnits;
+                if (remainder < 0) {
+                    best = low;
+                    break;
+                }
+                if (remainder < maxSeconds / estimateUnits) {
+                    best = candidate;
+                    break;
+                }
+                if (remainder > 0) low = candidate + 1;
+                else high = candidate - 1;
+            }
+            return best;
+        }
+
+        function resolveRetailPricingComponent(priceInput) {
+            const legacyComponent = findReactComponent(priceInput);
+            if (legacyComponent) {
+                return { kind: 'legacy', props: legacyComponent.props, state: legacyComponent.state };
+            }
+
+            const host = getRetailPricingHost(priceInput);
+            const fiberNode = findFunctionalRetailFiber(priceInput);
+            if (!host || !fiberNode?.memoizedProps) return null;
+
+            let constantsData = null;
+            try {
+                constantsData = JSON.parse(localStorage.getItem('SimcompaniesConstantsData') || 'null');
+            } catch (e) { /* 基础数据损坏时仍允许显式数量计算 */ }
+
+            const props = fiberNode.memoizedProps;
+            const quantityInput = host.querySelector('input[name="quantity"]');
+            const rawQuantity = quantityInput?.value ?? '';
+            const stacks = getRetailStacks(props, constantsData?.constantsResources, Date.now());
+            let quantity = parseExplicitRetailQuantity(rawQuantity);
+            if (quantity === null) {
+                const durationSeconds = parseRetailDurationSeconds(rawQuantity);
+                quantity = calculateRetailQuantityFromDuration(
+                    durationSeconds,
+                    priceInput.value,
+                    props,
+                    stacks,
+                    constantsData
+                );
+            }
+
+            const costState = Number.isFinite(quantity) && quantity > 0
+                ? getRetailCostState(stacks, quantity)
+                : { cogs: null, quality: null, missing: 0 };
+            return {
+                kind: 'functional',
+                props,
+                state: {
+                    cogs: costState.cogs,
+                    quality: costState.quality,
+                    quantity
+                }
+            };
+        }
+
 
 
         const workerCode = `
@@ -2178,7 +2605,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         const { lwe, zn, size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
             skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
             v, b,
-            cogs, quality, quantity, cardIndex, retryCount,
+            cogs, quality, quantity, targetKey, retryCount,
             SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT,
             calcMode} = e.data;
 
@@ -2231,7 +2658,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             if (!modeledData) {
                 self.postMessage({
                     error: '未找到资源 ' + resource.dbLetter + ' 的零售模型（经济周期 ' + economyState + '），请更新基础数据',
-                    cardIndex,
+                    targetKey,
                     retryCount,
                     calcMode
                 });
@@ -2285,7 +2712,8 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             bestPrice: bestPrice,
             maxProfit: maxProfit,
             calculatedWages: calculatedWages,
-            cardIndex: cardIndex,
+            targetKey: targetKey,
+            quantity: parseFloat(quantity),
             retryCount: retryCount,
             calcMode: calcMode,
             finalTotalProfit: (bestPrice * parseFloat(quantity)) - cogs - calculatedWages,
@@ -2297,7 +2725,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
         const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
 
-        function triggerCalculation(comp, index, retryCount = 0, calcMode = 'hourly') {
+        function triggerCalculation(comp, targetKey, retryCount = 0, calcMode = 'hourly') {
             if (localStorage.getItem('SimcompaniesConstantsData') == null) {
                 showToast("请先点击左下角更新基础数据", 'error');
                 return;
@@ -2314,12 +2742,14 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
             // 解构 State
             const { cogs: originalCogs, quality, quantity } = comp.state;
+            const quantityValue = Number(quantity);
 
-            // 读取自定义单位成本（通过 index 找到对应卡片上的输入框），仅当 >0 时覆盖 cogs
-            const cardEl = document.querySelectorAll('div[style="overflow: visible;"]')[index];
+            const priceInput = findPricingInputByTargetKey(targetKey);
+            const cardEl = getRetailPricingHost(priceInput);
             const customCostEl = cardEl?.querySelector('.custom-unit-cost-input');
             const customUnitCostVal = getRetailStoreButtonConfig().unitCost && customCostEl ? (parseFloat(customCostEl.value) || 0) : 0;
-            const cogs = customUnitCostVal > 0 ? customUnitCostVal * quantity : originalCogs;
+            const cogs = customUnitCostVal > 0 ? customUnitCostVal * quantityValue : Number(originalCogs);
+            if (!Number.isFinite(quantityValue) || quantityValue <= 0 || !Number.isFinite(cogs)) return;
 
             // 在主线程预计算 Worker 无法访问的函数结果
             // ⚠️ 这里直接使用了父作用域中的 Ul 函数
@@ -2332,8 +2762,8 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 wages, buildingKind, forceQuality, weather,
                 v: vVal, b: bVal, // 传入预计算结果
                 skillCMO, skillCOO, saturation, // 备用
-                cogs, quality, quantity,
-                cardIndex: index,
+                cogs, quality, quantity: quantityValue,
+                targetKey,
                 retryCount: retryCount,
                 SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT,
                 calcMode: calcMode
@@ -2343,42 +2773,42 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         // 注册 Worker 异步回调 (处理结果和校验)
         profitWorker.onmessage = (event) => {
             if (event.data?.error) {
-                const card = document.querySelectorAll('div[style="overflow: visible;"]')[event.data.cardIndex];
+                const priceInput = findPricingInputByTargetKey(event.data.targetKey);
+                const card = getRetailPricingHost(priceInput);
                 const profitDisplay = card?.querySelector('.auto-profit-display');
                 const btnHourly = card?.querySelector('.btn-max-hourly-profit');
                 const btnTotal = card?.querySelector('.btn-max-total-profit');
                 if (profitDisplay) {
-                    profitDisplay.textContent = event.data.error;
-                    profitDisplay.style.background = '#f44336';
-                    profitDisplay.style.color = 'white';
+                    updateRetailStatus(profitDisplay, event.data.error, 'error', DM());
                 }
                 if (btnHourly) {
                     btnHourly.textContent = '最大时利润';
                     btnHourly.disabled = false;
                 }
                 if (btnTotal) {
-                    btnTotal.textContent = '最大利润';
+                    btnTotal.textContent = '最大总利润';
                     btnTotal.disabled = false;
                 }
                 return;
             }
             // 1. 接收 Worker 返回的数据 (包括计算出的预计工资 calculatedWages)
-            const { bestPrice, maxProfit, calculatedWages, cardIndex, retryCount, calcMode, finalTotalProfit, finalW } = event.data;
+            const {
+                bestPrice, calculatedWages, targetKey, quantity: calculationQuantity,
+                retryCount, calcMode, finalTotalProfit, finalW
+            } = event.data;
             const mode = calcMode || 'hourly';
 
-            // 使用 index 查找对应的卡片
-            const card = document.querySelectorAll('div[style="overflow: visible;"]')[cardIndex];
-            if (!card) return;
-
-            const priceInput = card.querySelector('input[name="price"]');
+            const priceInput = findPricingInputByTargetKey(targetKey);
+            const card = getRetailPricingHost(priceInput);
+            if (!card || !priceInput) return;
             const btnHourly = card.querySelector('.btn-max-hourly-profit');
             const btnTotal = card.querySelector('.btn-max-total-profit');
             const profitDisplay = card.querySelector('.auto-profit-display');
 
             if (!priceInput || !profitDisplay) return;
 
-            // 2. 重新获取 comp 实例，准备获取 size 和 wagesTotal
-            const comp = findReactComponent(priceInput);
+            // 2. 重新获取新旧 UI 的组件快照
+            const comp = resolveRetailPricingComponent(priceInput);
             if (!comp) return;
             const size = comp.props.size || 1; // 修正：在回调中获取 size
 
@@ -2387,59 +2817,190 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
             // 4. 更新显示 UI
             const hourlyProfit = finalW > 0 ? ((finalTotalProfit / finalW) / size * 3600) : 0;
-
-            profitDisplay.innerHTML = `
-                <div>总利润: ${finalTotalProfit.toFixed(2)}</div>
-                <div style="margin-top: 2px;">每级时利润: ${hourlyProfit.toFixed(2)}</div>
-            `;
-            profitDisplay.style.background = '#4CAF50'; // 绿色表示成功
-            profitDisplay.style.color = 'white';
-            profitDisplay.style.fontWeight = 'bold';
+            updateRetailProfitResult(profitDisplay, finalTotalProfit, hourlyProfit, DM());
 
             if (btnHourly) {
                 btnHourly.textContent = '最大时利润';
                 btnHourly.disabled = false;
             }
             if (btnTotal) {
-                btnTotal.textContent = '最大利润';
+                btnTotal.textContent = '最大总利润';
                 btnTotal.disabled = false;
             }
 
             // 5. 异步校验 (等待 React State 更新)
             setTimeout(() => {
-                const updatedComp = findReactComponent(priceInput);
+                const currentPriceInput = findPricingInputByTargetKey(targetKey) || priceInput;
+                const currentCard = getRetailPricingHost(currentPriceInput);
+                const updatedComp = resolveRetailPricingComponent(currentPriceInput);
                 if (!updatedComp) return;
 
                 const actualWages = updatedComp.state.wagesTotal;
+                const quantityChanged = updatedComp.kind === 'functional' &&
+                    Number.isFinite(calculationQuantity) &&
+                    Number.isFinite(updatedComp.state.quantity) &&
+                    Math.abs(updatedComp.state.quantity - calculationQuantity) > 0.5;
+                const wagesChanged = updatedComp.kind === 'legacy' &&
+                    Number.isFinite(actualWages) &&
+                    Math.abs(calculatedWages - actualWages) > 1;
 
-                // 校验误差
-                if (Math.abs(calculatedWages - actualWages) > 1) {
+                if (quantityChanged || wagesChanged) {
                     if (retryCount < 5) {
-                        const newQty = updatedComp.state.quantity;
-                        // console.log(`[修正重试 ${retryCount + 1}/3] 数量已更新为: ${newQty}，重新发起计算...`);
-
-                        profitDisplay.style.background = '#2196F3'; // 蓝色提示正在修正
-                        profitDisplay.style.color = 'white';
-                        profitDisplay.innerHTML = '🔄 修正数量中...';
+                        updateRetailStatus(profitDisplay, '修正数量中...', 'busy', DM());
 
                         // ⚠️ 优先使用 card.doAutoCalc 调用以传递 mode 参数
-                        if (typeof card.doAutoCalc === "function") {
-                            card.doAutoCalc(updatedComp, retryCount + 1, mode);
+                        if (typeof currentCard?.doAutoCalc === "function") {
+                            currentCard.doAutoCalc(updatedComp, retryCount + 1, mode);
                         } else if (typeof triggerCalculation === "function") {
-                            triggerCalculation(updatedComp, cardIndex, retryCount + 1, mode);
+                            triggerCalculation(updatedComp, targetKey, retryCount + 1, mode);
                         } else {
                             // console.error("triggerCalculation 函数未定义，请确保它在作用域内。");
                         }
                     } else {
-                        profitDisplay.style.background = '#f44336'; // 最终失败变红
-                        profitDisplay.style.color = 'white';
-                        profitDisplay.innerHTML = '⚠️ 计算偏差过大';
-                        showToast("利润计算偏差：建议手动输入具体数量或更新基础数据,依然报错请联系Rabbit House", 'error');
+                        const nativeStatus = profitDisplay.classList.contains('sc-retail-pricing-status');
+                        updateRetailStatus(profitDisplay, '计算偏差过大', 'error', DM());
+                        if (!nativeStatus) {
+                            showToast("利润计算偏差：建议手动输入具体数量或更新基础数据,依然报错请联系Rabbit House", 'error');
+                        }
                     }
                 }
-            }, 100); // 100ms 等待 React 状态更新
+            }, comp.kind === 'functional' ? 180 : 100); // 等待 React 更新价格/数量
 
         };
+
+        function findNativeRetailActionButton(host) {
+            const group = host.querySelector('div[role="group"][aria-labelledby^="retail-by-time-"]');
+            if (!group) return null;
+            const buttons = Array.from(group.querySelectorAll('button'));
+            return buttons.find(button => button.textContent.trim().toUpperCase() === 'MAX') ||
+                buttons[buttons.length - 1] ||
+                null;
+        }
+
+        function createRetailPricingButton(label, className, nativeButton) {
+            const button = nativeButton ? nativeButton.cloneNode(true) : document.createElement('button');
+            button.type = 'button';
+            button.className = nativeButton ? `${nativeButton.className} ${className}` : `btn btn-secondary ${className}`;
+            button.textContent = label;
+            button.disabled = false;
+            button.removeAttribute('id');
+            button.removeAttribute('aria-label');
+            button.removeAttribute('aria-haspopup');
+            button.removeAttribute('aria-expanded');
+            button.removeAttribute('aria-pressed');
+            button.removeAttribute('aria-disabled');
+            button.style.textTransform = 'none';
+            button.style.whiteSpace = 'nowrap';
+            button.style.width = '100%';
+            button.style.minWidth = '0';
+            return button;
+        }
+
+        function getNewRetailPanelMount(priceInput, host) {
+            const quantityInput = host.querySelector('input[name="quantity"]');
+            if (quantityInput) {
+                let quantityPriceRow = priceInput.parentElement;
+                while (
+                    quantityPriceRow &&
+                    quantityPriceRow !== host &&
+                    !quantityPriceRow.contains(quantityInput)
+                ) {
+                    quantityPriceRow = quantityPriceRow.parentElement;
+                }
+                if (quantityPriceRow && quantityPriceRow !== host) {
+                    quantityPriceRow.style.flexWrap = 'wrap';
+                    return quantityPriceRow;
+                }
+            }
+
+            let priceField = null;
+            if (priceInput.id) {
+                const label = Array.from(host.querySelectorAll('label[for]'))
+                    .find(node => node.htmlFor === priceInput.id);
+                priceField = label?.closest('div') || null;
+            }
+            priceField ||= priceInput.parentElement?.parentElement?.parentElement || null;
+            const quantityPriceRow = priceField?.parentElement || null;
+            return quantityPriceRow || priceField || host;
+        }
+
+        function createNewRetailCostInput(priceInput, targetKey) {
+            const input = priceInput.cloneNode(false);
+            input.id = `${targetKey}-unit-cost`;
+            input.name = 'sc-retail-unit-cost';
+            input.type = 'number';
+            input.value = '';
+            input.placeholder = '假设单位成本';
+            input.min = '0';
+            input.step = '0.01';
+            input.autocomplete = 'off';
+            input.className = `${priceInput.className || ''} custom-unit-cost-input`.trim();
+            Array.from(input.attributes).forEach(attribute => {
+                if (attribute.name.startsWith('aria-')) input.removeAttribute(attribute.name);
+            });
+            input.removeAttribute('aria-invalid');
+            input.removeAttribute('aria-describedby');
+            input.style.width = '100%';
+            input.style.boxSizing = 'border-box';
+            return input;
+        }
+
+        function formatRetailProfit(value) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) return '-';
+            return number.toLocaleString('zh-CN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function updateRetailStatus(display, message, type = 'idle', dark = false) {
+            if (!display) return;
+            if (display.classList.contains('sc-retail-pricing-status')) {
+                display.classList.remove('sc-retail-pricing-metrics', 'is-idle', 'is-busy', 'is-error', 'is-success');
+                display.classList.add('sc-retail-status-message', `is-${type}`);
+                display.classList.toggle('sc-retail-status-empty', type === 'idle' || type === 'busy');
+                display.textContent = message;
+                return;
+            }
+            display.textContent = message;
+            display.style.background = type === 'error' ? '#f44336' : type === 'success' ? '#4CAF50' : type === 'busy' ? '#2196F3' : (dark ? '#555' : '#e0e0e0');
+            display.style.color = type === 'idle' ? (dark ? '#fff' : '#333') : 'white';
+            display.style.fontWeight = type === 'idle' ? 'normal' : 'bold';
+        }
+
+        function updateRetailProfitResult(display, totalProfit, hourlyProfit, dark = false) {
+            if (!display) return;
+            if (display.classList.contains('sc-retail-pricing-status')) {
+                display.classList.remove(
+                    'sc-retail-status-message',
+                    'sc-retail-status-empty',
+                    'is-idle',
+                    'is-busy',
+                    'is-error',
+                    'is-success'
+                );
+                display.classList.add('sc-retail-pricing-metrics', 'is-success');
+                display.innerHTML = `
+                    <div class="sc-retail-pricing-metric">
+                        <span>总利润</span>
+                        <strong${totalProfit < 0 ? ' class="is-negative"' : ''}>${formatRetailProfit(totalProfit)}</strong>
+                    </div>
+                    <div class="sc-retail-pricing-metric">
+                        <span>每级时利润</span>
+                        <strong${hourlyProfit < 0 ? ' class="is-negative"' : ''}>${formatRetailProfit(hourlyProfit)}</strong>
+                    </div>
+                `;
+                return;
+            }
+            display.innerHTML = `
+                <div>总利润: ${totalProfit.toFixed(2)}</div>
+                <div style="margin-top:2px;">每级时利润: ${hourlyProfit.toFixed(2)}</div>
+            `;
+            display.style.background = '#4CAF50';
+            display.style.color = 'white';
+            display.style.fontWeight = 'bold';
+        }
 
         // 主功能
         function initAutoPricing() {
@@ -2450,72 +3011,137 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     return;
                 }
                 ensureRetailStoreButtonStyles();
-                const input = document.querySelector('input[name="price"]');
-                if (!input) return;
 
-                const reactInstance = findReactComponent(input);
-                if (!reactInstance) return;
+                const processedHosts = new Set();
+                document.querySelectorAll('input[name="price"]').forEach((priceInput, index) => {
+                    const card = getRetailPricingHost(priceInput);
+                    if (!card || processedHosts.has(card)) return;
+                    processedHosts.add(card);
 
-                const cards = document.querySelectorAll('div[style="overflow: visible;"]');
+                    const existingPanel = card.querySelector('.sc-retail-store-button-container');
+                    const inputId = priceInput.id || '';
+                    if (
+                        card.dataset.autoPricingAdded &&
+                        existingPanel &&
+                        card.dataset.scRetailPricingInputId === inputId
+                    ) {
+                        return;
+                    }
+                    if (existingPanel) {
+                        existingPanel.remove();
+                    }
+                    if (card.dataset.autoPricingAdded) delete card.dataset.autoPricingAdded;
 
-                cards.forEach((card, index) => {
-                    if (card.dataset.autoPricingAdded) return;
-
-                    const priceInput = card.querySelector('input[name="price"]');
-                    if (!priceInput) return;
-
-                    const comp = findReactComponent(priceInput);
-                    if (!comp) return;
-
+                    const isNewUI = isNewRetailPricingHost(priceInput, card);
+                    const targetKey = getRetailPricingTargetKey(priceInput, card);
+                    const nativeButton = isNewUI ? findNativeRetailActionButton(card) : null;
                     const btnContainer = document.createElement('div');
-                    btnContainer.className = 'sc-retail-store-button-container';
-                    btnContainer.style = `display: flex; flex-direction: column; gap: 4px; margin-top: 5px;`;
+                    btnContainer.className = `sc-retail-store-button-container${isNewUI ? ' sc-retail-pricing-native' : ''}`;
+                    btnContainer.dataset.layout = isNewUI ? 'native' : 'legacy';
+                    if (!isNewUI) {
+                        btnContainer.style = 'display:flex;flex-direction:column;gap:4px;margin-top:5px;';
+                    }
 
-                    const btnHourly = document.createElement('button');
-                    btnHourly.textContent = '最大时利润';
-                    btnHourly.type = 'button';
-                    btnHourly.className = 'btn-max-hourly-profit';
-                    btnHourly.setAttribute('data-index', index);
-                    btnHourly.style = `background: #2196F3; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; width: 100%;`;
+                    const buttonRow = document.createElement('div');
+                    buttonRow.className = 'sc-retail-store-button-row';
+                    if (!isNewUI) {
+                        buttonRow.style = 'display:flex;flex-direction:column;gap:4px;width:100%;';
+                    }
 
-                    const btnTotal = document.createElement('button');
-                    btnTotal.textContent = '最大利润';
-                    btnTotal.type = 'button';
-                    btnTotal.className = 'btn-max-total-profit';
-                    btnTotal.setAttribute('data-index', index);
-                    btnTotal.style = `background: #e91e63; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; width: 100%;`;
-
-                    btnContainer.appendChild(btnHourly);
-                    btnContainer.appendChild(btnTotal);
+                    const btnHourly = createRetailPricingButton('最大时利润', 'btn-max-hourly-profit', nativeButton);
+                    const btnTotal = createRetailPricingButton('最大总利润', 'btn-max-total-profit', nativeButton);
+                    if (!isNewUI) {
+                        btnHourly.style.cssText = 'background:#2196F3;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:13px;width:100%;';
+                        btnTotal.style.cssText = 'background:#e91e63;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:13px;width:100%;';
+                    }
+                    buttonRow.appendChild(btnHourly);
+                    buttonRow.appendChild(btnTotal);
 
                     const d = DM();
                     const profitDisplay = document.createElement('div');
-                    profitDisplay.className = 'auto-profit-display';
-                    profitDisplay.textContent = `等待计算...`;
-                    profitDisplay.style = `margin-top: 5px; font-size: 14px; color: ${d ? '#fff' : '#333'}; background: ${d ? '#555' : '#e0e0e0'}; padding: 4px 8px; text-align: center; border-radius: 4px;`;
+                    profitDisplay.className = `auto-profit-display${isNewUI ? ' sc-retail-pricing-status sc-retail-status-message is-idle sc-retail-status-empty' : ''}`;
+                    profitDisplay.textContent = isNewUI ? '' : '等待计算...';
+                    if (isNewUI) {
+                        const surface = d ? 'rgba(0,0,0,.18)' : 'rgba(0,0,0,.035)';
+                        const border = d ? 'rgba(255,255,255,.17)' : 'rgba(0,0,0,.16)';
+                        const muted = d ? 'rgba(255,255,255,.62)' : 'rgba(0,0,0,.56)';
+                        btnContainer.style.setProperty('--sc-retail-surface', surface);
+                        btnContainer.style.setProperty('--sc-retail-border', border);
+                        btnContainer.style.setProperty('--sc-retail-muted', muted);
+                        btnContainer.style.setProperty('--sc-retail-text', d ? '#f1f1f1' : '#242424');
+                        btnContainer.style.setProperty('--sc-retail-positive', d ? '#79d68a' : '#2e7d3a');
+                        btnContainer.style.setProperty('--sc-retail-negative', d ? '#ff8a80' : '#b42318');
+                        btnContainer.style.setProperty('--sc-retail-busy', d ? '#74b7ff' : '#1769aa');
+                    } else {
+                        profitDisplay.style = `font-size:14px;color:${d ? '#fff' : '#333'};background:${d ? '#555' : '#e0e0e0'};padding:4px 8px;text-align:center;border-radius:4px;`;
+                    }
 
-                    // 自定义成本输入框
-                    const customCostInput = document.createElement('input');
-                    customCostInput.type = 'number';
-                    customCostInput.className = 'custom-unit-cost-input';
-                    customCostInput.placeholder = '假设单位成本';
-                    customCostInput.min = '0';
-                    customCostInput.step = '0.01';
-                    customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid ${d ? '#555' : '#bbb'}; border-radius: 4px; background: ${d ? '#333' : '#fff'}; color: ${d ? '#fff' : '#333'}; font-size: 13px; box-sizing: border-box;`;
+                    const customCostInput = isNewUI
+                        ? createNewRetailCostInput(priceInput, targetKey)
+                        : document.createElement('input');
+                    if (!isNewUI) {
+                        customCostInput.type = 'number';
+                        customCostInput.className = 'custom-unit-cost-input';
+                        customCostInput.placeholder = '假设单位成本';
+                        customCostInput.min = '0';
+                        customCostInput.step = '0.01';
+                        customCostInput.style = `width:100%;padding:4px 8px;border:1px solid ${d ? '#555' : '#bbb'};border-radius:4px;background:${d ? '#333' : '#fff'};color:${d ? '#fff' : '#333'};font-size:13px;box-sizing:border-box;`;
+                    }
+                    let costField = null;
+                    if (isNewUI) {
+                        costField = document.createElement('label');
+                        costField.className = 'sc-retail-cost-field';
+                        const costLabel = document.createElement('span');
+                        costLabel.textContent = '假设单位成本';
+                        costField.append(costLabel, customCostInput);
+                    }
+
+                    btnContainer.appendChild(buttonRow);
+                    btnContainer.appendChild(profitDisplay);
+                    btnContainer.appendChild(costField || customCostInput);
                     btnHourly.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly);
                     btnTotal.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.total);
                     customCostInput.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.unitCost);
+                    costField?.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.unitCost);
                     btnContainer.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly && !buttonConfig.total);
+                    profitDisplay.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly && !buttonConfig.total);
 
-                    // --- 提取核心发送逻辑 ---
-                    // 这样按钮点击能用，后续重试也能用
+                    const resetButtons = () => {
+                        btnHourly.textContent = '最大时利润';
+                        btnHourly.disabled = false;
+                        btnTotal.textContent = '最大总利润';
+                        btnTotal.disabled = false;
+                    };
+
+                    const setStatus = (message, type = 'idle') => {
+                        updateRetailStatus(profitDisplay, message, type, d);
+                    };
+
+                    // 记录最新目标，供 Worker 返回和数量修正重试共用。
                     const startCalc = (targetComp, retryIdx = 0, mode = 'hourly') => {
-                        if (localStorage.getItem('SimcompaniesConstantsData') == null) {
-                            showToast("请尝试更新基本数据（左下角按钮）"); // 替换了 alert
+                        const latestComp = resolveRetailPricingComponent(priceInput) || targetComp;
+                        if (!latestComp) {
+                            setStatus('未找到零售计算数据，请刷新页面后重试', 'error');
+                            resetButtons();
                             return;
                         }
 
-                        // UI反馈
+                        const rawConstants = localStorage.getItem('SimcompaniesConstantsData');
+                        if (!rawConstants) {
+                            setStatus('请先在插件菜单更新基础数据', 'error');
+                            resetButtons();
+                            return;
+                        }
+
+                        let constantsData;
+                        try {
+                            constantsData = JSON.parse(rawConstants);
+                        } catch (e) {
+                            setStatus('基础数据损坏，请重新更新基础数据', 'error');
+                            resetButtons();
+                            return;
+                        }
+
                         if (retryIdx === 0) {
                             if (mode === 'hourly') {
                                 btnHourly.textContent = '计算中...';
@@ -2524,29 +3150,39 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                                 btnTotal.textContent = '计算中...';
                                 btnTotal.disabled = true;
                             }
+                        } else if (mode === 'hourly') {
+                            btnHourly.textContent = '修正中...';
+                            btnHourly.disabled = true;
+                        } else {
+                            btnTotal.textContent = '修正中...';
+                            btnTotal.disabled = true;
                         }
-                        profitDisplay.textContent = retryIdx > 0 ? `修正中(${retryIdx})...` : `计算中...`;
+                        setStatus(retryIdx > 0 ? `修正中(${retryIdx})...` : '计算中...', 'busy');
 
-                        const lwe = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).retailInfo;
-                        const zn = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
-
-                        // 重新获取最新的 state 和 props
-                        const { size, acceleration, economyState, resource, salesModifierWithRecreationBonus, skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather = null } = targetComp.props;
-                        const { cogs: originalCogs, quality, quantity } = targetComp.state;
-
-                        // 读取自定义单位成本，仅当输入 >0 时用 单位成本*数量 覆盖 cogs
+                        const {
+                            size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
+                            skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather = null
+                        } = latestComp.props;
+                        const { cogs: originalCogs, quality, quantity } = latestComp.state;
+                        const quantityValue = Number(quantity);
                         const customUnitCost = getRetailStoreButtonConfig().unitCost ? (parseFloat(customCostInput.value) || 0) : 0;
-                        const cogs = customUnitCost > 0 ? customUnitCost * quantity : originalCogs;
+                        const cogs = customUnitCost > 0 ? customUnitCost * quantityValue : Number(originalCogs);
+                        if (!Number.isFinite(quantityValue) || quantityValue <= 0 || !Number.isFinite(cogs)) {
+                            setStatus('请先输入有效数量和库存成本', 'error');
+                            resetButtons();
+                            return;
+                        }
 
-                        const v = salesModifierWithRecreationBonus + Math.floor(skillCMO / 3);
+                        const v = (salesModifierWithRecreationBonus || 0) + Math.floor((skillCMO || 0) / 3);
                         const b = Ul(administrationOverhead, skillCOO);
 
                         profitWorker.postMessage({
-                            lwe, zn, size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
+                            lwe: constantsData.retailInfo, zn: constantsData.data,
+                            size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
                             skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
-                            v, b, cogs, quality, quantity,
-                            cardIndex: index,
-                            retryCount: retryIdx, // 发送当前是第几次尝试
+                            v, b, cogs, quality, quantity: quantityValue,
+                            targetKey,
+                            retryCount: retryIdx,
                             SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT,
                             calcMode: mode
                         });
@@ -2555,25 +3191,26 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     btnHourly.onclick = (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        startCalc(comp, 0, 'hourly');
+                        startCalc(null, 0, 'hourly');
                     };
-
                     btnTotal.onclick = (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        startCalc(comp, 0, 'total');
+                        startCalc(null, 0, 'total');
                     };
 
-                    // 将函数引用挂载在 DOM 上，方便 onmessage 找到并调用重试
                     card.doAutoCalc = startCalc;
-
-                    priceInput.parentNode.insertBefore(btnContainer, priceInput.nextSibling);
-                    priceInput.parentNode.insertBefore(profitDisplay, btnContainer.nextSibling);
-                    priceInput.parentNode.insertBefore(customCostInput, profitDisplay.nextSibling);
+                    if (isNewUI) {
+                        getNewRetailPanelMount(priceInput, card).appendChild(btnContainer);
+                    } else {
+                        priceInput.parentNode.insertBefore(btnContainer, priceInput.nextSibling);
+                    }
                     card.dataset.autoPricingAdded = 'true';
                 });
                 refreshAutoPricingButtons();
-            } catch (err) { }
+            } catch (err) {
+                console.warn('[零售定价] 初始化失败', err);
+            }
         }
 
         window.initAutoPricing = initAutoPricing;
@@ -2593,18 +3230,30 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 clearTimeout(debounceTimer);
                 clearTimeout(lateCheckTimer);
                 debounceTimer = setTimeout(() => {
-                    // 检查是否有新增的卡片节点
-                    const hasNewCards = mutationsList.some(mutation => {
-                        return mutation.type === 'childList' &&
-                            mutation.addedNodes.length > 0 &&
+                    const hasRelevantChanges = mutationsList.some(mutation => {
+                        if (mutation.type !== 'childList') return false;
+                        const hasAddedCard = mutation.addedNodes.length > 0 &&
                             Array.from(mutation.addedNodes).some(node => {
-                                return node.nodeType === 1 && // 元素节点
-                                    (node.matches('div[style="overflow: visible;"]') ||
-                                        node.querySelector('div[style="overflow: visible;"]'));
+                                return node.nodeType === 1 &&
+                                    (
+                                        node.matches(`${LEGACY_RETAIL_CARD_SELECTOR}, ${NEW_RETAIL_ROW_SELECTOR}, ${NEW_RETAIL_PRICE_SELECTOR}`) ||
+                                        node.querySelector(`${LEGACY_RETAIL_CARD_SELECTOR}, ${NEW_RETAIL_ROW_SELECTOR}, ${NEW_RETAIL_PRICE_SELECTOR}`)
+                                    );
                             });
+                        if (hasAddedCard) return true;
+
+                        const target = mutation.target.nodeType === 1
+                            ? mutation.target
+                            : mutation.target.parentElement;
+                        const host = target?.closest?.(`${LEGACY_RETAIL_CARD_SELECTOR}, ${NEW_RETAIL_ROW_SELECTOR}`);
+                        return Boolean(
+                            host &&
+                            host.querySelector('input[name="price"]') &&
+                            !host.querySelector('.sc-retail-store-button-container')
+                        );
                     });
 
-                    if (hasNewCards) {
+                    if (hasRelevantChanges) {
                         initAutoPricing();
                         // 追加延迟二次检查：React 组件可能分批次渲染，
                         // 首次检查时部分卡片可能尚未挂载到 DOM

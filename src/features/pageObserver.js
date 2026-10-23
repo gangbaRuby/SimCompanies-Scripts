@@ -16,6 +16,8 @@ const BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Mo
     // 模块9：判断当前页面
     // ======================
     (function () {
+        const BUILDING_PAGE_PATTERN = /\/b\/\d+(?:\/retail\/[^\/?#]+)?\/?(?:[?#].*)?$/;
+        const RETAIL_DETAIL_PATTERN = /\/b\/\d+\/retail\/[^\/?#]+\/?(?:[?#].*)?$/;
         const PAGE_ACTIONS = {
             marketPage: { //交易所页面
                 pattern: /^https:\/\/www\.simcompanies\.com(?:\/[^\/]+)?\/market\/resource\/(\d+)\/?$/,
@@ -80,18 +82,21 @@ const BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Mo
                 }
             },
             buildingPage: { //建筑页面
-                pattern: /\/b\/\d+\/?$/,
-                action: () => {
-                    RestaurantStockReminder.init();
-                    SalesOfficeHelper.init();
-                    if (isPageModuleEnabled('buildingUpgradeMaterialCopy')) {
-                        BuildingUpgradeMaterialCopy.init();
+                pattern: BUILDING_PAGE_PATTERN,
+                action: (url) => {
+                    const isRetailDetail = RETAIL_DETAIL_PATTERN.test(url);
+                    if (!isRetailDetail) {
+                        RestaurantStockReminder.init();
+                        SalesOfficeHelper.init();
+                        if (isPageModuleEnabled('buildingUpgradeMaterialCopy')) {
+                            BuildingUpgradeMaterialCopy.init();
+                        }
                     }
                     // 多级重试：确保在 SPA 页面切换后 DOM 完全渲染时能注入按钮
                     // 单次 300ms 延迟有时不足以等待 React 渲染完成
                     const tryInit = (delay, retriesLeft) => {
                         setTimeout(() => {
-                            if (!/\/b\/\d+\/?$/.test(location.href)) return;
+                            if (!BUILDING_PAGE_PATTERN.test(location.href)) return;
                             if (typeof window.initAutoAmountButtons === 'function') {
                                 window.initAutoAmountButtons();
                             }
