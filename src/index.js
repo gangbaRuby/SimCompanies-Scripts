@@ -18,6 +18,7 @@ import './features/chatAccessibility.js';
 import './features/chatMessageBlocker.js';
 import './features/chatEmojiPicker.js';
 import './features/executiveBoardroom.js';
+import './features/reversePurchasePrice.js';
 import { Network } from './core/network.js';
 import { state } from './core/state.js';
 import { constantsData } from './features/constantsData.js';
@@ -1076,6 +1077,19 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     btn.onclick = showSaturationTable;
                     return btn;
                 })(),
+                (() => {
+                    const btn = createActionButton('反推收购价', 'reversePurchasePrice');
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        const module = window.SC_Modules?.reversePurchasePrice;
+                        if (typeof module?.openTemporaryPage !== 'function') {
+                            btn.textContent = '反推收购价（未加载）';
+                            return;
+                        }
+                        module.openTemporaryPage();
+                    };
+                    return btn;
+                })(),
                 // createActionButton('MP-?%', 'mpShow'), // 2026-08 暂时隐藏：改为"备份插件设置"
                 (() => {
                     const btn = document.createElement('button');
@@ -1085,6 +1099,14 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     return btn;
                 })(),
                 createActionButton('计算当前冰淇淋剩余量', 'calculateDecay'),
+                (() => {
+                    const btn = document.createElement('button');
+                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
+                    btn.textContent = '⚙️ 功能开关设置';
+                    btn.style.backgroundColor = '#607D8B';
+                    btn.onclick = () => switchMenu(true);
+                    return btn;
+                })(),
                 (() => {
                     const btn = document.createElement('button');
                     btn.className = 'SimcompaniesRetailCalculation-action-btn';
@@ -1117,14 +1139,6 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                         }
                     }, 500);
 
-                    return btn;
-                })(),
-                (() => {
-                    const btn = document.createElement('button');
-                    btn.className = 'SimcompaniesRetailCalculation-action-btn';
-                    btn.textContent = '⚙️ 功能开关设置';
-                    btn.style.backgroundColor = '#607D8B';
-                    btn.onclick = () => switchMenu(true);
                     return btn;
                 })()
             );

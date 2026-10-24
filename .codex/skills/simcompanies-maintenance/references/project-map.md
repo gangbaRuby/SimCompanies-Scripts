@@ -23,6 +23,7 @@
 - `resourceMarketHandler.js`：资源市场计算和控件。
 - `outgoingContractMPHandler.js`：出库销售/合同 MP、VWAP 预设、价格建议和运输利润显示。
 - `warehouseRetailProfit.js`：仓库零售利润。
+- `reversePurchasePrice.js`：反推收购价插件菜单模块；采用带手机边距的手机优先紧凑布局，手机端参数两列、内容单列，资源按商店分类、按 ID 排序并支持单店折叠、全选和清空，品质使用多选标签，操作栏吸底；复用入库合同页的自定义高管数据入口、支持领域级经济周期覆盖、使用与交易所和合同一致的 CMO 时利润口径、每级时利润在平均价 0.01-10 倍范围内反推、资源×品质批量计算、领域级设置保存、Worker 计算与价格矩阵渲染、不可计算原因区分、表格资源文字显示与聊天格式复制、品质列溢出提醒和单项价格隐藏；可将保留价格合并覆盖 `SC_Contract_HighPrice_Settings` 中矩阵涉及资源品质的单独规则，不修改留空项及未涉及资源；插件菜单入口负责打开可关闭面板。
 - `landscapeIdleBuildingHighlight.js`：地图空闲建筑高亮。
 - `restaurantStockReminder.js`：餐馆备货提醒（菜单库存、每日消耗、剩余天数预警）。
 - `chatMessageBlocker.js`：聊天室全局屏蔽（WebSocket 实时消息按 sender.id 过滤 + 消息组「屏蔽」按钮 + CSS 零高隐藏 + 导入当前领域游戏内黑名单；不改 HTTP 响应以防 fullHistory `r.length<30` 误判；名单全局键 `SC_ChatBlock_List`）。
