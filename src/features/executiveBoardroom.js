@@ -4,6 +4,8 @@ import { Storage } from './dataStorage.js';
 import { Network } from '../core/network.js';
 import { registerExportInfo } from '../core/exportInfo.js';
 
+const EXECUTIVE_SETTINGS_KEY = 'SC-ExecutiveBoardroom-Settings';
+
 export const executiveCustomButton = (function () {
         let boardroomState = {
             'o': null, 'f': null, 'm': null, 't': null,
@@ -13,6 +15,20 @@ export const executiveCustomButton = (function () {
 
         let draggedSlotId = null;
         let selectedSlotId = null;
+
+        const ACADEMY_BUCKETS = [0, 5, 10, 15, 20];
+        const DIRECT_POINT_KEYS = ['coo', 'cfo', 'cmo', 'cto'];
+
+        let executiveSettings = {
+            calculationMode: 'detailed',
+            academyLevel: null,
+            directPoints: {
+                coo: 0,
+                cfo: 0,
+                cmo: 0,
+                cto: 0
+            }
+        };
 
         const SLOT_LABELS = {
             o: 'COO', f: 'CFO', m: 'CMO', t: 'CTO',
@@ -72,50 +88,153 @@ export const executiveCustomButton = (function () {
             }
         }
 
-        function getAcademyRadioValue() {
-            const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
-            try {
-                const stored = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
-                const academyActive = Number(stored?.academyActive);
-                if (Number.isFinite(academyActive) && academyActive >= 0) {
-                    if (academyActive >= 20) return 20;
-                    if (academyActive >= 15) return 15;
-                    if (academyActive >= 10) return 10;
-                    if (academyActive >= 5) return 5;
-                    return 0;
-                }
-            } catch (e) {
-                console.warn('读取学院等级失败，使用默认区间 15-19:', e);
-            }
-            return 15;
+        function toNonNegativeInteger(value) {
+            const num = Number(value);
+            if (!Number.isFinite(num) || num < 0) return 0;
+            return Math.floor(num);
         }
 
-        // 读取当前领域真实的学院总等级（领域数据缓存里没有时返回 null）
+        function getAcademyBucket(level) {
+            if (level >= 20) return 20;
+            if (level >= 15) return 15;
+            if (level >= 10) return 10;
+            if (level >= 5) return 5;
+            return 0;
+        }
+
         function readRealmAcademyLevel() {
             const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
             try {
                 const stored = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
-                const level = Number(stored && stored.academyActive);
+                const level = Number(stored?.academyActive);
                 if (Number.isFinite(level) && level >= 0) return level;
             } catch (e) { /* 忽略读取失败 */ }
             return null;
         }
 
-        // 把弹窗的学院总等级单选同步到真实学院总等级所在区间
-        function syncAcademyRadioToRealm() {
-            const level = readRealmAcademyLevel();
-            if (level === null) return null;
-            const bucket = level >= 20 ? 20 : level >= 15 ? 15 : level >= 10 ? 10 : level >= 5 ? 5 : 0;
-            document.querySelectorAll('input[name="sc-aca-r"]').forEach(radio => {
-                radio.checked = Number(radio.value) === bucket;
+        function normalizeExecutiveSettings(raw) {
+            const parsed = raw && typeof raw === 'object' ? raw : {};
+            const savedAcademy = Number(parsed.academyLevel);
+            const academyLevel = ACADEMY_BUCKETS.includes(savedAcademy)
+                ? savedAcademy
+                : null;
+            const directPoints = {};
+            const savedPoints = parsed.directPoints && typeof parsed.directPoints === 'object'
+                ? parsed.directPoints
+                : {};
+            DIRECT_POINT_KEYS.forEach(key => {
+                directPoints[key] = toNonNegativeInteger(savedPoints[key]);
             });
-            return bucket;
+            return {
+                calculationMode: parsed.calculationMode === 'direct' ? 'direct' : 'detailed',
+                academyLevel,
+                directPoints
+            };
+        }
+
+        function loadExecutiveSettings() {
+            let parsed = null;
+            try {
+                parsed = JSON.parse(localStorage.getItem(getScopedKey(EXECUTIVE_SETTINGS_KEY)) || 'null');
+            } catch (e) {
+                parsed = null;
+            }
+            executiveSettings = normalizeExecutiveSettings(parsed);
+            if (executiveSettings.academyLevel === null) {
+                const realmLevel = readRealmAcademyLevel();
+                executiveSettings.academyLevel = realmLevel === null ? 15 : getAcademyBucket(realmLevel);
+            }
+        }
+
+        function saveExecutiveSettings() {
+            try {
+                localStorage.setItem(getScopedKey(EXECUTIVE_SETTINGS_KEY), JSON.stringify(executiveSettings));
+            } catch (e) {
+                console.warn('保存高管计算设置失败:', e);
+            }
+        }
+
+        function getAcademyRadioValue() {
+            return ACADEMY_BUCKETS.includes(Number(executiveSettings.academyLevel))
+                ? Number(executiveSettings.academyLevel)
+                : 15;
+        }
+
+        function getCalculationMode() {
+            const selected = document.querySelector('input[name="sc-exec-mode"]:checked');
+            if (selected) return selected.value === 'direct' ? 'direct' : 'detailed';
+            return executiveSettings.calculationMode === 'direct' ? 'direct' : 'detailed';
+        }
+
+        function updateCalculationModeUI() {
+            const directPanel = document.getElementById('sc-direct-points-panel');
+            if (!directPanel) return;
+            directPanel.classList.toggle('sc-boardroom-hidden', getCalculationMode() !== 'direct');
+        }
+
+        function setCalculationMode(mode) {
+            executiveSettings.calculationMode = mode === 'direct' ? 'direct' : 'detailed';
+            saveExecutiveSettings();
+            document.querySelectorAll('input[name="sc-exec-mode"]').forEach(radio => {
+                radio.checked = radio.value === executiveSettings.calculationMode;
+            });
+            updateCalculationModeUI();
         }
 
         // 读取当前选中的学院总等级（右侧模拟计算与最优摆放共用）
         function getCheckedAcademyLevel() {
             const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
-            return selectedRadio ? parseInt(selectedRadio.value) : 15;
+            if (selectedRadio) return parseInt(selectedRadio.value);
+            return getAcademyRadioValue();
+        }
+
+        function getDirectEffectivePoints() {
+            const points = {};
+            DIRECT_POINT_KEYS.forEach(key => {
+                const input = document.getElementById(`sc-direct-${key}`);
+                const value = input ? input.value : executiveSettings.directPoints[key];
+                points[key] = toNonNegativeInteger(value);
+            });
+            return points;
+        }
+
+        function getActiveEffectivePoints() {
+            const calculationMode = getCalculationMode();
+            if (calculationMode === 'direct') {
+                const points = getDirectEffectivePoints();
+                return {
+                    calculationMode,
+                    academyLevel: getCheckedAcademyLevel(),
+                    rawCoo: points.coo,
+                    effCoo: points.coo,
+                    rawCfo: points.cfo,
+                    effCfo: points.cfo,
+                    rawCmo: points.cmo,
+                    effCmo: points.cmo,
+                    rawCto: points.cto,
+                    effCto: points.cto
+                };
+            }
+            const academyLevel = getCheckedAcademyLevel();
+            return {
+                calculationMode,
+                academyLevel,
+                ...computeEffectivePoints(boardroomState, academyLevel)
+            };
+        }
+
+        function updateAcademyMismatch() {
+            const warning = document.getElementById('sc-academy-mismatch');
+            if (!warning) return;
+            const actualLevel = readRealmAcademyLevel();
+            const selectedLevel = getCheckedAcademyLevel();
+            if (actualLevel === null || getAcademyBucket(actualLevel) === selectedLevel) {
+                warning.classList.add('sc-boardroom-hidden');
+                warning.textContent = '';
+                return;
+            }
+            warning.textContent = `当前领域学院总等级为 ${actualLevel}，所选区间与实际不符；详细高管将按所选区间计算。`;
+            warning.classList.remove('sc-boardroom-hidden');
         }
 
         // 依据学院等级计算 4 个职位的原始/有效点数（与右侧模拟计算同一套公式）
@@ -168,16 +287,20 @@ export const executiveCustomButton = (function () {
         }
 
         function calculateResults() {
-            const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
-            const academyLevel = selectedRadio ? parseInt(selectedRadio.value) : 15;
+            updateAcademyMismatch();
 
             // 原始汇总点数与衰减有效点数（与「最优摆放建议」共用同一套公式）
             const {
+                calculationMode,
                 rawCoo, effCoo,
                 rawCfo, effCfo,
                 rawCmo, effCmo,
                 rawCto, effCto
-            } = computeEffectivePoints(boardroomState, academyLevel);
+            } = getActiveEffectivePoints();
+            const directMode = calculationMode === 'direct';
+            const pointSource = (raw, effective) => directMode
+                ? `有效点数 <code>${effective}</code>（直接设定的衰减后数值）`
+                : `有效点数 <code>${effective}</code>（原始汇总点数 ${raw}，衰减折算后为 ${effective}）`;
 
             // 3. Retrieve local storage cache
             const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
@@ -223,7 +346,7 @@ export const executiveCustomButton = (function () {
                 admin: `
                     <strong>管理费用计算详情：</strong><br>
                     1. <strong>基础管理费用</strong>：总建筑等级=工人/100，管理费用=(总建筑等级-1)/170。<br>
-                    2. <strong>高管加成</strong>：COO 有效点数 <code>${effCoo}</code>（原始汇总点数 ${rawCoo}，衰减折算后为 ${effCoo}）。<br>
+                    2. <strong>高管加成</strong>：${pointSource(rawCoo, effCoo)}。<br>
                     3. <strong>计算公式</strong>：每 1 点有效 COO 减少基础管理费用的 1%。<br>
                        <code>${baseAdminText} &times; ${effCoo}% = ${Math.abs(baseAdminVal * effCoo).toFixed(2)}%</code> 扣减。<br>
                     4. <strong>最终结果</strong>：<code>${baseAdminText} - ${Math.abs(baseAdminVal * effCoo).toFixed(2)}% = ${finalAdminText}</code>。
@@ -231,7 +354,7 @@ export const executiveCustomButton = (function () {
                 cfo: `
                     <strong>会计费用起始点计算详情：</strong><br>
                     1. <strong>基础限额</strong>：固定值 <code>$3.0M</code>（所有公司初始免税上限均为 $3,000,000）。<br>
-                    2. <strong>高管加成</strong>：CFO 有效点数 <code>${effCfo}</code>（原始汇总点数 ${rawCfo}，衰减折算后为 ${effCfo}）。<br>
+                    2. <strong>高管加成</strong>：${pointSource(rawCfo, effCfo)}。<br>
                     3. <strong>银行加成</strong>：当前银行等级为 <code>${bankLevel}</code>，提供额外 <code>${(bankLevel * 10).toFixed(0)}%</code> 的 CFO 效果增幅。<br>
                     4. <strong>计算公式</strong>：<code>$3.0M + CFO 有效点数 &times; $0.5M &times; (1 + 银行等级 / 10)</code>。<br>
                        <code>$3.0M + ${effCfo} &times; $0.5M &times; (1 + ${bankLevel} / 10) = ${finalCfoText}</code>。<br>
@@ -240,7 +363,7 @@ export const executiveCustomButton = (function () {
                 salesSpeed: `
                     <strong>销售速度计算详情：</strong><br>
                     1. <strong>基础销售速度</strong>：等级加成与休闲加成之和 <code>${baseSalesText}</code>。<br>
-                    2. <strong>高管加成</strong>：CMO 有效点数 <code>${effCmo}</code>（原始汇总点数 ${rawCmo}，衰减折算后为 ${effCmo}）。<br>
+                    2. <strong>高管加成</strong>：${pointSource(rawCmo, effCmo)}。<br>
                     3. <strong>计算公式</strong>：每 3 点有效 CMO 增加 1% 销售速度。<br>
                        <code>Math.floor(${effCmo} / 3) = +${Math.floor(effCmo / 3)}%</code> 速度提升。<br>
                     4. <strong>最终结果</strong>：<code>${baseSalesText} + ${Math.floor(effCmo / 3)}% = ${finalSalesText}</code>。
@@ -248,7 +371,7 @@ export const executiveCustomButton = (function () {
                 restaurant: `
                     <strong>餐馆评级计算详情：</strong><br>
                     1. <strong>基础评级</strong>：基础销售速度 * 0.02<br>
-                    2. <strong>高管加成</strong>：CMO 有效点数 <code>${effCmo}</code>（原始汇总点数 ${rawCmo}，衰减折算后为 ${effCmo}）。<br>
+                    2. <strong>高管加成</strong>：${pointSource(rawCmo, effCmo)}。<br>
                     3. <strong>计算公式</strong>：每 1 点有效 CMO 增加 0.01 餐馆评级。<br>
                        <code>${effCmo} &times; 0.01 = +${(effCmo * 0.01).toFixed(2)}</code> 评级提升。<br>
                     4. <strong>最终结果</strong>：<code>${baseRestaurantText} + ${(effCmo * 0.01).toFixed(2)} = ${finalRestaurantText}</code>。
@@ -256,7 +379,7 @@ export const executiveCustomButton = (function () {
                 patent: `
                     <strong>专利转化概率计算详情：</strong><br>
                     1. <strong>基础概率</strong>：游戏固定基础转化率 <code>6.25%</code>。<br>
-                    2. <strong>高管加成</strong>：CTO 有效点数 <code>${effCto}</code>（原始汇总点数 ${rawCto}，衰减折算后为 ${effCto}）。<br>
+                    2. <strong>高管加成</strong>：${pointSource(rawCto, effCto)}。<br>
                     3. <strong>计算公式</strong>：每 1 点有效 CTO 增加 1% 的基础专利转化概率（即 6.25% 的 1% = 0.0625%）。<br>
                        <code>${effCto} &times; 0.0625% = +${(effCto * 0.0625).toFixed(2)}%</code> 概率提升。<br>
                     4. <strong>最终结果</strong>：<code>6.25% + ${(effCto * 0.0625).toFixed(2)}% = ${finalPatentText}</code>。
@@ -264,7 +387,7 @@ export const executiveCustomButton = (function () {
                 research: `
                     <strong>研究生产速度提升计算详情：</strong><br>
                     1. <strong>基础速度</strong>：固定基础值 <code>0.0%</code>。<br>
-                    2. <strong>高管加成</strong>：CTO 有效点数 <code>${effCto}</code>（原始汇总点数 ${rawCto}，衰减折算后为 ${effCto}）。<br>
+                    2. <strong>高管加成</strong>：${pointSource(rawCto, effCto)}。<br>
                     3. <strong>计算公式</strong>：每 1 点有效 CTO 增加 2% 的研究类生产速度。<br>
                        <code>${effCto} &times; 2% = +${(effCto * 2.0).toFixed(1)}%</code> 速度提升。<br>
                     4. <strong>最终结果</strong>：<code>${finalResearchText}</code>。
@@ -345,7 +468,11 @@ export const executiveCustomButton = (function () {
                 });
             }
 
-            return { adminBonus: effCoo, saleBonus: Math.floor(effCmo / 3) };
+            return {
+                adminBonus: effCoo,
+                saleBonus: Math.floor(effCmo / 3),
+                calculationMode
+            };
         }
 
         // ===================== 最优摆放建议（精确求解） =====================
@@ -585,7 +712,7 @@ export const executiveCustomButton = (function () {
             };
         }
 
-        // 当前摆法的指标（按真实学院等级）
+        // 当前摆法的指标（按用户所选学院区间）
         function currentMetrics(academyLevel) {
             const eff = computeEffectivePoints(boardroomState, academyLevel);
             return {
@@ -600,19 +727,19 @@ export const executiveCustomButton = (function () {
         function saveBoardroom() {
             const res = calculateResults();
             const rId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
+            saveExecutiveSettings();
             localStorage.setItem(`R${rId}-SC-Saved-Bonuses`, JSON.stringify({
                 adminBonus: res.adminBonus,
                 saleBonus: res.saleBonus,
                 timestamp: Date.now(),
-                source: 'manual'
+                source: 'manual',
+                calculationMode: res.calculationMode
             }));
             localStorage.setItem(`R${rId}-SC-Saved-Boardroom`, JSON.stringify(boardroomState));
         }
 
         // 把一套推荐摆法应用到 13 个格子并自动保存（后台计算后应用）
-        // 把一套推荐摆法应用到 13 个格子并自动保存（后台计算后应用）
         function applyBestPlacement(targetKey, btn) {
-            syncAcademyRadioToRealm();
             const academyLevel = getCheckedAcademyLevel();
             const pool = collectExecutivePool();
             if (pool.length === 0) {
@@ -696,6 +823,7 @@ export const executiveCustomButton = (function () {
                 });
 
                 renderBoardroom();
+                setCalculationMode('detailed');
                 saveBoardroom();
                 renderOptimizerResults();
                 showToast('已应用最优摆放并保存', 'success');
@@ -745,7 +873,6 @@ export const executiveCustomButton = (function () {
             const resultBox = document.getElementById('sc-opt-result');
             if (!resultBox || optBusy) return;
 
-            syncAcademyRadioToRealm();
             const academyLevel = getCheckedAcademyLevel();
             const pool = collectExecutivePool();
             if (pool.length === 0) {
@@ -857,7 +984,6 @@ export const executiveCustomButton = (function () {
                 optBusy = false;
             }
 
-            syncAcademyRadioToRealm();
             const academyLevel = getCheckedAcademyLevel();
             const pool = collectExecutivePool();
             if (pool.length === 0) {
@@ -1117,11 +1243,98 @@ export const executiveCustomButton = (function () {
             const style = document.createElement('style');
             style.id = 'sc-boardroom-styles';
             style.textContent = `
+                .sc-boardroom-hidden {
+                    display: none !important;
+                }
+
                 .sc-boardroom-layout {
                     display: flex;
                     flex-direction: row;
                     width: 100%;
                     height: 100%;
+                }
+
+                .sc-exec-mode-switch {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 4px;
+                    padding: 4px;
+                    margin-bottom: 12px;
+                    border: 1px solid var(--sc-border);
+                    border-radius: 6px;
+                    background: var(--sc-card-empty-bg);
+                }
+                .sc-exec-mode-option {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 5px;
+                    min-width: 0;
+                    padding: 7px 8px;
+                    border-radius: 4px;
+                    color: var(--sc-fg);
+                    cursor: pointer;
+                    font-size: 12px;
+                    font-weight: bold;
+                    text-align: center;
+                }
+                .sc-exec-mode-option:has(input:checked) {
+                    background: var(--sc-card-bg-selected);
+                    color: #2196F3;
+                }
+                .sc-direct-points-panel {
+                    padding: 10px;
+                    margin-bottom: 14px;
+                    border: 1px solid var(--sc-border);
+                    border-radius: 8px;
+                    background: var(--sc-card-empty-bg);
+                }
+                .sc-direct-points-heading {
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: baseline;
+                    gap: 4px 8px;
+                    margin-bottom: 8px;
+                    color: var(--sc-fg);
+                    font-size: 13px;
+                    font-weight: bold;
+                }
+                .sc-direct-points-grid {
+                    display: grid;
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
+                    gap: 8px;
+                }
+                .sc-direct-point-field {
+                    min-width: 0;
+                }
+                .sc-direct-point-label {
+                    display: block;
+                    margin-bottom: 3px;
+                    color: var(--sc-fg2);
+                    font-size: 10px;
+                    font-weight: bold;
+                    text-align: center;
+                }
+                .sc-direct-point-input {
+                    width: 100%;
+                    min-width: 0;
+                    padding: 5px 2px;
+                    border: 1px solid var(--sc-border);
+                    border-radius: 4px;
+                    background: var(--sc-input-bg);
+                    color: var(--sc-input-fg);
+                    box-sizing: border-box;
+                    font-size: 12px;
+                    text-align: center;
+                }
+                .sc-academy-mismatch {
+                    margin-top: 8px;
+                    padding: 6px 8px;
+                    border: 1px solid var(--sc-dangerFg);
+                    border-radius: 4px;
+                    color: var(--sc-dangerFg);
+                    font-size: 11px;
+                    line-height: 1.5;
                 }
 
                 .sc-boardroom-left {
@@ -1302,6 +1515,20 @@ export const executiveCustomButton = (function () {
                         padding: 1px 2px;
                         font-size: 10px;
                     }
+                    .sc-exec-mode-option {
+                        padding: 7px 4px;
+                        font-size: 11px;
+                    }
+                    .sc-direct-points-panel {
+                        padding: 8px;
+                    }
+                    .sc-direct-points-grid {
+                        gap: 4px;
+                    }
+                    .sc-direct-point-input {
+                        padding: 5px 1px;
+                        font-size: 11px;
+                    }
                 }
             `;
             document.head.appendChild(style);
@@ -1312,6 +1539,7 @@ export const executiveCustomButton = (function () {
 
             injectStyles();
             loadSavedBoardroom();
+            loadExecutiveSettings();
 
             const modal = document.createElement('div');
             modal.id = 'sc-calc-modal';
@@ -1342,6 +1570,39 @@ export const executiveCustomButton = (function () {
                             <button id="sc-boardroom-save-btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">保存</button>
                             <button id="sc-boardroom-fetch-btn" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">获取当前最新高管数据</button>
                             <button id="sc-boardroom-opt-btn" style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">最优摆放建议</button>
+                        </div>
+                        <div class="sc-exec-mode-switch">
+                            <label class="sc-exec-mode-option">
+                                <input type="radio" name="sc-exec-mode" value="detailed" ${executiveSettings.calculationMode === 'detailed' ? 'checked' : ''}>
+                                详细高管
+                            </label>
+                            <label class="sc-exec-mode-option">
+                                <input type="radio" name="sc-exec-mode" value="direct" ${executiveSettings.calculationMode === 'direct' ? 'checked' : ''}>
+                                直接有效点数
+                            </label>
+                        </div>
+                        <div id="sc-direct-points-panel" class="sc-direct-points-panel ${executiveSettings.calculationMode === 'direct' ? '' : 'sc-boardroom-hidden'}">
+                            <div class="sc-direct-points-heading">
+                                <span>直接有效点数</span>
+                            </div>
+                            <div class="sc-direct-points-grid">
+                                <label class="sc-direct-point-field">
+                                    <span class="sc-direct-point-label">COO</span>
+                                    <input id="sc-direct-coo" class="sc-direct-point-input" data-direct-point="coo" type="number" min="0" step="1" inputmode="numeric" value="${executiveSettings.directPoints.coo}">
+                                </label>
+                                <label class="sc-direct-point-field">
+                                    <span class="sc-direct-point-label">CFO</span>
+                                    <input id="sc-direct-cfo" class="sc-direct-point-input" data-direct-point="cfo" type="number" min="0" step="1" inputmode="numeric" value="${executiveSettings.directPoints.cfo}">
+                                </label>
+                                <label class="sc-direct-point-field">
+                                    <span class="sc-direct-point-label">CMO</span>
+                                    <input id="sc-direct-cmo" class="sc-direct-point-input" data-direct-point="cmo" type="number" min="0" step="1" inputmode="numeric" value="${executiveSettings.directPoints.cmo}">
+                                </label>
+                                <label class="sc-direct-point-field">
+                                    <span class="sc-direct-point-label">CTO</span>
+                                    <input id="sc-direct-cto" class="sc-direct-point-input" data-direct-point="cto" type="number" min="0" step="1" inputmode="numeric" value="${executiveSettings.directPoints.cto}">
+                                </label>
+                            </div>
                         </div>
                         <div id="sc-boardroom-opt-results"></div>
                         <div style="font-size: 11px; color: var(--sc-fg3); margin-bottom: 15px;">* 拖拽高管卡片，或点击两个高管卡片进行切换。</div>
@@ -1453,6 +1714,8 @@ export const executiveCustomButton = (function () {
                         <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="15" ${academyRadioValue === 15 ? 'checked' : ''} style="vertical-align:middle;"> 15-19</label>
                         <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="20" ${academyRadioValue === 20 ? 'checked' : ''} style="vertical-align:middle;"> 20+</label>
                     </div>
+                    <div style="margin-top: 7px; color: var(--sc-fg3); font-size: 10px; line-height: 1.5;">学院等级影响详细高管的学徒生效与点数衰减；直接有效点数已包含衰减。</div>
+                    <div id="sc-academy-mismatch" class="sc-academy-mismatch sc-boardroom-hidden"></div>
                 </div>
 
                 <!-- Calculation Table -->
@@ -1464,8 +1727,39 @@ export const executiveCustomButton = (function () {
                 </div>
             `;
 
+            wrapper.querySelectorAll('input[name="sc-exec-mode"]').forEach(radio => {
+                radio.onchange = () => {
+                    if (!radio.checked) return;
+                    setCalculationMode(radio.value);
+                    calculateResults();
+                };
+            });
+            updateCalculationModeUI();
+
             rightContainer.querySelectorAll('input[name="sc-aca-r"]').forEach(radio => {
-                radio.onchange = () => calculateResults();
+                radio.onchange = () => {
+                    if (!radio.checked) return;
+                    executiveSettings.academyLevel = parseInt(radio.value, 10);
+                    saveExecutiveSettings();
+                    calculateResults();
+                    const optimizerResults = document.getElementById('sc-boardroom-opt-results');
+                    if (optimizerResults && optimizerResults.innerHTML) {
+                        renderOptimizerResults();
+                    }
+                };
+            });
+
+            document.querySelectorAll('input[data-direct-point]').forEach(input => {
+                input.onchange = () => {
+                    const key = input.getAttribute('data-direct-point');
+                    const value = toNonNegativeInteger(input.value);
+                    input.value = value;
+                    executiveSettings.directPoints[key] = value;
+                    saveExecutiveSettings();
+                    if (getCalculationMode() === 'direct') {
+                        calculateResults();
+                    }
+                };
             });
 
             renderBoardroom();
@@ -1528,6 +1822,10 @@ registerExportInfo({
     scope: 'realm',
     // backup: true, // 2026-08 临时排除：该模块自带"获取最新数据"按钮，缺数据可手动刷新
     keys: realmId => realmId === null
-        ? ['SC-Saved-Boardroom', 'SC-Saved-Bonuses']
-        : [`R${realmId}-SC-Saved-Boardroom`, `R${realmId}-SC-Saved-Bonuses`]
+        ? ['SC-Saved-Boardroom', 'SC-Saved-Bonuses', EXECUTIVE_SETTINGS_KEY]
+        : [
+            `R${realmId}-SC-Saved-Boardroom`,
+            `R${realmId}-SC-Saved-Bonuses`,
+            `R${realmId}-${EXECUTIVE_SETTINGS_KEY}`
+        ]
 });
