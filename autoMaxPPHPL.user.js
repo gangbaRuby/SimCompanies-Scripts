@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.34.2
+// @version      1.34.3
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -330,6 +330,54 @@
             handleData(JSON.parse(this.responseText));
           } catch (e) {
             console.error("\u274C \u4ED3\u5E93 XHR JSON \u89E3\u6790\u5931\u8D25:", e);
+          }
+        }
+      });
+      return originalXHR.apply(this, arguments);
+    };
+  })();
+  (function() {
+    const contractHistory_URL_PATTERN = /\/api\/v2\/contracts-history-incoming\/?(?:[?#].*)?$/;
+    const CONTRACT_HISTORY_EVENT = "sc-incoming-contract-history";
+    function getRequestUrl(input) {
+      if (typeof input === "string") return input;
+      if (input instanceof URL) return input.href;
+      if (input && typeof input.url === "string") return input.url;
+      return "";
+    }
+    function handleData(data2) {
+      if (!Array.isArray(data2)) return;
+      const realmId = data2.find((item) => item?.seller?.realmId === 0 || item?.seller?.realmId === 1)?.seller?.realmId ?? getRealmIdFromLink();
+      if (realmId !== 0 && realmId !== 1) return;
+      const detail = {
+        realmId,
+        data: data2,
+        receivedAt: Date.now()
+      };
+      window.__SC_IncomingContractHistory = detail;
+      window.dispatchEvent(new CustomEvent(CONTRACT_HISTORY_EVENT, { detail }));
+    }
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      try {
+        const url = response?.url || getRequestUrl(args[0]);
+        if (contractHistory_URL_PATTERN.test(url)) {
+          response.clone().json().then(handleData).catch((err) => console.error("\u274C \u5165\u5E93\u5408\u540C\u5386\u53F2 JSON \u89E3\u6790\u5931\u8D25:", err));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      return response;
+    };
+    const originalXHR = window.XMLHttpRequest.prototype.open;
+    window.XMLHttpRequest.prototype.open = function(method, url) {
+      this.addEventListener("load", function() {
+        if (url && contractHistory_URL_PATTERN.test(String(url)) && this.responseText) {
+          try {
+            handleData(JSON.parse(this.responseText));
+          } catch (e) {
+            console.error("\u274C \u5165\u5E93\u5408\u540C\u5386\u53F2 JSON \u89E3\u6790\u5931\u8D25:", e);
           }
         }
       });
@@ -1943,6 +1991,8 @@
   var BuildingAuctionLevelFilter = { init: (...args) => window.SC_Modules?.BuildingAuctionLevelFilter?.init(...args) };
   var BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Modules?.BuildingAuctionLevelFilter?.destroy(...args) };
   (function() {
+    const BUILDING_PAGE_PATTERN = /\/b\/\d+(?:\/retail\/[^\/?#]+)?\/?(?:[?#].*)?$/;
+    const RETAIL_DETAIL_PATTERN = /\/b\/\d+\/retail\/[^\/?#]+\/?(?:[?#].*)?$/;
     const PAGE_ACTIONS = {
       marketPage: {
         //交易所页面
@@ -2006,16 +2056,19 @@
       },
       buildingPage: {
         //建筑页面
-        pattern: /\/b\/\d+\/?$/,
-        action: () => {
-          RestaurantStockReminder.init();
-          SalesOfficeHelper.init();
-          if (isPageModuleEnabled("buildingUpgradeMaterialCopy")) {
-            BuildingUpgradeMaterialCopy.init();
+        pattern: BUILDING_PAGE_PATTERN,
+        action: (url) => {
+          const isRetailDetail = RETAIL_DETAIL_PATTERN.test(url);
+          if (!isRetailDetail) {
+            RestaurantStockReminder.init();
+            SalesOfficeHelper.init();
+            if (isPageModuleEnabled("buildingUpgradeMaterialCopy")) {
+              BuildingUpgradeMaterialCopy.init();
+            }
           }
           const tryInit = (delay, retriesLeft) => {
             setTimeout(() => {
-              if (!/\/b\/\d+\/?$/.test(location.href)) return;
+              if (!BUILDING_PAGE_PATTERN.test(location.href)) return;
               if (typeof window.initAutoAmountButtons === "function") {
                 window.initAutoAmountButtons();
               }
@@ -6127,7 +6180,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.2",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.3",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -6237,6 +6290,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
   })();
 
   // src/features/executiveBoardroom.js
+  var EXECUTIVE_SETTINGS_KEY = "SC-ExecutiveBoardroom-Settings";
   var executiveCustomButton = /* @__PURE__ */ (function() {
     let boardroomState = {
       "o": null,
@@ -6255,6 +6309,18 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     };
     let draggedSlotId = null;
     let selectedSlotId = null;
+    const ACADEMY_BUCKETS = [0, 5, 10, 15, 20];
+    const DIRECT_POINT_KEYS = ["coo", "cfo", "cmo", "cto"];
+    let executiveSettings = {
+      calculationMode: "detailed",
+      academyLevel: null,
+      directPoints: {
+        coo: 0,
+        cfo: 0,
+        cmo: 0,
+        cto: 0
+      }
+    };
     const SLOT_LABELS = {
       o: "COO",
       f: "CFO",
@@ -6315,45 +6381,134 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }
       }
     }
-    function getAcademyRadioValue() {
-      const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
-      try {
-        const stored = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
-        const academyActive = Number(stored?.academyActive);
-        if (Number.isFinite(academyActive) && academyActive >= 0) {
-          if (academyActive >= 20) return 20;
-          if (academyActive >= 15) return 15;
-          if (academyActive >= 10) return 10;
-          if (academyActive >= 5) return 5;
-          return 0;
-        }
-      } catch (e) {
-        console.warn("\u8BFB\u53D6\u5B66\u9662\u7B49\u7EA7\u5931\u8D25\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u533A\u95F4 15-19:", e);
-      }
-      return 15;
+    function toNonNegativeInteger(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num < 0) return 0;
+      return Math.floor(num);
+    }
+    function getAcademyBucket(level) {
+      if (level >= 20) return 20;
+      if (level >= 15) return 15;
+      if (level >= 10) return 10;
+      if (level >= 5) return 5;
+      return 0;
     }
     function readRealmAcademyLevel() {
       const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
       try {
         const stored = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
-        const level = Number(stored && stored.academyActive);
+        const level = Number(stored?.academyActive);
         if (Number.isFinite(level) && level >= 0) return level;
       } catch (e) {
       }
       return null;
     }
-    function syncAcademyRadioToRealm() {
-      const level = readRealmAcademyLevel();
-      if (level === null) return null;
-      const bucket = level >= 20 ? 20 : level >= 15 ? 15 : level >= 10 ? 10 : level >= 5 ? 5 : 0;
-      document.querySelectorAll('input[name="sc-aca-r"]').forEach((radio) => {
-        radio.checked = Number(radio.value) === bucket;
+    function normalizeExecutiveSettings(raw) {
+      const parsed = raw && typeof raw === "object" ? raw : {};
+      const savedAcademy = Number(parsed.academyLevel);
+      const academyLevel = ACADEMY_BUCKETS.includes(savedAcademy) ? savedAcademy : null;
+      const directPoints = {};
+      const savedPoints = parsed.directPoints && typeof parsed.directPoints === "object" ? parsed.directPoints : {};
+      DIRECT_POINT_KEYS.forEach((key) => {
+        directPoints[key] = toNonNegativeInteger(savedPoints[key]);
       });
-      return bucket;
+      return {
+        calculationMode: parsed.calculationMode === "direct" ? "direct" : "detailed",
+        academyLevel,
+        directPoints
+      };
+    }
+    function loadExecutiveSettings() {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(localStorage.getItem(getScopedKey(EXECUTIVE_SETTINGS_KEY)) || "null");
+      } catch (e) {
+        parsed = null;
+      }
+      executiveSettings = normalizeExecutiveSettings(parsed);
+      if (executiveSettings.academyLevel === null) {
+        const realmLevel = readRealmAcademyLevel();
+        executiveSettings.academyLevel = realmLevel === null ? 15 : getAcademyBucket(realmLevel);
+      }
+    }
+    function saveExecutiveSettings() {
+      try {
+        localStorage.setItem(getScopedKey(EXECUTIVE_SETTINGS_KEY), JSON.stringify(executiveSettings));
+      } catch (e) {
+        console.warn("\u4FDD\u5B58\u9AD8\u7BA1\u8BA1\u7B97\u8BBE\u7F6E\u5931\u8D25:", e);
+      }
+    }
+    function getAcademyRadioValue() {
+      return ACADEMY_BUCKETS.includes(Number(executiveSettings.academyLevel)) ? Number(executiveSettings.academyLevel) : 15;
+    }
+    function getCalculationMode() {
+      const selected = document.querySelector('input[name="sc-exec-mode"]:checked');
+      if (selected) return selected.value === "direct" ? "direct" : "detailed";
+      return executiveSettings.calculationMode === "direct" ? "direct" : "detailed";
+    }
+    function updateCalculationModeUI() {
+      const directPanel = document.getElementById("sc-direct-points-panel");
+      if (!directPanel) return;
+      directPanel.classList.toggle("sc-boardroom-hidden", getCalculationMode() !== "direct");
+    }
+    function setCalculationMode(mode) {
+      executiveSettings.calculationMode = mode === "direct" ? "direct" : "detailed";
+      saveExecutiveSettings();
+      document.querySelectorAll('input[name="sc-exec-mode"]').forEach((radio) => {
+        radio.checked = radio.value === executiveSettings.calculationMode;
+      });
+      updateCalculationModeUI();
     }
     function getCheckedAcademyLevel() {
       const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
-      return selectedRadio ? parseInt(selectedRadio.value) : 15;
+      if (selectedRadio) return parseInt(selectedRadio.value);
+      return getAcademyRadioValue();
+    }
+    function getDirectEffectivePoints() {
+      const points = {};
+      DIRECT_POINT_KEYS.forEach((key) => {
+        const input = document.getElementById(`sc-direct-${key}`);
+        const value = input ? input.value : executiveSettings.directPoints[key];
+        points[key] = toNonNegativeInteger(value);
+      });
+      return points;
+    }
+    function getActiveEffectivePoints() {
+      const calculationMode = getCalculationMode();
+      if (calculationMode === "direct") {
+        const points = getDirectEffectivePoints();
+        return {
+          calculationMode,
+          academyLevel: getCheckedAcademyLevel(),
+          rawCoo: points.coo,
+          effCoo: points.coo,
+          rawCfo: points.cfo,
+          effCfo: points.cfo,
+          rawCmo: points.cmo,
+          effCmo: points.cmo,
+          rawCto: points.cto,
+          effCto: points.cto
+        };
+      }
+      const academyLevel = getCheckedAcademyLevel();
+      return {
+        calculationMode,
+        academyLevel,
+        ...computeEffectivePoints(boardroomState, academyLevel)
+      };
+    }
+    function updateAcademyMismatch() {
+      const warning = document.getElementById("sc-academy-mismatch");
+      if (!warning) return;
+      const actualLevel = readRealmAcademyLevel();
+      const selectedLevel = getCheckedAcademyLevel();
+      if (actualLevel === null || getAcademyBucket(actualLevel) === selectedLevel) {
+        warning.classList.add("sc-boardroom-hidden");
+        warning.textContent = "";
+        return;
+      }
+      warning.textContent = `\u5F53\u524D\u9886\u57DF\u5B66\u9662\u603B\u7B49\u7EA7\u4E3A ${actualLevel}\uFF0C\u6240\u9009\u533A\u95F4\u4E0E\u5B9E\u9645\u4E0D\u7B26\uFF1B\u8BE6\u7EC6\u9AD8\u7BA1\u5C06\u6309\u6240\u9009\u533A\u95F4\u8BA1\u7B97\u3002`;
+      warning.classList.remove("sc-boardroom-hidden");
     }
     function computeEffectivePoints(state3, academyLevel) {
       const getSkill = (slotId, skillKey) => {
@@ -6395,9 +6550,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       };
     }
     function calculateResults() {
-      const selectedRadio = document.querySelector('input[name="sc-aca-r"]:checked');
-      const academyLevel = selectedRadio ? parseInt(selectedRadio.value) : 15;
+      updateAcademyMismatch();
       const {
+        calculationMode,
         rawCoo,
         effCoo,
         rawCfo,
@@ -6406,7 +6561,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         effCmo,
         rawCto,
         effCto
-      } = computeEffectivePoints(boardroomState, academyLevel);
+      } = getActiveEffectivePoints();
+      const directMode = calculationMode === "direct";
+      const pointSource = (raw, effective) => directMode ? `\u6709\u6548\u70B9\u6570 <code>${effective}</code>\uFF08\u76F4\u63A5\u8BBE\u5B9A\u7684\u8870\u51CF\u540E\u6570\u503C\uFF09` : `\u6709\u6548\u70B9\u6570 <code>${effective}</code>\uFF08\u539F\u59CB\u6C47\u603B\u70B9\u6570 ${raw}\uFF0C\u8870\u51CF\u6298\u7B97\u540E\u4E3A ${effective}\uFF09`;
       const rId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
       let SRC = {};
       try {
@@ -6441,7 +6598,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         admin: `
                     <strong>\u7BA1\u7406\u8D39\u7528\u8BA1\u7B97\u8BE6\u60C5\uFF1A</strong><br>
                     1. <strong>\u57FA\u7840\u7BA1\u7406\u8D39\u7528</strong>\uFF1A\u603B\u5EFA\u7B51\u7B49\u7EA7=\u5DE5\u4EBA/100\uFF0C\u7BA1\u7406\u8D39\u7528=(\u603B\u5EFA\u7B51\u7B49\u7EA7-1)/170\u3002<br>
-                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1ACOO \u6709\u6548\u70B9\u6570 <code>${effCoo}</code>\uFF08\u539F\u59CB\u6C47\u603B\u70B9\u6570 ${rawCoo}\uFF0C\u8870\u51CF\u6298\u7B97\u540E\u4E3A ${effCoo}\uFF09\u3002<br>
+                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1A${pointSource(rawCoo, effCoo)}\u3002<br>
                     3. <strong>\u8BA1\u7B97\u516C\u5F0F</strong>\uFF1A\u6BCF 1 \u70B9\u6709\u6548 COO \u51CF\u5C11\u57FA\u7840\u7BA1\u7406\u8D39\u7528\u7684 1%\u3002<br>
                        <code>${baseAdminText} &times; ${effCoo}% = ${Math.abs(baseAdminVal * effCoo).toFixed(2)}%</code> \u6263\u51CF\u3002<br>
                     4. <strong>\u6700\u7EC8\u7ED3\u679C</strong>\uFF1A<code>${baseAdminText} - ${Math.abs(baseAdminVal * effCoo).toFixed(2)}% = ${finalAdminText}</code>\u3002
@@ -6449,7 +6606,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         cfo: `
                     <strong>\u4F1A\u8BA1\u8D39\u7528\u8D77\u59CB\u70B9\u8BA1\u7B97\u8BE6\u60C5\uFF1A</strong><br>
                     1. <strong>\u57FA\u7840\u9650\u989D</strong>\uFF1A\u56FA\u5B9A\u503C <code>$3.0M</code>\uFF08\u6240\u6709\u516C\u53F8\u521D\u59CB\u514D\u7A0E\u4E0A\u9650\u5747\u4E3A $3,000,000\uFF09\u3002<br>
-                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1ACFO \u6709\u6548\u70B9\u6570 <code>${effCfo}</code>\uFF08\u539F\u59CB\u6C47\u603B\u70B9\u6570 ${rawCfo}\uFF0C\u8870\u51CF\u6298\u7B97\u540E\u4E3A ${effCfo}\uFF09\u3002<br>
+                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1A${pointSource(rawCfo, effCfo)}\u3002<br>
                     3. <strong>\u94F6\u884C\u52A0\u6210</strong>\uFF1A\u5F53\u524D\u94F6\u884C\u7B49\u7EA7\u4E3A <code>${bankLevel}</code>\uFF0C\u63D0\u4F9B\u989D\u5916 <code>${(bankLevel * 10).toFixed(0)}%</code> \u7684 CFO \u6548\u679C\u589E\u5E45\u3002<br>
                     4. <strong>\u8BA1\u7B97\u516C\u5F0F</strong>\uFF1A<code>$3.0M + CFO \u6709\u6548\u70B9\u6570 &times; $0.5M &times; (1 + \u94F6\u884C\u7B49\u7EA7 / 10)</code>\u3002<br>
                        <code>$3.0M + ${effCfo} &times; $0.5M &times; (1 + ${bankLevel} / 10) = ${finalCfoText}</code>\u3002<br>
@@ -6458,7 +6615,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         salesSpeed: `
                     <strong>\u9500\u552E\u901F\u5EA6\u8BA1\u7B97\u8BE6\u60C5\uFF1A</strong><br>
                     1. <strong>\u57FA\u7840\u9500\u552E\u901F\u5EA6</strong>\uFF1A\u7B49\u7EA7\u52A0\u6210\u4E0E\u4F11\u95F2\u52A0\u6210\u4E4B\u548C <code>${baseSalesText}</code>\u3002<br>
-                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1ACMO \u6709\u6548\u70B9\u6570 <code>${effCmo}</code>\uFF08\u539F\u59CB\u6C47\u603B\u70B9\u6570 ${rawCmo}\uFF0C\u8870\u51CF\u6298\u7B97\u540E\u4E3A ${effCmo}\uFF09\u3002<br>
+                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1A${pointSource(rawCmo, effCmo)}\u3002<br>
                     3. <strong>\u8BA1\u7B97\u516C\u5F0F</strong>\uFF1A\u6BCF 3 \u70B9\u6709\u6548 CMO \u589E\u52A0 1% \u9500\u552E\u901F\u5EA6\u3002<br>
                        <code>Math.floor(${effCmo} / 3) = +${Math.floor(effCmo / 3)}%</code> \u901F\u5EA6\u63D0\u5347\u3002<br>
                     4. <strong>\u6700\u7EC8\u7ED3\u679C</strong>\uFF1A<code>${baseSalesText} + ${Math.floor(effCmo / 3)}% = ${finalSalesText}</code>\u3002
@@ -6466,7 +6623,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         restaurant: `
                     <strong>\u9910\u9986\u8BC4\u7EA7\u8BA1\u7B97\u8BE6\u60C5\uFF1A</strong><br>
                     1. <strong>\u57FA\u7840\u8BC4\u7EA7</strong>\uFF1A\u57FA\u7840\u9500\u552E\u901F\u5EA6 * 0.02<br>
-                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1ACMO \u6709\u6548\u70B9\u6570 <code>${effCmo}</code>\uFF08\u539F\u59CB\u6C47\u603B\u70B9\u6570 ${rawCmo}\uFF0C\u8870\u51CF\u6298\u7B97\u540E\u4E3A ${effCmo}\uFF09\u3002<br>
+                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1A${pointSource(rawCmo, effCmo)}\u3002<br>
                     3. <strong>\u8BA1\u7B97\u516C\u5F0F</strong>\uFF1A\u6BCF 1 \u70B9\u6709\u6548 CMO \u589E\u52A0 0.01 \u9910\u9986\u8BC4\u7EA7\u3002<br>
                        <code>${effCmo} &times; 0.01 = +${(effCmo * 0.01).toFixed(2)}</code> \u8BC4\u7EA7\u63D0\u5347\u3002<br>
                     4. <strong>\u6700\u7EC8\u7ED3\u679C</strong>\uFF1A<code>${baseRestaurantText} + ${(effCmo * 0.01).toFixed(2)} = ${finalRestaurantText}</code>\u3002
@@ -6474,7 +6631,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         patent: `
                     <strong>\u4E13\u5229\u8F6C\u5316\u6982\u7387\u8BA1\u7B97\u8BE6\u60C5\uFF1A</strong><br>
                     1. <strong>\u57FA\u7840\u6982\u7387</strong>\uFF1A\u6E38\u620F\u56FA\u5B9A\u57FA\u7840\u8F6C\u5316\u7387 <code>6.25%</code>\u3002<br>
-                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1ACTO \u6709\u6548\u70B9\u6570 <code>${effCto}</code>\uFF08\u539F\u59CB\u6C47\u603B\u70B9\u6570 ${rawCto}\uFF0C\u8870\u51CF\u6298\u7B97\u540E\u4E3A ${effCto}\uFF09\u3002<br>
+                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1A${pointSource(rawCto, effCto)}\u3002<br>
                     3. <strong>\u8BA1\u7B97\u516C\u5F0F</strong>\uFF1A\u6BCF 1 \u70B9\u6709\u6548 CTO \u589E\u52A0 1% \u7684\u57FA\u7840\u4E13\u5229\u8F6C\u5316\u6982\u7387\uFF08\u5373 6.25% \u7684 1% = 0.0625%\uFF09\u3002<br>
                        <code>${effCto} &times; 0.0625% = +${(effCto * 0.0625).toFixed(2)}%</code> \u6982\u7387\u63D0\u5347\u3002<br>
                     4. <strong>\u6700\u7EC8\u7ED3\u679C</strong>\uFF1A<code>6.25% + ${(effCto * 0.0625).toFixed(2)}% = ${finalPatentText}</code>\u3002
@@ -6482,7 +6639,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         research: `
                     <strong>\u7814\u7A76\u751F\u4EA7\u901F\u5EA6\u63D0\u5347\u8BA1\u7B97\u8BE6\u60C5\uFF1A</strong><br>
                     1. <strong>\u57FA\u7840\u901F\u5EA6</strong>\uFF1A\u56FA\u5B9A\u57FA\u7840\u503C <code>0.0%</code>\u3002<br>
-                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1ACTO \u6709\u6548\u70B9\u6570 <code>${effCto}</code>\uFF08\u539F\u59CB\u6C47\u603B\u70B9\u6570 ${rawCto}\uFF0C\u8870\u51CF\u6298\u7B97\u540E\u4E3A ${effCto}\uFF09\u3002<br>
+                    2. <strong>\u9AD8\u7BA1\u52A0\u6210</strong>\uFF1A${pointSource(rawCto, effCto)}\u3002<br>
                     3. <strong>\u8BA1\u7B97\u516C\u5F0F</strong>\uFF1A\u6BCF 1 \u70B9\u6709\u6548 CTO \u589E\u52A0 2% \u7684\u7814\u7A76\u7C7B\u751F\u4EA7\u901F\u5EA6\u3002<br>
                        <code>${effCto} &times; 2% = +${(effCto * 2).toFixed(1)}%</code> \u901F\u5EA6\u63D0\u5347\u3002<br>
                     4. <strong>\u6700\u7EC8\u7ED3\u679C</strong>\uFF1A<code>${finalResearchText}</code>\u3002
@@ -6557,7 +6714,11 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           row.onclick = updateDetail;
         });
       }
-      return { adminBonus: effCoo, saleBonus: Math.floor(effCmo / 3) };
+      return {
+        adminBonus: effCoo,
+        saleBonus: Math.floor(effCmo / 3),
+        calculationMode
+      };
     }
     const OPT_SEAT_COEF = {
       o: { coo: 1, cmo: 0.25, cto: 0.25 },
@@ -6793,16 +6954,17 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     function saveBoardroom() {
       const res = calculateResults();
       const rId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
+      saveExecutiveSettings();
       localStorage.setItem(`R${rId}-SC-Saved-Bonuses`, JSON.stringify({
         adminBonus: res.adminBonus,
         saleBonus: res.saleBonus,
         timestamp: Date.now(),
-        source: "manual"
+        source: "manual",
+        calculationMode: res.calculationMode
       }));
       localStorage.setItem(`R${rId}-SC-Saved-Boardroom`, JSON.stringify(boardroomState));
     }
     function applyBestPlacement(targetKey, btn) {
-      syncAcademyRadioToRealm();
       const academyLevel = getCheckedAcademyLevel();
       const pool = collectExecutivePool();
       if (pool.length === 0) {
@@ -6876,6 +7038,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           if (next) boardroomState[seatId] = next.obj;
         });
         renderBoardroom();
+        setCalculationMode("detailed");
         saveBoardroom();
         renderOptimizerResults();
         showToast("\u5DF2\u5E94\u7528\u6700\u4F18\u6446\u653E\u5E76\u4FDD\u5B58", "success");
@@ -6886,6 +7049,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     let optResearchInput = "";
     let optRunId = 0;
     let optBusy = false;
+    let optPanelOpen = false;
     const OPT_MODE_LABELS = {
       admin: "\u7BA1\u7406\u8D39\u7528\u6700\u4F4E",
       restaurant: "\u9910\u9986\u8BC4\u7EA7\u6700\u9AD8",
@@ -6913,7 +7077,6 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     function computeAndShowOptResult() {
       const resultBox = document.getElementById("sc-opt-result");
       if (!resultBox || optBusy) return;
-      syncAcademyRadioToRealm();
       const academyLevel = getCheckedAcademyLevel();
       const pool = collectExecutivePool();
       if (pool.length === 0) {
@@ -7000,14 +7163,31 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }
       });
     }
+    function setOptimizerPanelOpen(open) {
+      const container = document.getElementById("sc-boardroom-opt-results");
+      const button = document.getElementById("sc-boardroom-opt-btn");
+      optPanelOpen = open === true;
+      if (container) {
+        container.classList.toggle("sc-boardroom-hidden", !optPanelOpen);
+        container.setAttribute("aria-hidden", String(!optPanelOpen));
+        if (!optPanelOpen) {
+          if (optBusy) {
+            optRunId++;
+            optBusy = false;
+          }
+          container.replaceChildren();
+        }
+      }
+      if (button) button.setAttribute("aria-expanded", String(optPanelOpen));
+    }
     function renderOptimizerResults() {
       const container = document.getElementById("sc-boardroom-opt-results");
       if (!container) return;
+      setOptimizerPanelOpen(true);
       if (optBusy) {
         optRunId++;
         optBusy = false;
       }
-      syncAcademyRadioToRealm();
       const academyLevel = getCheckedAcademyLevel();
       const pool = collectExecutivePool();
       if (pool.length === 0) {
@@ -7237,11 +7417,98 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       const style2 = document.createElement("style");
       style2.id = "sc-boardroom-styles";
       style2.textContent = `
+                .sc-boardroom-hidden {
+                    display: none !important;
+                }
+
                 .sc-boardroom-layout {
                     display: flex;
                     flex-direction: row;
                     width: 100%;
                     height: 100%;
+                }
+
+                .sc-exec-mode-switch {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 4px;
+                    padding: 4px;
+                    margin-bottom: 12px;
+                    border: 1px solid var(--sc-border);
+                    border-radius: 6px;
+                    background: var(--sc-card-empty-bg);
+                }
+                .sc-exec-mode-option {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 5px;
+                    min-width: 0;
+                    padding: 7px 8px;
+                    border-radius: 4px;
+                    color: var(--sc-fg);
+                    cursor: pointer;
+                    font-size: 12px;
+                    font-weight: bold;
+                    text-align: center;
+                }
+                .sc-exec-mode-option:has(input:checked) {
+                    background: var(--sc-card-bg-selected);
+                    color: #2196F3;
+                }
+                .sc-direct-points-panel {
+                    padding: 10px;
+                    margin-bottom: 14px;
+                    border: 1px solid var(--sc-border);
+                    border-radius: 8px;
+                    background: var(--sc-card-empty-bg);
+                }
+                .sc-direct-points-heading {
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: baseline;
+                    gap: 4px 8px;
+                    margin-bottom: 8px;
+                    color: var(--sc-fg);
+                    font-size: 13px;
+                    font-weight: bold;
+                }
+                .sc-direct-points-grid {
+                    display: grid;
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
+                    gap: 8px;
+                }
+                .sc-direct-point-field {
+                    min-width: 0;
+                }
+                .sc-direct-point-label {
+                    display: block;
+                    margin-bottom: 3px;
+                    color: var(--sc-fg2);
+                    font-size: 10px;
+                    font-weight: bold;
+                    text-align: center;
+                }
+                .sc-direct-point-input {
+                    width: 100%;
+                    min-width: 0;
+                    padding: 5px 2px;
+                    border: 1px solid var(--sc-border);
+                    border-radius: 4px;
+                    background: var(--sc-input-bg);
+                    color: var(--sc-input-fg);
+                    box-sizing: border-box;
+                    font-size: 12px;
+                    text-align: center;
+                }
+                .sc-academy-mismatch {
+                    margin-top: 8px;
+                    padding: 6px 8px;
+                    border: 1px solid var(--sc-dangerFg);
+                    border-radius: 4px;
+                    color: var(--sc-dangerFg);
+                    font-size: 11px;
+                    line-height: 1.5;
                 }
 
                 .sc-boardroom-left {
@@ -7422,6 +7689,20 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                         padding: 1px 2px;
                         font-size: 10px;
                     }
+                    .sc-exec-mode-option {
+                        padding: 7px 4px;
+                        font-size: 11px;
+                    }
+                    .sc-direct-points-panel {
+                        padding: 8px;
+                    }
+                    .sc-direct-points-grid {
+                        gap: 4px;
+                    }
+                    .sc-direct-point-input {
+                        padding: 5px 1px;
+                        font-size: 11px;
+                    }
                 }
             `;
       document.head.appendChild(style2);
@@ -7430,6 +7711,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       if (document.getElementById("sc-calc-modal")) return;
       injectStyles();
       loadSavedBoardroom();
+      loadExecutiveSettings();
+      optPanelOpen = false;
       const modal = document.createElement("div");
       modal.id = "sc-calc-modal";
       modal.style.cssText = `
@@ -7456,9 +7739,42 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                             <button id="sc-boardroom-save-btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">\u4FDD\u5B58</button>
                             <button id="sc-boardroom-fetch-btn" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">\u83B7\u53D6\u5F53\u524D\u6700\u65B0\u9AD8\u7BA1\u6570\u636E</button>
-                            <button id="sc-boardroom-opt-btn" style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">\u6700\u4F18\u6446\u653E\u5EFA\u8BAE</button>
+                            <button id="sc-boardroom-opt-btn" aria-controls="sc-boardroom-opt-results" aria-expanded="false" style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">\u6700\u4F18\u6446\u653E\u5EFA\u8BAE</button>
                         </div>
-                        <div id="sc-boardroom-opt-results"></div>
+                        <div class="sc-exec-mode-switch">
+                            <label class="sc-exec-mode-option">
+                                <input type="radio" name="sc-exec-mode" value="detailed" ${executiveSettings.calculationMode === "detailed" ? "checked" : ""}>
+                                \u8BE6\u7EC6\u9AD8\u7BA1
+                            </label>
+                            <label class="sc-exec-mode-option">
+                                <input type="radio" name="sc-exec-mode" value="direct" ${executiveSettings.calculationMode === "direct" ? "checked" : ""}>
+                                \u76F4\u63A5\u6709\u6548\u70B9\u6570
+                            </label>
+                        </div>
+                        <div id="sc-direct-points-panel" class="sc-direct-points-panel ${executiveSettings.calculationMode === "direct" ? "" : "sc-boardroom-hidden"}">
+                            <div class="sc-direct-points-heading">
+                                <span>\u76F4\u63A5\u6709\u6548\u70B9\u6570</span>
+                            </div>
+                            <div class="sc-direct-points-grid">
+                                <label class="sc-direct-point-field">
+                                    <span class="sc-direct-point-label">COO</span>
+                                    <input id="sc-direct-coo" class="sc-direct-point-input" data-direct-point="coo" type="number" min="0" step="1" inputmode="numeric" value="${executiveSettings.directPoints.coo}">
+                                </label>
+                                <label class="sc-direct-point-field">
+                                    <span class="sc-direct-point-label">CFO</span>
+                                    <input id="sc-direct-cfo" class="sc-direct-point-input" data-direct-point="cfo" type="number" min="0" step="1" inputmode="numeric" value="${executiveSettings.directPoints.cfo}">
+                                </label>
+                                <label class="sc-direct-point-field">
+                                    <span class="sc-direct-point-label">CMO</span>
+                                    <input id="sc-direct-cmo" class="sc-direct-point-input" data-direct-point="cmo" type="number" min="0" step="1" inputmode="numeric" value="${executiveSettings.directPoints.cmo}">
+                                </label>
+                                <label class="sc-direct-point-field">
+                                    <span class="sc-direct-point-label">CTO</span>
+                                    <input id="sc-direct-cto" class="sc-direct-point-input" data-direct-point="cto" type="number" min="0" step="1" inputmode="numeric" value="${executiveSettings.directPoints.cto}">
+                                </label>
+                            </div>
+                        </div>
+                        <div id="sc-boardroom-opt-results" class="sc-boardroom-hidden" aria-hidden="true"></div>
                         <div style="font-size: 11px; color: var(--sc-fg3); margin-bottom: 15px;">* \u62D6\u62FD\u9AD8\u7BA1\u5361\u7247\uFF0C\u6216\u70B9\u51FB\u4E24\u4E2A\u9AD8\u7BA1\u5361\u7247\u8FDB\u884C\u5207\u6362\u3002</div>
                         <div id="sc-slots-container"></div>
                     </div>
@@ -7508,7 +7824,11 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       if (btnOpt) {
         btnOpt.onclick = (e) => {
           e.preventDefault();
-          renderOptimizerResults();
+          if (optPanelOpen) {
+            setOptimizerPanelOpen(false);
+          } else {
+            renderOptimizerResults();
+          }
         };
       }
       btnSave.onclick = (e) => {
@@ -7556,6 +7876,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                         <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="15" ${academyRadioValue === 15 ? "checked" : ""} style="vertical-align:middle;"> 15-19</label>
                         <label style="cursor:pointer;"><input type="radio" name="sc-aca-r" value="20" ${academyRadioValue === 20 ? "checked" : ""} style="vertical-align:middle;"> 20+</label>
                     </div>
+                    <div style="margin-top: 7px; color: var(--sc-fg3); font-size: 10px; line-height: 1.5;">\u5B66\u9662\u7B49\u7EA7\u5F71\u54CD\u8BE6\u7EC6\u9AD8\u7BA1\u7684\u5B66\u5F92\u751F\u6548\u4E0E\u70B9\u6570\u8870\u51CF\uFF1B\u76F4\u63A5\u6709\u6548\u70B9\u6570\u5DF2\u5305\u542B\u8870\u51CF\u3002</div>
+                    <div id="sc-academy-mismatch" class="sc-academy-mismatch sc-boardroom-hidden"></div>
                 </div>
 
                 <!-- Calculation Table -->
@@ -7566,8 +7888,36 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                     \u{1F4A1} \u63D0\u793A\uFF1A\u70B9\u51FB\u6216\u60AC\u6D6E\u5728\u4E0A\u65B9\u4EFB\u610F\u884C\uFF0C\u53EF\u5728\u6B64\u5904\u67E5\u770B\u8BE6\u7EC6\u8BA1\u7B97\u516C\u5F0F\u3002
                 </div>
             `;
+      wrapper.querySelectorAll('input[name="sc-exec-mode"]').forEach((radio) => {
+        radio.onchange = () => {
+          if (!radio.checked) return;
+          setCalculationMode(radio.value);
+          calculateResults();
+        };
+      });
+      updateCalculationModeUI();
       rightContainer.querySelectorAll('input[name="sc-aca-r"]').forEach((radio) => {
-        radio.onchange = () => calculateResults();
+        radio.onchange = () => {
+          if (!radio.checked) return;
+          executiveSettings.academyLevel = parseInt(radio.value, 10);
+          saveExecutiveSettings();
+          calculateResults();
+          if (optPanelOpen) {
+            renderOptimizerResults();
+          }
+        };
+      });
+      document.querySelectorAll("input[data-direct-point]").forEach((input) => {
+        input.onchange = () => {
+          const key = input.getAttribute("data-direct-point");
+          const value = toNonNegativeInteger(input.value);
+          input.value = value;
+          executiveSettings.directPoints[key] = value;
+          saveExecutiveSettings();
+          if (getCalculationMode() === "direct") {
+            calculateResults();
+          }
+        };
       });
       renderBoardroom();
       calculateResults();
@@ -7612,15 +7962,22 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     name: "\u81EA\u5B9A\u4E49\u9AD8\u7BA1\u6570\u636E",
     scope: "realm",
     // backup: true, // 2026-08 临时排除：该模块自带"获取最新数据"按钮，缺数据可手动刷新
-    keys: (realmId) => realmId === null ? ["SC-Saved-Boardroom", "SC-Saved-Bonuses"] : [`R${realmId}-SC-Saved-Boardroom`, `R${realmId}-SC-Saved-Bonuses`]
+    keys: (realmId) => realmId === null ? ["SC-Saved-Boardroom", "SC-Saved-Bonuses", EXECUTIVE_SETTINGS_KEY] : [
+      `R${realmId}-SC-Saved-Boardroom`,
+      `R${realmId}-SC-Saved-Bonuses`,
+      `R${realmId}-${EXECUTIVE_SETTINGS_KEY}`
+    ]
   });
 
   // src/features/resourceMarketHandler.js
+  var BUILDING_LEVEL_KEY = "sc_building_level";
+  var BUILDING_HOURS_KEY = "sc_building_hours";
+  var BUILDING_LEVEL_MODE_KEY = "sc_building_level_mode";
   registerExportInfo({
     name: "\u4EA4\u6613\u6240\u8BA1\u7B97\u53C2\u6570",
     scope: "global",
     backup: true,
-    keys: ["sc_building_level", "sc_building_hours"]
+    keys: [BUILDING_LEVEL_KEY, BUILDING_HOURS_KEY, BUILDING_LEVEL_MODE_KEY]
   });
   var { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state2;
   var MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" style="display:block;width:14px;height:14px;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="envelope" class="css-0" role="img" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48H48zM0 176V384c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V176L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"></path></svg>`;
@@ -7640,6 +7997,101 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     let _quantityCheckInterval = null;
     let _formClickHandler = null;
     let _initDone = false;
+    function readConstantsData() {
+      try {
+        const raw = localStorage.getItem("SimcompaniesConstantsData");
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+    function getManualBuildingLevel() {
+      const storedLevel = localStorage.getItem(BUILDING_LEVEL_KEY);
+      return storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
+    }
+    function getBuildingLevelMode() {
+      return localStorage.getItem(BUILDING_LEVEL_MODE_KEY) === "auto" ? "auto" : "manual";
+    }
+    function getBuildingKindForResource(SCD) {
+      const resource = parseInt(currentResourceId, 10);
+      const sales = SCD?.data?.SALES;
+      if (!Number.isFinite(resource) || !sales || typeof sales !== "object") return null;
+      for (const [kind, ids] of Object.entries(sales)) {
+        if (Array.isArray(ids) && ids.some((id) => Number(id) === resource)) return kind;
+      }
+      return null;
+    }
+    function getCapturedBuildingLevel(buildingKind) {
+      if (!buildingKind || currentRealmId === null || currentRealmId === void 0) {
+        return { available: false, level: 0, count: 0 };
+      }
+      try {
+        const raw = localStorage.getItem(`SimcompaniesRetailCalculation_${currentRealmId}`);
+        const buildings = raw ? JSON.parse(raw)?.buildings : null;
+        if (!Array.isArray(buildings)) return { available: false, level: 0, count: 0 };
+        let totalLevel = 0;
+        let count = 0;
+        for (const building of buildings) {
+          if (String(building?.kind) !== String(buildingKind)) continue;
+          const level = Number(building?.size);
+          if (!Number.isFinite(level) || level <= 0) continue;
+          totalLevel += level;
+          count++;
+        }
+        const normalizedLevel = Math.floor(totalLevel + Number.EPSILON);
+        return {
+          available: count > 0 && normalizedLevel >= 1,
+          level: normalizedLevel,
+          count
+        };
+      } catch {
+        return { available: false, level: 0, count: 0 };
+      }
+    }
+    function getBuildingLevelState() {
+      const mode = getBuildingLevelMode();
+      const manualLevel = getManualBuildingLevel();
+      if (mode !== "auto") {
+        return {
+          mode,
+          manualLevel,
+          capturedLevel: 0,
+          capturedCount: 0,
+          capturedAvailable: false,
+          effectiveLevel: manualLevel
+        };
+      }
+      const buildingKind = getBuildingKindForResource(readConstantsData());
+      const captured = getCapturedBuildingLevel(buildingKind);
+      return {
+        mode,
+        manualLevel,
+        capturedLevel: captured.level,
+        capturedCount: captured.count,
+        capturedAvailable: captured.available,
+        effectiveLevel: captured.available ? captured.level : manualLevel
+      };
+    }
+    function syncBuildingLevelControl(state3 = getBuildingLevelState(), options = {}) {
+      const levelInput = document.getElementById("sc-building-level");
+      const modeSelect = document.getElementById("sc-building-level-mode-select");
+      if (!levelInput || !modeSelect) return state3;
+      modeSelect.value = state3.mode;
+      modeSelect.setAttribute("aria-label", "\u5EFA\u7B51\u7B49\u7EA7\u6765\u6E90");
+      if (state3.mode === "auto") {
+        modeSelect.title = state3.capturedAvailable ? `\u81EA\u52A8\uFF1A\u5DF2\u6309\u5F53\u524D\u9886\u57DF ${state3.capturedCount} \u680B\u540C\u7C7B\u5EFA\u7B51\u8BA1\u7B97\uFF0C\u603B\u7B49\u7EA7 ${state3.capturedLevel}` : `\u81EA\u52A8\u7B49\u7EA7\u6682\u4E0D\u53EF\u7528\uFF0C\u5DF2\u4F7F\u7528\u4F60\u586B\u5199\u7684\u7B49\u7EA7 ${state3.manualLevel}`;
+        levelInput.readOnly = state3.capturedAvailable;
+        levelInput.title = state3.capturedAvailable ? "\u81EA\u52A8\u8BA1\u7B97\u7684\u540C\u7C7B\u5EFA\u7B51\u603B\u7B49\u7EA7" : `\u81EA\u52A8\u7B49\u7EA7\u6682\u4E0D\u53EF\u7528\uFF0C\u5F53\u524D\u4F7F\u7528\u624B\u52A8\u7B49\u7EA7 ${state3.manualLevel}`;
+      } else {
+        modeSelect.title = "\u624B\u52A8\uFF1A\u4F7F\u7528\u4F60\u586B\u5199\u7684\u5EFA\u7B51\u7B49\u7EA7";
+        levelInput.readOnly = false;
+        levelInput.title = "\u624B\u52A8\u586B\u5199\u7684\u5EFA\u7B51\u7B49\u7EA7";
+      }
+      if (!(options.preserveFocusedInput && document.activeElement === levelInput)) {
+        levelInput.value = String(state3.effectiveLevel);
+      }
+      return state3;
+    }
     const workerCode = `
         self.onmessage = function(e) {
         const { orders, shared, SCD, SRC, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
@@ -7948,6 +8400,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (simContent) simContent.innerHTML = `<div style="color:${DM() ? "#888" : "#777"};font-size:12px;text-align:center;padding:8px;">\u6682\u65E0\u8BA2\u5355\u6570\u636E</div>`;
         return;
       }
+      const buildingLevelState = syncBuildingLevelControl(getBuildingLevelState(), { preserveFocusedInput: true });
       let avgProfitPerHour = 0;
       let totalProfitVal = 0;
       let totalTimeSeconds = 0;
@@ -7956,10 +8409,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       let borderColor = "";
       let coveredCount = 0;
       let statusText = "";
-      let bldLevel = 1;
+      const bldLevel = buildingLevelState.effectiveLevel;
       if (isSimulationMode) {
-        const storedLevel = localStorage.getItem("sc_building_level");
-        bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
         const processedRows = rawRows.map((item) => {
           const data2 = extractNumbersFromAriaLabel(item.row.getAttribute("aria-label"));
           return {
@@ -8042,9 +8493,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             }
           }
         }
-        const storedLevel = localStorage.getItem("sc_building_level");
-        bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
-        const storedHours = localStorage.getItem("sc_building_hours");
+        const storedHours = localStorage.getItem(BUILDING_HOURS_KEY);
         const bldHours = storedHours !== null ? Math.max(0, parseFloat(storedHours) || 0) : 24;
         const targetSeconds = bldLevel * bldHours * 3600;
         let remainingTime = targetSeconds;
@@ -8629,19 +9078,19 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             buildingLevelInput.type = "number";
             buildingLevelInput.min = "1";
             buildingLevelInput.step = "1";
-            buildingLevelInput.value = localStorage.getItem("sc_building_level") || "100";
+            buildingLevelInput.value = localStorage.getItem(BUILDING_LEVEL_KEY) || "100";
             buildingLevelInput.title = "\u5EFA\u7B51\u7B49\u7EA7";
             buildingLevelInput.style.cssText = `font-size: 11px; color: ${d7 ? "#efefef" : "#333"}; background: ${d7 ? "#333" : "#fff"}; border: 1px solid ${d7 ? "#555" : "#bbb"}; border-radius: 3px; padding: 1px 2px; width: 36px; text-align: center;`;
             buildingLevelInput.addEventListener("input", () => {
               const raw = parseInt(buildingLevelInput.value);
               const v = raw >= 1 && Number.isFinite(raw) ? raw : 1;
-              localStorage.setItem("sc_building_level", v);
+              localStorage.setItem(BUILDING_LEVEL_KEY, v);
               updateGlobalSimulation();
             });
             buildingLevelInput.addEventListener("change", () => {
               const raw = parseInt(buildingLevelInput.value);
               const v = raw >= 1 && Number.isFinite(raw) ? raw : 1;
-              localStorage.setItem("sc_building_level", v);
+              localStorage.setItem(BUILDING_LEVEL_KEY, v);
               updateGlobalSimulation();
             });
             extraControls.appendChild(buildingLevelInput);
@@ -8654,19 +9103,19 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             buildingHoursInput.type = "number";
             buildingHoursInput.min = "0";
             buildingHoursInput.step = "0.01";
-            buildingHoursInput.value = localStorage.getItem("sc_building_hours") || "24";
+            buildingHoursInput.value = localStorage.getItem(BUILDING_HOURS_KEY) || "24";
             buildingHoursInput.title = "\u8FD0\u884C\u65F6\u957F\uFF08\u5C0F\u65F6\uFF09";
             buildingHoursInput.style.cssText = `font-size: 11px; color: ${d7 ? "#efefef" : "#333"}; background: ${d7 ? "#333" : "#fff"}; border: 1px solid ${d7 ? "#555" : "#bbb"}; border-radius: 3px; padding: 1px 2px; width: 36px; text-align: center;`;
             buildingHoursInput.addEventListener("input", () => {
               const raw = parseFloat(buildingHoursInput.value);
               const v = raw > 0 && Number.isFinite(raw) ? Math.round(raw * 100) / 100 : 0;
-              localStorage.setItem("sc_building_hours", v);
+              localStorage.setItem(BUILDING_HOURS_KEY, v);
               updateGlobalSimulation();
             });
             buildingHoursInput.addEventListener("change", () => {
               const raw = parseFloat(buildingHoursInput.value);
               const v = raw > 0 && Number.isFinite(raw) ? Math.round(raw * 100) / 100 : 0;
-              localStorage.setItem("sc_building_hours", v);
+              localStorage.setItem(BUILDING_HOURS_KEY, v);
               updateGlobalSimulation();
             });
             extraControls.appendChild(buildingHoursInput);
@@ -8674,6 +9123,20 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             bldLabel2.textContent = "H";
             bldLabel2.style.cssText = `font-size: 11px; color: ${d7 ? "#aaa" : "#666"};`;
             extraControls.appendChild(bldLabel2);
+            const buildingLevelModeSelect = document.createElement("select");
+            buildingLevelModeSelect.id = "sc-building-level-mode-select";
+            buildingLevelModeSelect.title = "\u5EFA\u7B51\u7B49\u7EA7\u6765\u6E90";
+            buildingLevelModeSelect.innerHTML = `
+                            <option value="manual">\u624B\u52A8</option>
+                            <option value="auto">\u81EA\u52A8</option>
+                        `;
+            buildingLevelModeSelect.style.cssText = `font-size: 11px; color: ${d7 ? "#efefef" : "#333"}; background: ${d7 ? "#333" : "#fff"}; border: 1px solid ${d7 ? "#555" : "#bbb"}; border-radius: 3px; padding: 1px 1px; width: 46px;`;
+            buildingLevelModeSelect.addEventListener("change", () => {
+              localStorage.setItem(BUILDING_LEVEL_MODE_KEY, buildingLevelModeSelect.value);
+              syncBuildingLevelControl();
+              updateGlobalSimulation();
+            });
+            extraControls.appendChild(buildingLevelModeSelect);
             const basicGroup = document.createElement("span");
             basicGroup.id = "sc-basic-group";
             basicGroup.style.cssText = `display: inline-flex; align-items: center; gap: ${isNarrow7 ? "2px" : "8px"}; flex-wrap: wrap;`;
@@ -8716,6 +9179,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             simContent.innerHTML = `<div style="color:${d7 ? "#888" : "#777"};font-size:12px;text-align:center;padding:8px;">\u7B49\u5F85\u6570\u636E\u52A0\u8F7D\u2026</div>`;
             summaryDisplay.appendChild(simContent);
             container.appendChild(summaryDisplay);
+            syncBuildingLevelControl();
             if (window.innerWidth <= 991) {
               setTimeout(() => {
                 const rows = tbody.querySelectorAll("tr");
@@ -8994,6 +9458,35 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     let processDebounceTimer = null;
     let activeObserver = null;
     let checkPageTimer = null;
+    const CONTRACT_HISTORY_EVENT = "sc-incoming-contract-history";
+    const CONTRACT_HISTORY_WAIT_MS = 5e3;
+    const MARKET_FETCH_CONCURRENCY = 2;
+    const MARKET_FETCH_TIMEOUT_MS = 1e4;
+    const MARKET_RATE_LIMIT_COOLDOWN_MS = 3e4;
+    const CONTRACT_DISPLAY_SETTINGS_KEY = "contractDisplaySettings";
+    const DEFAULT_CONTRACT_DISPLAY_SETTINGS = Object.freeze({
+      referencePrice: false,
+      marketMaxProfit: false,
+      exchangeLink: false,
+      lastAcceptedTime: false
+    });
+    let contractHistoryByOffer = /* @__PURE__ */ new Map();
+    let contractHistoryByBaseOffer = /* @__PURE__ */ new Map();
+    let contractHistoryByProduct = /* @__PURE__ */ new Map();
+    let contractHistorySellerIds = /* @__PURE__ */ new Map();
+    let contractHistorySellerIdsBySlug = /* @__PURE__ */ new Map();
+    let contractHistoryLoaded = false;
+    let contractHistoryUnavailable = false;
+    let contractHistoryRealmId = null;
+    let contractHistoryListener = null;
+    let contractHistoryWaitTimer = null;
+    let contractDisplaySettingsModal = null;
+    let mpFetchSequence = 0;
+    let activeMarketFetches = 0;
+    let marketRateLimitUntil = 0;
+    const marketFetchQueue = [];
+    const marketFetchInFlight = /* @__PURE__ */ new Map();
+    const marketFetchCooldownUntil = /* @__PURE__ */ new Map();
     const workerCode = `
         self.onmessage = function(e) {
             const { orders, shared, SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = e.data;
@@ -9351,11 +9844,24 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         b
       };
     }
-    function calcMpInfo(cardData, marketData, status) {
+    function calcMpInfo(cardData, marketData, status, httpStatus = null) {
       const resourceId = parseInt(cardData.dbLetter);
       const targetQuality = cardData.quality !== null && cardData.quality !== void 0 ? cardData.quality : 0;
-      if (status === "error") {
-        return { mpPercent: null, mpValue: null, mpNotes: "MP\u8BF7\u6C42\u5931\u8D25", mpBestQuality: null };
+      if (status !== "ok" && status !== "fallback_expired") {
+        const failureNotes = {
+          rate_limited: "MP\u83B7\u53D6\u5931\u8D25\uFF08\u8BF7\u6C42\u8FC7\u591A\uFF0C\u7A0D\u540E\u91CD\u8BD5\uFF09",
+          timeout: "MP\u83B7\u53D6\u5931\u8D25\uFF08\u8BF7\u6C42\u8D85\u65F6\uFF09",
+          http_error: httpStatus ? `MP\u83B7\u53D6\u5931\u8D25\uFF08HTTP ${httpStatus}\uFF09` : "MP\u83B7\u53D6\u5931\u8D25\uFF08HTTP \u9519\u8BEF\uFF09",
+          invalid_response: "MP\u83B7\u53D6\u5931\u8D25\uFF08\u6570\u636E\u5F02\u5E38\uFF09",
+          internal_error: "MP\u83B7\u53D6\u5931\u8D25\uFF08\u5185\u90E8\u9519\u8BEF\uFF09",
+          error: "MP\u83B7\u53D6\u5931\u8D25"
+        };
+        return {
+          mpPercent: null,
+          mpValue: null,
+          mpNotes: failureNotes[status] || "MP\u83B7\u53D6\u5931\u8D25",
+          mpBestQuality: null
+        };
       }
       const expiredNote = status === "fallback_expired" ? " (\u7F13\u5B58\u5DF2\u8FC7\u671F)" : "";
       if (!marketData || !Array.isArray(marketData) || marketData.length === 0) {
@@ -9389,6 +9895,16 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       }
       return { mpPercent: null, mpValue: null, mpNotes: "\u5E02\u573A\u65E0\u5BF9\u5E94\u54C1\u8D28" + expiredNote, mpBestQuality: null };
     }
+    function showMpFailureForCards(cards, note) {
+      for (const card of cards) {
+        card.__mpPercent = null;
+        card.__mpValue = null;
+        card.__mpBestQuality = null;
+        card.__mpNotes = note;
+        card.__mpPending = false;
+        updateCardMpDisplay(card, null, null, note);
+      }
+    }
     async function processAllCards(cards, forceReset = false) {
       if (!cards || cards.length === 0) return;
       const realmId = getRealmIdFromLink2();
@@ -9402,12 +9918,22 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           Storage.save("region", regionData);
         } catch (err) {
           console.error("[\u5408\u540C\u6279\u91CF] \u6570\u636E\u521D\u59CB\u5316\u5931\u8D25:", err);
+          showMpFailureForCards(cards, "MP\u83B7\u53D6\u5931\u8D25\uFF08\u6570\u636E\u672A\u5C31\u7EEA\uFF09");
           return;
         }
       }
-      const SCD = JSON.parse(localStorage.getItem(constantsKey));
-      const SRC = JSON.parse(localStorage.getItem(regionKey));
-      if (!SCD || !SRC) return;
+      let SCD = null;
+      let SRC = null;
+      try {
+        SCD = JSON.parse(localStorage.getItem(constantsKey));
+        SRC = JSON.parse(localStorage.getItem(regionKey));
+      } catch (error) {
+        console.error("[\u5408\u540C\u6279\u91CF] \u672C\u5730\u6570\u636E\u89E3\u6790\u5931\u8D25:", error);
+      }
+      if (!SCD || !SRC) {
+        showMpFailureForCards(cards, "MP\u83B7\u53D6\u5931\u8D25\uFF08\u6570\u636E\u672A\u5C31\u7EEA\uFF09");
+        return;
+      }
       const pageActionsConfig = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
       const isCustomEnabled = pageActionsConfig["executiveCustomToggle"] === true;
       let SSB = null;
@@ -9424,14 +9950,21 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       const uniqueResourceIds = /* @__PURE__ */ new Set();
       for (const card of cards) {
         const data2 = parseContractCard(card);
-        if (!data2 || !data2.dbLetter) continue;
+        if (!data2 || !data2.dbLetter) {
+          showMpFailureForCards([card], "MP\u83B7\u53D6\u5931\u8D25\uFF08\u65E0\u6CD5\u8BC6\u522B\u8D44\u6E90\uFF09");
+          continue;
+        }
+        card.__contractData = data2;
+        updateLastAcceptedDisplay(card, data2);
+        const displaySettings = getContractDisplaySettings();
         const currentSignature = `${data2.dbLetter}_${data2.quantity}_${data2.quality}_${data2.unitPrice}`;
         if (!forceReset && card.hasAttribute("data-found") && !card.hasAttribute("data-retry")) {
           if (card.__contractSignature === currentSignature) {
             const hasProfitUI = card.__profitDisplayEl && document.body.contains(card.__profitDisplayEl);
+            const hasLastAcceptedUI = !displaySettings.lastAcceptedTime || card.__lastAcceptedDisplayEl && document.body.contains(card.__lastAcceptedDisplayEl);
             const acceptBtn = card.querySelector(ACCEPT_CONTRACT_SELECTOR);
             const lostInterceptor = card.__wasHighPrice && acceptBtn && !acceptBtn.__hasHighPriceInterceptor;
-            if (hasProfitUI && !lostInterceptor) {
+            if (hasProfitUI && hasLastAcceptedUI && !lostInterceptor) {
               continue;
             }
           } else {
@@ -9446,6 +9979,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           delete card.__profitDisplayEl;
           delete card.__wasHighPrice;
           delete card.__mpValue;
+          delete card.__isRetail;
+          delete card.__contractUnitPrice;
         }
         card.__contractSignature = currentSignature;
         const resourceId = parseInt(data2.dbLetter);
@@ -9495,22 +10030,21 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       fetchMpDataAndUpdate(cardInfos, realmId, SCD, SRC);
     }
     async function fetchMpDataAndUpdate(cardInfos, realmId, SCD, SRC) {
-      const uniqueIds = /* @__PURE__ */ new Set();
-      for (const { data: data2 } of cardInfos) {
-        if (data2.dbLetter) uniqueIds.add(data2.dbLetter);
+      const sequence = ++mpFetchSequence;
+      const cardInfosByResource = /* @__PURE__ */ new Map();
+      for (const cardInfo of cardInfos) {
+        const rid = cardInfo.data.dbLetter;
+        if (!rid) continue;
+        if (!cardInfosByResource.has(rid)) cardInfosByResource.set(rid, []);
+        cardInfosByResource.get(rid).push(cardInfo);
       }
-      if (uniqueIds.size === 0) return;
-      const marketDataMap = {};
-      const marketPromises = [...uniqueIds].map(async (rid) => {
-        marketDataMap[rid] = await getMarketDataForResource(realmId, rid);
-      });
-      await Promise.all(marketPromises);
-      const marketMaxProfitEnabled = (() => {
-        const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-        return cfg["marketMaxProfitToggle"] === true;
-      })();
+      if (cardInfosByResource.size === 0) {
+        showMpFailureForCards(cardInfos.map((info) => info.card), "MP\u83B7\u53D6\u5931\u8D25\uFF08\u65E0\u6CD5\u8BC6\u522B\u8D44\u6E90\uFF09");
+        return;
+      }
+      const displaySettings = getContractDisplaySettings();
+      const marketMaxProfitEnabled = displaySettings.marketMaxProfit || displaySettings.exchangeLink;
       pendingMarketCards.clear();
-      const marketOrders = [];
       let customBonuses = null;
       if (marketMaxProfitEnabled) {
         const pageActionsConfig = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
@@ -9529,49 +10063,69 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           customBonuses = { isCustomEnabled: false, adminBonus: null, saleBonus: null };
         }
       }
-      for (const { card, data: data2, isRetail } of cardInfos) {
-        const marketResult = marketDataMap[data2.dbLetter] || { data: null, status: "error" };
-        const mpInfo = calcMpInfo(data2, marketResult.data, marketResult.status);
-        card.__resourceId = data2.dbLetter;
-        card.__mpPercent = mpInfo.mpPercent;
-        card.__mpValue = mpInfo.mpValue;
-        card.__mpBestQuality = mpInfo.mpBestQuality;
-        if (mpInfo.mpNotes) card.__mpNotes = mpInfo.mpNotes;
-        card.__mpPending = false;
-        if (marketMaxProfitEnabled && isRetail && marketResult.data && marketResult.data.length > 0) {
-          const cid = marketCardIdCounter++;
-          pendingMarketCards.set(cid, {
-            card,
-            mpPercent: mpInfo.mpPercent,
-            mpValue: mpInfo.mpValue,
-            mpNotes: mpInfo.mpNotes
-          });
-          marketOrders.push({
-            cardId: cid,
-            marketData: marketResult.data,
-            targetQuality: data2.quality !== null && data2.quality !== void 0 ? data2.quality : 0,
-            quantity: data2.quantity,
-            resourceId: data2.dbLetter
-          });
-          card.__marketMaxProfit = null;
-        } else {
-          card.__marketMaxProfit = null;
+      const updateResource = async (rid) => {
+        let marketResult;
+        try {
+          marketResult = await getMarketDataForResource(realmId, rid);
+        } catch (error) {
+          console.error("[\u5408\u540CMP] \u5E02\u573A\u6570\u636E\u5904\u7406\u5931\u8D25:", error);
+          marketResult = { data: null, status: "internal_error" };
         }
-        updateCardMpDisplay(card, mpInfo.mpPercent, mpInfo.mpValue, mpInfo.mpNotes);
-      }
-      if (marketOrders.length > 0) {
-        marketProfitWorker.postMessage({
-          orders: marketOrders,
-          shared: { SCD, SRC },
-          customBonuses,
-          SCXXCS: SCXXCS2,
-          PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL2,
-          RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT2
-        });
-      }
+        if (sequence !== mpFetchSequence) return;
+        const marketOrders = [];
+        for (const { card, data: data2, isRetail } of cardInfosByResource.get(rid) || []) {
+          const mpInfo = calcMpInfo(data2, marketResult.data, marketResult.status, marketResult.httpStatus);
+          card.__isRetail = isRetail === true;
+          card.__contractUnitPrice = Number(data2.unitPrice);
+          card.__resourceId = data2.dbLetter;
+          card.__mpPercent = mpInfo.mpPercent;
+          card.__mpValue = mpInfo.mpValue;
+          card.__mpBestQuality = mpInfo.mpBestQuality;
+          if (mpInfo.mpNotes) {
+            card.__mpNotes = mpInfo.mpNotes;
+          } else {
+            delete card.__mpNotes;
+          }
+          card.__mpPending = false;
+          if (marketMaxProfitEnabled && isRetail && marketResult.data && marketResult.data.length > 0) {
+            const cid = marketCardIdCounter++;
+            pendingMarketCards.set(cid, {
+              card,
+              mpPercent: mpInfo.mpPercent,
+              mpValue: mpInfo.mpValue,
+              mpNotes: mpInfo.mpNotes
+            });
+            marketOrders.push({
+              cardId: cid,
+              marketData: marketResult.data,
+              targetQuality: data2.quality !== null && data2.quality !== void 0 ? data2.quality : 0,
+              quantity: data2.quantity,
+              resourceId: data2.dbLetter
+            });
+            card.__marketMaxProfit = null;
+          } else {
+            card.__marketMaxProfit = null;
+          }
+          updateCardMpDisplay(card, mpInfo.mpPercent, mpInfo.mpValue, mpInfo.mpNotes);
+        }
+        if (marketOrders.length > 0 && sequence === mpFetchSequence) {
+          marketProfitWorker.postMessage({
+            orders: marketOrders,
+            shared: { SCD, SRC },
+            customBonuses,
+            SCXXCS: SCXXCS2,
+            PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL2,
+            RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT2
+          });
+        }
+      };
+      await Promise.allSettled([...cardInfosByResource.keys()].map(updateResource));
     }
     function init5() {
-      cleanupAll();
+      cleanupAll(false);
+      bindContractHistoryEvents();
+      loadContractHistorySnapshot();
+      scheduleContractHistoryUnavailable();
       const isOnIncomingPage = () => /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
       checkPageTimer = setInterval(() => {
         if (!isOnIncomingPage()) {
@@ -9593,7 +10147,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }
       }, 500);
     }
-    function cleanupAll() {
+    function cleanupAll(invalidateMpFetches = true) {
       if (activeObserver) {
         activeObserver.disconnect();
         activeObserver = null;
@@ -9606,7 +10160,29 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         clearTimeout(processDebounceTimer);
         processDebounceTimer = null;
       }
-      pendingCards.clear();
+      if (invalidateMpFetches) {
+        pendingCards.clear();
+        pendingMarketCards.clear();
+        mpFetchSequence++;
+      }
+      if (contractHistoryListener) {
+        window.removeEventListener(CONTRACT_HISTORY_EVENT, contractHistoryListener);
+        contractHistoryListener = null;
+      }
+      contractHistoryByOffer.clear();
+      contractHistoryByBaseOffer.clear();
+      contractHistoryByProduct.clear();
+      contractHistorySellerIds.clear();
+      contractHistorySellerIdsBySlug.clear();
+      contractHistoryLoaded = false;
+      contractHistoryUnavailable = false;
+      contractHistoryRealmId = null;
+      if (contractHistoryWaitTimer) {
+        clearTimeout(contractHistoryWaitTimer);
+        contractHistoryWaitTimer = null;
+      }
+      removeContractDisplaySettingsModal();
+      document.querySelectorAll('[data-sc-last-accepted="true"]').forEach((el) => el.remove());
       removeWarningNotice();
     }
     function startMutationObserver() {
@@ -9618,7 +10194,19 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           cleanupAll();
           return;
         }
+        const isPluginOwnedNode = (node) => {
+          const element = node?.nodeType === 1 ? node : node?.parentElement;
+          return !!element?.closest('[data-sc-contract="true"], [data-sc-last-accepted="true"]');
+        };
+        const isPluginOnlyMutation = (mutation) => {
+          if (mutation.target?.nodeType === 1 && mutation.target.closest('[data-sc-contract="true"], [data-sc-last-accepted="true"]')) {
+            return true;
+          }
+          const changedNodes = [...mutation.addedNodes, ...mutation.removedNodes];
+          return changedNodes.length > 0 && changedNodes.every(isPluginOwnedNode);
+        };
         const hasRelevantChanges = mutationsList.some((mutation) => {
+          if (isPluginOnlyMutation(mutation)) return false;
           return mutation.type === "childList" && // 添加了新节点，且包含合同卡片
           (mutation.addedNodes.length > 0 && Array.from(mutation.addedNodes).some((node) => node.nodeType === 1 && (node.matches('div[tabindex="0"]') || node.querySelector('div[tabindex="0"]'))) || // 或者是已有卡片内部发生了变化（React 抹除 UI 时通常触发其内部节点的 childList 变化）
           mutation.target && mutation.target.nodeType === 1 && mutation.target.closest('div[tabindex="0"]'));
@@ -9645,9 +10233,390 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       }
       return null;
     }
+    function normalizeSellerName(name) {
+      return String(name || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+    }
+    function getSellerSlugKey(companyName) {
+      return String(companyName || "").normalize("NFKC").trim().replace(/\s+/g, "-").toLowerCase();
+    }
+    function getContractBaseOfferKey(realmId, sellerId, kind, quality, price) {
+      const numericKind = Number(kind);
+      const numericQuality = Number(quality);
+      const numericPrice = Number(price);
+      if (realmId === null || sellerId === null || sellerId === void 0 || !Number.isFinite(numericKind) || !Number.isFinite(numericQuality) || !Number.isFinite(numericPrice)) {
+        return null;
+      }
+      return [
+        realmId,
+        sellerId,
+        numericKind,
+        numericQuality,
+        Math.round(numericPrice * 100)
+      ].join("|");
+    }
+    function getContractProductKey(realmId, sellerId, kind, quality) {
+      const numericKind = Number(kind);
+      const numericQuality = Number(quality);
+      if (realmId === null || sellerId === null || sellerId === void 0 || !Number.isFinite(numericKind) || !Number.isFinite(numericQuality)) {
+        return null;
+      }
+      return [realmId, sellerId, numericKind, numericQuality].join("|");
+    }
+    function getContractOfferKey(realmId, sellerId, kind, quality, price, quantity) {
+      const baseKey = getContractBaseOfferKey(realmId, sellerId, kind, quality, price);
+      const numericQuantity = Number(quantity);
+      if (!baseKey || !Number.isFinite(numericQuantity)) return null;
+      return `${baseKey}|${numericQuantity}`;
+    }
+    function getPageActionsConfig() {
+      try {
+        return JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+      } catch (e) {
+        return {};
+      }
+    }
+    function getContractDisplaySettings() {
+      const config = getPageActionsConfig();
+      const stored = config[CONTRACT_DISPLAY_SETTINGS_KEY];
+      if (stored && typeof stored === "object") {
+        return {
+          referencePrice: stored.referencePrice === true,
+          marketMaxProfit: stored.marketMaxProfit === true,
+          exchangeLink: stored.exchangeLink === true,
+          lastAcceptedTime: stored.lastAcceptedTime === true
+        };
+      }
+      const legacyEnabled = config.marketMaxProfitToggle === true;
+      return {
+        ...DEFAULT_CONTRACT_DISPLAY_SETTINGS,
+        referencePrice: legacyEnabled,
+        marketMaxProfit: legacyEnabled,
+        exchangeLink: legacyEnabled
+      };
+    }
+    function saveContractDisplaySettings(settings) {
+      const config = getPageActionsConfig();
+      config[CONTRACT_DISPLAY_SETTINGS_KEY] = {
+        referencePrice: settings.referencePrice === true,
+        marketMaxProfit: settings.marketMaxProfit === true,
+        exchangeLink: settings.exchangeLink === true,
+        lastAcceptedTime: settings.lastAcceptedTime === true
+      };
+      localStorage.setItem("SC_PageActions_Settings", JSON.stringify(config));
+    }
+    function shouldShowExchangeLink(card) {
+      if (!getContractDisplaySettings().exchangeLink || card.__resourceId == null) return false;
+      if (card.__isRetail === true) {
+        const marketMaxProfit = Number(card.__marketMaxProfit);
+        const contractProfit = Number(card.__contractProfit);
+        return Number.isFinite(marketMaxProfit) && Number.isFinite(contractProfit) && marketMaxProfit > contractProfit;
+      }
+      const marketPrice = Number(card.__mpValue);
+      const contractPrice = Number(card.__contractUnitPrice);
+      return Number.isFinite(marketPrice) && Number.isFinite(contractPrice) && marketPrice > 0 && contractPrice > marketPrice;
+    }
+    function indexContractHistory(detail) {
+      if (!detail || !Array.isArray(detail.data)) return;
+      const currentRealmId = getRealmIdFromLink2();
+      if (currentRealmId !== null && detail.realmId !== currentRealmId) return;
+      const nextOffers = /* @__PURE__ */ new Map();
+      const nextBaseOffers = /* @__PURE__ */ new Map();
+      const nextProductOffers = /* @__PURE__ */ new Map();
+      const nextSellerIds = /* @__PURE__ */ new Map();
+      const nextSellerIdsBySlug = /* @__PURE__ */ new Map();
+      for (const entry of detail.data) {
+        const sellerId = entry?.seller?.id;
+        const sellerNameKey = normalizeSellerName(entry?.seller?.company);
+        if (sellerId !== null && sellerId !== void 0 && sellerNameKey) {
+          nextSellerIds.set(sellerNameKey, sellerId);
+          nextSellerIdsBySlug.set(getSellerSlugKey(entry.seller.company), sellerId);
+        }
+        const baseOfferKey = getContractBaseOfferKey(
+          detail.realmId,
+          sellerId,
+          entry?.kind,
+          entry?.quality,
+          entry?.price
+        );
+        const productKey = getContractProductKey(
+          detail.realmId,
+          sellerId,
+          entry?.kind,
+          entry?.quality
+        );
+        const offerKey = getContractOfferKey(
+          detail.realmId,
+          sellerId,
+          entry?.kind,
+          entry?.quality,
+          entry?.price,
+          entry?.quantity
+        );
+        const timestamp = Date.parse(entry?.datetime);
+        if (!baseOfferKey || !offerKey || !Number.isFinite(timestamp)) continue;
+        const record = {
+          timestamp,
+          datetime: entry.datetime,
+          quantity: Number(entry.quantity),
+          price: Number(entry.price)
+        };
+        const previousExact = nextOffers.get(offerKey);
+        if (!previousExact || timestamp > previousExact.timestamp) {
+          nextOffers.set(offerKey, record);
+        }
+        const previousBase = nextBaseOffers.get(baseOfferKey);
+        if (!previousBase || timestamp > previousBase.timestamp) {
+          nextBaseOffers.set(baseOfferKey, record);
+        }
+        const previousProduct = productKey ? nextProductOffers.get(productKey) : null;
+        if (productKey && (!previousProduct || timestamp > previousProduct.timestamp)) {
+          nextProductOffers.set(productKey, record);
+        }
+      }
+      contractHistoryByOffer = nextOffers;
+      contractHistoryByBaseOffer = nextBaseOffers;
+      contractHistoryByProduct = nextProductOffers;
+      contractHistorySellerIds = nextSellerIds;
+      contractHistorySellerIdsBySlug = nextSellerIdsBySlug;
+      contractHistoryRealmId = detail.realmId;
+      contractHistoryLoaded = true;
+      contractHistoryUnavailable = false;
+      if (contractHistoryWaitTimer) {
+        clearTimeout(contractHistoryWaitTimer);
+        contractHistoryWaitTimer = null;
+      }
+      refreshLastAcceptedDisplays();
+    }
+    function loadContractHistorySnapshot() {
+      const snapshot = window.__SC_IncomingContractHistory;
+      if (snapshot) indexContractHistory(snapshot);
+    }
+    function bindContractHistoryEvents() {
+      if (contractHistoryListener) return;
+      contractHistoryListener = (event) => indexContractHistory(event?.detail);
+      window.addEventListener(CONTRACT_HISTORY_EVENT, contractHistoryListener);
+    }
+    function scheduleContractHistoryUnavailable() {
+      if (contractHistoryLoaded || contractHistoryWaitTimer) return;
+      contractHistoryWaitTimer = setTimeout(() => {
+        contractHistoryWaitTimer = null;
+        if (contractHistoryLoaded) return;
+        contractHistoryUnavailable = true;
+        refreshLastAcceptedDisplays();
+      }, CONTRACT_HISTORY_WAIT_MS);
+    }
+    function formatLastAcceptedTime(timestamp) {
+      const date = new Date(timestamp);
+      const pad = (value) => String(value).padStart(2, "0");
+      return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+    function formatContractPrice(price) {
+      return Number(price).toLocaleString("zh-CN", {
+        maximumFractionDigits: 2
+      });
+    }
+    function getLastAcceptedInfo(data2) {
+      if (!contractHistoryLoaded) {
+        return { status: contractHistoryUnavailable ? "unavailable" : "loading" };
+      }
+      if (!data2 || !data2.sellerCompany && !data2.sellerSlug) return { status: "none" };
+      const currentRealmId = getRealmIdFromLink2();
+      if (currentRealmId !== null && currentRealmId !== contractHistoryRealmId) {
+        return { status: "loading" };
+      }
+      const sellerId = contractHistorySellerIds.get(normalizeSellerName(data2.sellerCompany)) ?? contractHistorySellerIdsBySlug.get(getSellerSlugKey(data2.sellerSlug));
+      const baseOfferKey = getContractBaseOfferKey(
+        contractHistoryRealmId,
+        sellerId,
+        data2.dbLetter,
+        data2.quality,
+        data2.unitPrice
+      );
+      const productKey = getContractProductKey(
+        contractHistoryRealmId,
+        sellerId,
+        data2.dbLetter,
+        data2.quality
+      );
+      const offerKey = getContractOfferKey(
+        contractHistoryRealmId,
+        sellerId,
+        data2.dbLetter,
+        data2.quality,
+        data2.unitPrice,
+        data2.quantity
+      );
+      const record = offerKey ? contractHistoryByOffer.get(offerKey) : null;
+      if (record) return { status: "found", matchType: "exact", ...record };
+      const fallbackRecord = baseOfferKey ? contractHistoryByBaseOffer.get(baseOfferKey) : null;
+      if (fallbackRecord) return { status: "found", matchType: "price", ...fallbackRecord };
+      const productRecord = productKey ? contractHistoryByProduct.get(productKey) : null;
+      return productRecord ? { status: "found", matchType: "product", ...productRecord } : { status: "none" };
+    }
+    function removeLastAcceptedDisplay(card) {
+      const display = card.__lastAcceptedDisplayEl;
+      if (display?.parentNode) display.remove();
+      card.__lastAcceptedDisplayEl = null;
+      const fallback = card.querySelector('[data-sc-last-accepted="true"]');
+      if (fallback) fallback.remove();
+    }
+    function updateLastAcceptedDisplay(card, data2) {
+      if (!getContractDisplaySettings().lastAcceptedTime) {
+        removeLastAcceptedDisplay(card);
+        return;
+      }
+      const sellerLink = card.querySelector('a[aria-label][href*="/company/"]');
+      const infoDiv = sellerLink?.parentElement || Array.from(card.querySelectorAll("div")).find((div) => div.textContent?.includes("@") && div.querySelector("b"));
+      if (!infoDiv) return;
+      let display = card.__lastAcceptedDisplayEl;
+      if (!display || !infoDiv.contains(display)) {
+        const fallback = card.querySelector('[data-sc-last-accepted="true"]');
+        display = fallback || document.createElement("div");
+        display.dataset.scLastAccepted = "true";
+        display.style.cssText = `
+                    display: block;
+                    margin-top: 3px;
+                    font-size: 11px;
+                    line-height: 1.4;
+                    white-space: nowrap;
+                `;
+        if (!infoDiv.contains(display)) infoDiv.appendChild(display);
+      }
+      const info = getLastAcceptedInfo(data2);
+      const dark = DM();
+      if (info.status === "found") {
+        const timeText = formatLastAcceptedTime(info.timestamp);
+        if (info.matchType === "exact") {
+          display.textContent = `\u4E0A\u6B21\u63A5\u53D7\uFF1A${timeText}`;
+        } else if (info.matchType === "price") {
+          display.textContent = `\u540C\u4EF7\u683C\u4E0A\u6B21\u63A5\u53D7\uFF1A${timeText}\uFF08\u6570\u91CF${info.quantity}\uFF09`;
+        } else {
+          display.textContent = `\u540C\u5546\u54C1\u4E0A\u6B21\u63A5\u53D7\uFF1A${timeText}\uFF08Q${data2.quality} $${formatContractPrice(info.price)}\uFF0C\u6570\u91CF${info.quantity}\uFF09`;
+        }
+        display.title = new Date(info.timestamp).toLocaleString(void 0, {
+          dateStyle: "full",
+          timeStyle: "long"
+        });
+        display.style.color = dark ? "#f0b44c" : "#8a5a00";
+      } else if (info.status === "loading") {
+        display.textContent = "\u4E0A\u6B21\u63A5\u53D7\uFF1A\u52A0\u8F7D\u4E2D...";
+        display.removeAttribute("title");
+        display.style.color = dark ? "#aaa" : "#777";
+      } else if (info.status === "unavailable") {
+        display.textContent = "\u4E0A\u6B21\u63A5\u53D7\uFF1A\u5386\u53F2\u6682\u672A\u52A0\u8F7D";
+        display.removeAttribute("title");
+        display.style.color = dark ? "#aaa" : "#777";
+      } else {
+        display.textContent = "\u4E0A\u6B21\u63A5\u53D7\uFF1A\u8FD1\u671F\u65E0\u8BB0\u5F55";
+        display.removeAttribute("title");
+        display.style.color = dark ? "#aaa" : "#777";
+      }
+      card.__lastAcceptedDisplayEl = display;
+    }
+    function refreshLastAcceptedDisplays() {
+      document.querySelectorAll('div[tabindex="0"]').forEach((card) => {
+        const data2 = card.__contractData || parseContractCard(card);
+        if (data2?.dbLetter) updateLastAcceptedDisplay(card, data2);
+      });
+    }
+    function refreshMpDisplaysWithoutFetch() {
+      document.querySelectorAll('div[tabindex="0"]').forEach((card) => {
+        if (card.__mpPercent !== void 0) {
+          updateCardMpDisplay(card, card.__mpPercent, card.__mpValue, card.__mpNotes);
+        }
+      });
+    }
+    function applyContractDisplaySettingsChange(previous, next, changedKey) {
+      if (changedKey === "lastAcceptedTime") {
+        refreshLastAcceptedDisplays();
+        return;
+      }
+      const marketWasEnabled = previous.marketMaxProfit || previous.exchangeLink;
+      const marketNowEnabled = next.marketMaxProfit || next.exchangeLink;
+      if (!marketWasEnabled && marketNowEnabled) {
+        refreshAllContractProfits();
+        return;
+      }
+      refreshMpDisplaysWithoutFetch();
+    }
+    function drainMarketFetchQueue() {
+      while (activeMarketFetches < MARKET_FETCH_CONCURRENCY && marketFetchQueue.length > 0) {
+        const item = marketFetchQueue.shift();
+        activeMarketFetches++;
+        Promise.resolve().then(item.task).then(item.resolve, item.reject).finally(() => {
+          activeMarketFetches--;
+          drainMarketFetchQueue();
+        });
+      }
+    }
+    function enqueueMarketFetch(task) {
+      return new Promise((resolve, reject) => {
+        marketFetchQueue.push({ task, resolve, reject });
+        drainMarketFetchQueue();
+      });
+    }
+    async function fetchMarketDataWithLimit(realmId, resourceId, cacheKey, cachedData) {
+      const cooldownUntil = marketFetchCooldownUntil.get(cacheKey) || 0;
+      const now = Date.now();
+      if (marketRateLimitUntil > now || cooldownUntil > now) {
+        return { data: null, status: "rate_limited", retryAt: Math.max(marketRateLimitUntil, cooldownUntil) };
+      }
+      return enqueueMarketFetch(async () => {
+        const currentCooldown = marketFetchCooldownUntil.get(cacheKey) || 0;
+        const currentNow = Date.now();
+        if (marketRateLimitUntil > currentNow || currentCooldown > currentNow) {
+          return {
+            data: null,
+            status: "rate_limited",
+            retryAt: Math.max(marketRateLimitUntil, currentCooldown)
+          };
+        }
+        const controller = new AbortController();
+        let timedOut = false;
+        const timeoutTimer = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, MARKET_FETCH_TIMEOUT_MS);
+        try {
+          const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
+          const response = await fetch(url, { signal: controller.signal });
+          if (response.status === 429) {
+            const retryAt = Date.now() + MARKET_RATE_LIMIT_COOLDOWN_MS;
+            marketRateLimitUntil = retryAt;
+            marketFetchCooldownUntil.set(cacheKey, retryAt);
+            return { data: null, status: "rate_limited", retryAt };
+          }
+          if (!response.ok) {
+            return cachedData ? { data: cachedData, status: "fallback_expired" } : { data: null, status: "http_error", httpStatus: response.status };
+          }
+          let json;
+          try {
+            json = await response.json();
+          } catch (error) {
+            return cachedData ? { data: cachedData, status: "fallback_expired" } : { data: null, status: "invalid_response" };
+          }
+          if (!Array.isArray(json)) {
+            return cachedData ? { data: cachedData, status: "fallback_expired" } : { data: null, status: "invalid_response" };
+          }
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: json }));
+          } catch (error) {
+            console.warn("[\u5408\u540CMP] \u5E02\u573A\u6570\u636E\u7F13\u5B58\u5199\u5165\u5931\u8D25:", error);
+          }
+          return { data: json, status: "ok" };
+        } catch (error) {
+          if (timedOut || error?.name === "AbortError") {
+            return { data: null, status: "timeout" };
+          }
+          return cachedData ? { data: cachedData, status: "fallback_expired" } : { data: null, status: "error" };
+        } finally {
+          clearTimeout(timeoutTimer);
+        }
+      });
+    }
     async function getMarketDataForResource(realmId, resourceId) {
-      const key = `market_all_${realmId}_${resourceId}`;
-      const raw = localStorage.getItem(key);
+      const cacheKey = `market_all_${realmId}_${resourceId}`;
+      const raw = localStorage.getItem(cacheKey);
       let cachedData = null;
       let cachedValid = false;
       if (raw) {
@@ -9664,21 +10633,15 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       if (cachedValid && cachedData) {
         return { data: cachedData, status: "ok" };
       }
-      try {
-        const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Network response was not ok");
-        const json = await response.json();
-        if (Array.isArray(json)) {
-          localStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data: json }));
-          return { data: json, status: "ok" };
+      const existingRequest = marketFetchInFlight.get(cacheKey);
+      if (existingRequest) return existingRequest;
+      const request = fetchMarketDataWithLimit(realmId, resourceId, cacheKey, cachedData).finally(() => {
+        if (marketFetchInFlight.get(cacheKey) === request) {
+          marketFetchInFlight.delete(cacheKey);
         }
-      } catch (e) {
-        if (cachedData) {
-          return { data: cachedData, status: "fallback_expired" };
-        }
-      }
-      return { data: null, status: "error" };
+      });
+      marketFetchInFlight.set(cacheKey, request);
+      return request;
     }
     function refreshAllContractProfits() {
       const contractCards = document.querySelectorAll('div[tabindex="0"]');
@@ -9693,6 +10656,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         delete card.__mpValue;
         delete card.__mpBestQuality;
         delete card.__mpPending;
+        delete card.__isRetail;
+        delete card.__contractUnitPrice;
         delete card.__marketMaxProfit;
         delete card.__marketMaxPrice;
         delete card.__marketMaxQuality;
@@ -9708,7 +10673,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         totalPrice: null,
         imageSrc: null,
         resourcePath: null,
-        dbLetter: null
+        dbLetter: null,
+        sellerCompany: null,
+        sellerSlug: null
       };
       const label = card.getAttribute("aria-label") || "";
       const regexEN = /^incoming contract,\s*([\d,]+).*?quality\s+(\d+),\s*at\s*\$([\d,.]+)\s+per unit,\s*total price\s*\$([\d,.]+)/i;
@@ -9737,10 +10704,20 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       if (img) {
         result.imageSrc = img.getAttribute("src");
         result.resourcePath = result.imageSrc.replace(/^\/static\//, "").replace(/\.[0-9a-f]{6,}\.(png|jpg|jpeg|gif|svg)$/, ".$1");
-        const constants = JSON.parse(localStorage.getItem("SimcompaniesConstantsData") || "{}");
-        const resources = Object.values(constants?.constantsResources || {});
-        const matched = resources.find((r) => r.image === result.resourcePath);
-        if (matched) result.dbLetter = matched.dbLetter;
+        try {
+          const constants = JSON.parse(localStorage.getItem("SimcompaniesConstantsData") || "{}");
+          const resources = Object.values(constants?.constantsResources || {});
+          const matched = resources.find((r) => r.image === result.resourcePath);
+          if (matched) result.dbLetter = matched.dbLetter;
+        } catch (error) {
+          console.warn("[\u5408\u540C\u5361\u7247] \u57FA\u7840\u6570\u636E\u89E3\u6790\u5931\u8D25:", error);
+        }
+      }
+      const sellerLink = card.querySelector('a[aria-label][href*="/company/"]');
+      if (sellerLink) {
+        result.sellerCompany = (sellerLink.getAttribute("aria-label") || sellerLink.textContent || "").trim() || null;
+        const sellerMatch = (sellerLink.getAttribute("href") || "").match(/\/company\/\d+\/([^/?#]+)/);
+        result.sellerSlug = sellerMatch ? decodeURIComponent(sellerMatch[1]) : null;
       }
       return result;
     }
@@ -9809,10 +10786,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       }
       const dPh = DM();
       let mpHtml = "";
-      const mmpEnabled = (() => {
-        const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-        return cfg["marketMaxProfitToggle"] === true;
-      })();
+      const displaySettings = getContractDisplaySettings();
       if (card.__mpPending) {
         mpHtml = `<span class="sc-mp-part" style="color:${dPh ? "#aaa" : "#888"};white-space:nowrap;"> | MP\u8BA1\u7B97\u4E2D...</span>`;
       } else {
@@ -9821,7 +10795,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           const prefix = card.__mpPercent < 0 ? "MP+" : "MP-";
           const mpColor = card.__mpPercent < 0 ? "color:#ef5350;" : "";
           mpPartHtml = ` | <span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(card.__mpPercent).toFixed(2)}%`;
-          if (mmpEnabled && card.__mpValue != null && isFinite(card.__mpValue)) {
+          if (displaySettings.referencePrice && card.__mpValue != null && isFinite(card.__mpValue)) {
             mpPartHtml += ` ($${card.__mpValue.toFixed(2)})`;
           }
           if (card.__mpNotes) {
@@ -9830,7 +10804,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           mpPartHtml += `</span>`;
         }
         let mmpPartHtml = "";
-        if (mmpEnabled && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+        if (displaySettings.marketMaxProfit && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
           const mmp = card.__marketMaxProfit;
           const mmpColor = mmp < 0 ? "color:#ff1744;" : "color:#4caf50;";
           let mmpNote = "";
@@ -9842,10 +10816,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             mmpPartHtml += `<span style="color:${dPh ? "#aaa" : "#777"};font-size:0.85em;">${mmpNote}</span>`;
           }
           mmpPartHtml += `</span>`;
-          if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
-            const lnkColor = "#ff9800";
-            mmpPartHtml += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:${lnkColor};text-decoration:none;">\u{1F4C8}\u4EA4\u6613\u6240</a>`;
-          }
+        }
+        if (shouldShowExchangeLink(card)) {
+          mmpPartHtml += `${mmpPartHtml ? " " : " | "}<a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">\u{1F4C8}\u4EA4\u6613\u6240</a>`;
         }
         mpHtml = `<span class="sc-mp-part">${mpPartHtml}${mmpPartHtml}</span>`;
       }
@@ -9861,10 +10834,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         checkAndApplyDoubleConfirm(card);
         return;
       }
-      const marketMaxProfitEnabled = (() => {
-        const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-        return cfg["marketMaxProfitToggle"] === true;
-      })();
+      const displaySettings = getContractDisplaySettings();
       const mpSpan = displayEl.querySelector(".sc-mp-part");
       const hasProfit = !!displayEl.querySelector(".sc-profit-part");
       const sep = hasProfit ? " | " : "";
@@ -9874,7 +10844,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         const prefix = mpPercent < 0 ? "MP+" : "MP-";
         const mpColor = mpPercent < 0 ? "color:#ef5350;" : "";
         mpPartHtml = `${sep}<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
-        if (marketMaxProfitEnabled && mpValue != null && isFinite(mpValue)) {
+        if (displaySettings.referencePrice && mpValue != null && isFinite(mpValue)) {
           mpPartHtml += ` ($${mpValue.toFixed(2)})`;
         }
         if (mpNotes) {
@@ -9887,7 +10857,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }
       }
       let mmpPartHtml = "";
-      if (marketMaxProfitEnabled && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+      if (displaySettings.marketMaxProfit && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
         const mmp = card.__marketMaxProfit;
         const mmpColor = mmp < 0 ? "color:#ff1744;" : "color:#4caf50;";
         let mmpNote = "";
@@ -9899,9 +10869,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           mmpPartHtml += `<span style="color:${dMp ? "#aaa" : "#777"};font-size:0.85em;">${mmpNote}</span>`;
         }
         mmpPartHtml += `</span>`;
-        if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
-          mmpPartHtml += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">\u{1F4C8}\u4EA4\u6613\u6240</a>`;
-        }
+      }
+      if (shouldShowExchangeLink(card)) {
+        mmpPartHtml += `${mmpPartHtml ? " " : " | "}<a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">\u{1F4C8}\u4EA4\u6613\u6240</a>`;
       }
       const mpHtml = mpPartHtml + mmpPartHtml;
       if (mpSpan) {
@@ -9932,16 +10902,13 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }
       }
       const dMpNote = DM();
-      const mmpEnabledLegacy = (() => {
-        const cfg = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
-        return cfg["marketMaxProfitToggle"] === true;
-      })();
+      const displaySettings = getContractDisplaySettings();
       if (mpPercent !== null && mpPercent !== void 0 && isFinite(mpPercent)) {
         if (displayText) displayText += " |";
         const prefix = mpPercent < 0 ? "MP+" : "MP-";
         const mpColor = mpPercent < 0 ? "color:#ef5350;" : "";
         let mpBaseText = `<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
-        if (mmpEnabledLegacy && mpValue != null && isFinite(mpValue)) {
+        if (displaySettings.referencePrice && mpValue != null && isFinite(mpValue)) {
           mpBaseText += ` ($${mpValue.toFixed(2)})`;
         }
         if (mpNotes) {
@@ -9953,7 +10920,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (displayText) displayText += " |";
         displayText += `<span style="color:${dMpNote ? "#aaa" : "#777"};">${mpNotes}</span>`;
       }
-      if (mmpEnabledLegacy && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+      if (displaySettings.marketMaxProfit && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
         if (displayText) displayText += " |";
         const mmp = card.__marketMaxProfit;
         const mmpColor = mmp < 0 ? "color:#ff1744;" : "color:#4caf50;";
@@ -9966,10 +10933,11 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           mmpText += `<span style="color:${dMpNote ? "#aaa" : "#777"};font-size:0.85em;">${mmpNote}</span>`;
         }
         mmpText += `</span>`;
-        if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
-          mmpText += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">\u{1F4C8}\u4EA4\u6613\u6240</a>`;
-        }
         displayText += mmpText;
+      }
+      if (shouldShowExchangeLink(card)) {
+        if (displayText) displayText += " ";
+        displayText += `<a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">\u{1F4C8}\u4EA4\u6613\u6240</a>`;
       }
       if (!displayText) return;
       profitDisplay.innerHTML = displayText;
@@ -10063,16 +11031,17 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             `;
       customBtn.onclick = () => executiveCustomButton.show();
       btnGroup.appendChild(customBtn);
-      const marketToggle = createGlobalCustomToggle(
-        "marketMaxProfitToggle",
-        "\u663E\u793A\u66F4\u591A",
-        {},
-        () => {
-          refreshAllContractProfits();
-        }
-      );
-      marketToggle.wrapper.style.marginLeft = "0";
-      btnGroup.appendChild(marketToggle.wrapper);
+      const displaySettingsBtn = document.createElement("button");
+      displaySettingsBtn.type = "button";
+      displaySettingsBtn.className = "sc-contract-display-settings-button";
+      displaySettingsBtn.textContent = "\u8BE6\u7EC6\u663E\u793A\u8BBE\u7F6E";
+      displaySettingsBtn.style.cssText = `
+                padding: 4px 10px; background: #607d8b;
+                color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                font-weight: bold; white-space: nowrap; flex-shrink: 0;
+            `;
+      displaySettingsBtn.onclick = () => showContractDisplaySettingsModal();
+      btnGroup.appendChild(displaySettingsBtn);
       const priceSetBtn = document.createElement("button");
       priceSetBtn.type = "button";
       priceSetBtn.textContent = "\u4E8C\u6B21\u786E\u8BA4\u8BBE\u7F6E";
@@ -10270,6 +11239,131 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           resetAcceptBtn(acceptBtn);
         }
       }
+    }
+    function removeContractDisplaySettingsModal() {
+      if (!contractDisplaySettingsModal) return;
+      if (contractDisplaySettingsModal.__keydownHandler) {
+        document.removeEventListener("keydown", contractDisplaySettingsModal.__keydownHandler);
+      }
+      contractDisplaySettingsModal.remove();
+      contractDisplaySettingsModal = null;
+    }
+    function showContractDisplaySettingsModal() {
+      if (contractDisplaySettingsModal) return;
+      const modal = document.createElement("div");
+      modal.id = "sc-contract-display-settings-modal";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.setAttribute("aria-label", "\u5165\u5E93\u5408\u540C\u8BE6\u7EC6\u663E\u793A\u8BBE\u7F6E");
+      modal.style.cssText = `
+                position: fixed; inset: 0; padding: 12px;
+                background: rgba(0, 0, 0, 0.6); z-index: 22000;
+                display: flex; justify-content: center; align-items: center;
+                box-sizing: border-box;
+            `;
+      modal.style.setProperty("--sc-bg", theme.bg);
+      modal.style.setProperty("--sc-bg2", theme.bg2);
+      modal.style.setProperty("--sc-fg", theme.fg);
+      modal.style.setProperty("--sc-fg2", theme.fg2);
+      modal.style.setProperty("--sc-fg3", theme.fg3);
+      modal.style.setProperty("--sc-border", theme.border);
+      modal.style.setProperty("--sc-border2", theme.border2);
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = `
+                background: var(--sc-bg); border: 1px solid var(--sc-border);
+                border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                width: min(380px, calc(100vw - 24px)); max-height: min(560px, calc(100vh - 24px));
+                color: var(--sc-fg); font-family: sans-serif; display: flex; flex-direction: column; overflow: hidden;
+                box-sizing: border-box;
+            `;
+      const header = document.createElement("div");
+      header.style.cssText = `
+                padding: 12px 16px; background: #607d8b; color: white;
+                display: flex; justify-content: space-between; align-items: center;
+                user-select: none; font-weight: bold; font-size: 15px;
+            `;
+      const title = document.createElement("span");
+      title.textContent = "\u5165\u5E93\u5408\u540C\u8BE6\u7EC6\u663E\u793A\u8BBE\u7F6E";
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.setAttribute("aria-label", "\u5173\u95ED\u8BE6\u7EC6\u663E\u793A\u8BBE\u7F6E");
+      closeBtn.textContent = "\xD7";
+      closeBtn.style.cssText = `
+                padding: 0; border: 0; background: transparent; color: white;
+                cursor: pointer; font-size: 22px; line-height: 1;
+            `;
+      closeBtn.onclick = removeContractDisplaySettingsModal;
+      header.append(title, closeBtn);
+      const content = document.createElement("div");
+      content.style.cssText = `
+                padding: 14px 16px 16px; overflow-y: auto;
+                display: flex; flex-direction: column; gap: 2px;
+            `;
+      const settingLabels = {
+        referencePrice: "\u53C2\u8003\u4EF7\u683C",
+        marketMaxProfit: "\u5E02\u573A\u6700\u5927\u65F6\u5229",
+        exchangeLink: "\u4EA4\u6613\u6240\u94FE\u63A5",
+        lastAcceptedTime: "\u4E0A\u6B21\u63A5\u53D7\u65F6\u95F4"
+      };
+      let currentSettings = getContractDisplaySettings();
+      for (const [key, labelText] of Object.entries(settingLabels)) {
+        const row = document.createElement("label");
+        row.style.cssText = `
+                    display: flex; align-items: center; gap: 10px;
+                    min-height: 38px; padding: 4px 2px; cursor: pointer;
+                    color: var(--sc-fg); font-size: 13px;
+                `;
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = currentSettings[key] === true;
+        checkbox.style.cssText = "width: 17px; height: 17px; margin: 0; flex: 0 0 auto;";
+        checkbox.onchange = () => {
+          const previous = currentSettings;
+          currentSettings = {
+            ...previous,
+            [key]: checkbox.checked
+          };
+          saveContractDisplaySettings(currentSettings);
+          applyContractDisplaySettingsChange(previous, currentSettings, key);
+        };
+        const label = document.createElement("span");
+        label.textContent = labelText;
+        row.append(checkbox, label);
+        content.appendChild(row);
+      }
+      const note = document.createElement("div");
+      note.style.cssText = `
+                margin-top: 8px; padding-top: 10px;
+                border-top: 1px solid var(--sc-border2);
+                color: var(--sc-fg3); font-size: 11px; line-height: 1.5;
+                display: flex; flex-direction: column; gap: 4px;
+            `;
+      const displayConditions = [
+        ["\u53C2\u8003\u4EF7\u683C", "\u80FD\u8BA1\u7B97\u51FA MP \u65F6\uFF0C\u540C\u65F6\u663E\u793A\u5E02\u573A\u53C2\u8003\u5355\u4EF7\u3002"],
+        ["\u5E02\u573A\u6700\u5927\u65F6\u5229", "\u96F6\u552E\u5546\u54C1\u5728\u4EA4\u6613\u6240\u6309\u5F53\u524D\u8BA2\u5355\u80FD\u7B97\u51FA\u5229\u6DA6\u65F6\u663E\u793A\u3002"],
+        ["\u4EA4\u6613\u6240\u94FE\u63A5", "\u96F6\u552E\u5546\u54C1\u5728\u4EA4\u6613\u6240\u8D5A\u5F97\u66F4\u591A\uFF0C\u6216\u975E\u96F6\u552E\u5546\u54C1\u5728\u4EA4\u6613\u6240\u4E70\u5F97\u66F4\u4FBF\u5B9C\u65F6\u663E\u793A\u3002"],
+        ["\u4E0A\u6B21\u63A5\u53D7\u65F6\u95F4", "\u627E\u5230\u76F8\u540C\u5356\u5BB6\u3001\u5546\u54C1\u548C\u54C1\u8D28\u7684\u5165\u5E93\u8BB0\u5F55\u65F6\u663E\u793A\u65F6\u95F4\uFF1B\u6CA1\u6709\u8BB0\u5F55\u65F6\u663E\u793A\u201C\u8FD1\u671F\u65E0\u8BB0\u5F55\u201D\uFF0C\u8BB0\u5F55\u672A\u52A0\u8F7D\u65F6\u663E\u793A\u201C\u5386\u53F2\u6682\u672A\u52A0\u8F7D\u201D\u3002"]
+      ];
+      for (const [labelText, conditionText] of displayConditions) {
+        const line = document.createElement("div");
+        const label = document.createElement("b");
+        label.textContent = `${labelText}\uFF1A`;
+        line.append(label, document.createTextNode(conditionText));
+        note.appendChild(line);
+      }
+      content.appendChild(note);
+      wrapper.append(header, content);
+      modal.appendChild(wrapper);
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) removeContractDisplaySettingsModal();
+      });
+      modal.__keydownHandler = (event) => {
+        if (event.key === "Escape") removeContractDisplaySettingsModal();
+      };
+      document.addEventListener("keydown", modal.__keydownHandler);
+      document.body.appendChild(modal);
+      contractDisplaySettingsModal = modal;
+      closeBtn.focus();
     }
     function showContractPriceModal() {
       if (document.getElementById("sc-contract-price-modal")) return;
@@ -12043,6 +13137,71 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     }, 500);
   })();
 
+  // src/constants/buildingMap.js
+  var BUILDING_NAME_PREFIX = "be-bl-";
+  var BUILDING_NAMES = Object.freeze({
+    "be-bl-a": "\u6C7D\u8F66\u7814\u53D1\u6240",
+    "be-bl-b": "\u755C\u7267\u5B9E\u9A8C\u5BA4",
+    "be-bl-c": "\u5316\u5B66\u5B9E\u9A8C\u5BA4",
+    "be-bl-d": "\u4E94\u91D1\u5546\u5E97",
+    "be-bl-e": "\u5C60\u5BB0\u573A",
+    "be-bl-f": "\u65F6\u88C5\u8BBE\u8BA1\u4E2D\u5FC3",
+    "be-bl-g": "\u603B\u627F\u5305\u5546",
+    "be-bl-h": "\u7269\u7406\u5B66\u5B9E\u9A8C\u5BA4",
+    "be-bl-i": "\u78E8\u574A",
+    "be-bl-j": "\u70D8\u7119\u5382",
+    "be-bl-k": "\u98DF\u54C1\u52A0\u5DE5\u5382",
+    "be-bl-l": "\u53D1\u5C04\u53F0",
+    "be-bl-m": "\u4E2D\u592E\u53A8\u623F",
+    "be-bl-n": "\u94F6\u884C",
+    "be-bl-o": "\u6DF7\u51DD\u571F\u5382",
+    "be-bl-p": "\u4F5C\u7269\u7814\u7A76\u4E2D\u5FC3",
+    "be-bl-q": "\u53A8\u623F",
+    "be-bl-r": "\u9910\u9986",
+    "be-bl-s": "\u8F6F\u4EF6\u7814\u53D1\u9662",
+    "be-bl-x": "\u5EFA\u6750\u5382",
+    "be-bl-1": "\u6C7D\u8F66\u5382",
+    "be-bl-2": "\u8F66\u884C",
+    "be-bl-3": "\u795E\u5E99",
+    "be-bl-4": "\u516C\u56ED",
+    "be-bl-5": "\u4EBA\u5DE5\u6E56",
+    "be-bl-6": "\u996E\u6599\u5DE5\u5382",
+    "be-bl-7": "\u822A\u7A7A\u822A\u5929\u5382",
+    "be-bl-8": "\u822A\u7A7A\u7535\u5B50\u5668\u4EF6\u5382",
+    "be-bl-9": "\u5782\u76F4\u6574\u5408\u8BBE\u65BD",
+    "be-bl-0": "\u673A\u5E93",
+    "be-bl-A": "\u52A0\u6CB9\u7AD9",
+    "be-bl-B": "\u9500\u552E\u529E\u516C\u5BA4",
+    "be-bl-C": "\u7535\u5B50\u4EA7\u54C1\u5546\u5E97",
+    "be-bl-D": "\u63A8\u8FDB\u5668\u5DE5\u5382",
+    "be-bl-E": "\u53D1\u7535\u5382",
+    "be-bl-F": "\u7267\u573A",
+    "be-bl-G": "\u751F\u9C9C\u5546\u5E97",
+    "be-bl-H": "\u65F6\u88C5\u5546\u5E97",
+    "be-bl-L": "\u7535\u5B50\u4EA7\u54C1\u5382",
+    "be-bl-M": "\u77FF\u4E95",
+    "be-bl-T": "\u65F6\u88C5\u5382",
+    "be-bl-O": "\u6CB9\u4E95",
+    "be-bl-P": "\u519C\u573A",
+    "be-bl-Q": "\u91C7\u77F3\u573A",
+    "be-bl-R": "\u70BC\u6CB9\u5382",
+    "be-bl-S": "\u8D27\u8FD0\u7AD9",
+    "be-bl-W": "\u6C34\u5E93",
+    "be-bl-Y": "\u6750\u6599\u52A0\u5DE5\u5382",
+    "be-bl-t": "\u4E07\u5723\u8282\u96C6\u5E02",
+    "be-bl-u": "Xmas\u5E02\u573A",
+    "be-bl-v": "\u68EE\u6797\u82D7\u5703",
+    "be-bl-y": "\u5B66\u9662",
+    "be-bl-z": "\u6C99\u6EE9\u96C6\u5E02",
+    "be-bl-I": "\u6625\u5B63\u96C6\u5E02"
+  });
+  function getBuildingName(code, fallback = "") {
+    if (code === void 0 || code === null) return fallback;
+    const rawCode = String(code);
+    const key = rawCode.startsWith(BUILDING_NAME_PREFIX) ? rawCode : BUILDING_NAME_PREFIX + rawCode;
+    return Object.prototype.hasOwnProperty.call(BUILDING_NAMES, key) ? BUILDING_NAMES[key] : fallback;
+  }
+
   // src/features/chatEmojiPicker.js
   registerExportInfo({
     name: "\u804A\u5929\u8868\u60C5\u9009\u62E9\u5668\u6700\u8FD1\u4F7F\u7528",
@@ -12057,40 +13216,6 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     const BUNDLE_SELECTOR = 'script[type="module"][crossorigin][src^="https://www.simcompanies.com/static/bundle/assets/index-"][src$=".js"]';
     const RECENT_KEY = "SC_EmojiPicker_Recent";
     const RECENT_MAX = 30;
-    const BUILDING_NAMES = {
-      P: "\u519C\u573A",
-      W: "\u6C34\u5E93",
-      E: "\u53D1\u7535\u5382",
-      O: "\u6CB9\u7530",
-      R: "\u70BC\u6CB9\u5382",
-      S: "\u8FD0\u8F93\u7AD9",
-      G: "\u6742\u8D27\u5E97",
-      C: "\u7535\u5B50\u4EA7\u54C1\u5546\u5E97",
-      A: "\u52A0\u6CB9\u7AD9",
-      F: "\u7267\u573A",
-      M: "\u77FF\u4E95",
-      Y: "\u5DE5\u5382",
-      L: "\u7535\u5B50\u5DE5\u5382",
-      T: "\u65F6\u88C5\u5DE5\u5382",
-      B: "\u9500\u552E\u529E\u516C\u5BA4",
-      d: "\u4E94\u91D1\u5E97",
-      g: "\u5EFA\u7B51\u627F\u5305\u5546",
-      H: "\u65F6\u88C5\u5E97",
-      i: "\u78E8\u574A",
-      I: "\u6625\u5B63\u5E02\u573A",
-      j: "\u9762\u5305\u623F",
-      k: "\u98DF\u54C1\u52A0\u5DE5\u5382",
-      m: "\u9910\u996E",
-      n: "\u5C60\u5BB0\u573A",
-      o: "\u6DF7\u51DD\u571F\u5382",
-      p: "\u63A8\u8FDB\u5668\u5DE5\u5382",
-      Q: "\u91C7\u77F3\u573A",
-      r: "\u9910\u5385",
-      t: "\u82D7\u5703",
-      x: "\u5EFA\u7B51\u5DE5\u5382",
-      y: "\u5B66\u9662",
-      z: "\u6CF3\u6C60\u5E02\u573A"
-    };
     let openPanel = null;
     let openButton = null;
     let openInputGroup = null;
@@ -12221,14 +13346,14 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       resources.sort((a, b) => Number(a.code.replace(/\D/g, "")) - Number(b.code.replace(/\D/g, "")));
       const buildings = [];
       const seenBuildings = /* @__PURE__ */ new Set();
-      const buildingRe = /\bdbLetter:\s*"([A-Za-z])",[\s\S]{0,4000}?levelImages:\s*\[\s*\{\s*level:\s*\d+,\s*image:\s*"([^"]+)"/g;
+      const buildingRe = /\bdbLetter:\s*"([A-Za-z0-9])",[\s\S]{0,4000}?levelImages:\s*\[\s*\{\s*level:\s*\d+,\s*image:\s*"([^"]+)"/g;
       while ((match2 = buildingRe.exec(raw)) !== null) {
         const file = match2[2];
         if (!file.startsWith("images/buildings/") || seenBuildings.has(match2[1])) continue;
         seenBuildings.add(match2[1]);
         buildings.push({
           code: `:bd-${match2[1]}:`,
-          name: BUILDING_NAMES[match2[1]] || "",
+          name: getBuildingName(match2[1], ""),
           image: resolveAssetUrl(assets, file)
         });
       }
@@ -12965,6 +14090,1138 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     setTimeout(start, 300);
   })();
 
+  // src/features/reversePurchasePrice.js
+  var SETTINGS_KEY = "SC-ReversePurchasePrice-Settings";
+  var CONTRACT_HIGH_PRICE_SETTINGS_KEY = "SC_Contract_HighPrice_Settings";
+  var PRICE_LOWER_LIMIT = 0.01;
+  var PRICE_UPPER_LIMIT = 10;
+  var QUALITY_IDS = Array.from({ length: 13 }, (_, index) => index);
+  var CHAT_QUALITY_COLUMN_LIMIT = 5;
+  var STORE_NAMES = {
+    "2": "\u8F66\u884C",
+    G: "\u751F\u9C9C\u5546\u5E97",
+    A: "\u52A0\u6CB9\u7AD9",
+    C: "\u7535\u5B50\u4EA7\u54C1\u5546\u5E97",
+    H: "\u65F6\u88C5\u5546\u5E97",
+    d: "\u4E94\u91D1\u5546\u5E97",
+    t: "\u4E07\u5723\u8282\u96C6\u5E02",
+    z: "\u6C99\u6EE9\u96C6\u5E02",
+    I: "\u6625\u5B63\u96C6\u5E02",
+    u: "Xmas\u5E02\u573A"
+  };
+  var CALCULATION_REASON_LABELS = {
+    "missing-price-data": "\u7F3A\u5C11\u5E73\u5747\u4EF7\u6216\u9971\u548C\u5EA6",
+    "missing-store": "\u7F3A\u5C11\u5546\u5E97\u5F52\u5C5E",
+    "missing-model": "\u7F3A\u5C11\u96F6\u552E\u6A21\u578B",
+    "invalid-production-cost": "\u96F6\u552E\u6A21\u578B\u751F\u4EA7\u6210\u672C\u65E0\u6548",
+    "invalid-selling-time": "\u552E\u4EF7\u8303\u56F4\u5185\u65E0\u6CD5\u8BA1\u7B97\u9500\u552E\u7528\u65F6",
+    "no-feasible-price": "\u6CA1\u6709\u6EE1\u8DB3\u6BCF\u7EA7\u65F6\u5229\u6DA6\u7684\u6536\u8D2D\u4EF7"
+  };
+  var DEFAULT_SETTINGS = {
+    version: 1,
+    targetHourlyProfit: "",
+    buildingLevel: 100,
+    saleQuantity: 1e3,
+    economyState: null,
+    resourceIds: [],
+    qualityIds: []
+  };
+  function getRealmSettingsKey(realmId) {
+    return realmId === null ? SETTINGS_KEY : `R${realmId}-${SETTINGS_KEY}`;
+  }
+  registerExportInfo({
+    name: "\u53CD\u63A8\u6536\u8D2D\u4EF7\u8BBE\u7F6E",
+    scope: "realm",
+    backup: true,
+    keys: (realmId) => [getRealmSettingsKey(realmId)]
+  });
+  var ReversePurchasePrice = /* @__PURE__ */ (function() {
+    let mountedRoot = null;
+    let uiRoot = null;
+    let ui = null;
+    let worker = null;
+    let temporaryOverlay = null;
+    let temporaryKeyHandler = null;
+    let requestSequence = 0;
+    let uiRequestSequence = 0;
+    const pendingRequests = /* @__PURE__ */ new Map();
+    function readJson(key) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        return null;
+      }
+    }
+    function uniquePositiveIntegers(values) {
+      if (!Array.isArray(values)) return [];
+      return [...new Set(values.map(Number).filter((value) => Number.isInteger(value) && value > 0))];
+    }
+    function normalizeSettings(raw) {
+      const source = raw && typeof raw === "object" ? raw : {};
+      const target = Number(source.targetHourlyProfit);
+      const buildingLevel = Number(source.buildingLevel);
+      const saleQuantity = Number(source.saleQuantity);
+      const hasEconomyState = source.economyState !== null && source.economyState !== void 0 && source.economyState !== "";
+      const economyState = hasEconomyState ? Number(source.economyState) : null;
+      return {
+        version: 1,
+        targetHourlyProfit: Number.isFinite(target) && target > 0 ? target : "",
+        buildingLevel: Number.isFinite(buildingLevel) && buildingLevel > 0 ? buildingLevel : DEFAULT_SETTINGS.buildingLevel,
+        saleQuantity: Number.isFinite(saleQuantity) && saleQuantity > 0 ? saleQuantity : DEFAULT_SETTINGS.saleQuantity,
+        economyState: [0, 1, 2].includes(economyState) ? economyState : null,
+        resourceIds: uniquePositiveIntegers(source.resourceIds),
+        qualityIds: [...new Set(
+          (Array.isArray(source.qualityIds) ? source.qualityIds : []).map(Number).filter((value) => Number.isInteger(value) && value >= 0 && value <= 12)
+        )].sort((a, b) => a - b)
+      };
+    }
+    function loadSettings() {
+      return normalizeSettings(readJson(getScopedKey(SETTINGS_KEY)));
+    }
+    function saveSettings(nextSettings) {
+      const normalized = normalizeSettings(nextSettings);
+      localStorage.setItem(getScopedKey(SETTINGS_KEY), JSON.stringify(normalized));
+      return normalized;
+    }
+    function readCalculationData() {
+      const realmId = getRealmIdFromLink();
+      const constants = readJson("SimcompaniesConstantsData");
+      const region = realmId === null ? null : readJson(`SimcompaniesRetailCalculation_${realmId}`);
+      if (!constants?.data?.SALES || !constants?.retailInfo) {
+        throw new Error("\u7F3A\u5C11\u57FA\u7840\u6570\u636E\uFF0C\u8BF7\u5148\u66F4\u65B0\u57FA\u7840\u6570\u636E");
+      }
+      if (!region?.ResourcesRetailInfo) {
+        throw new Error("\u7F3A\u5C11\u5F53\u524D\u9886\u57DF\u6570\u636E\uFF0C\u8BF7\u5237\u65B0\u5730\u56FE\u6216\u9886\u57DF\u6570\u636E");
+      }
+      return { realmId, constants, region };
+    }
+    function getExecutiveBonuses(region) {
+      let skillCMO = Number(region?.saleBonus) || 0;
+      let skillCOO = Number(region?.adminBonus) || 0;
+      let pageSettings = {};
+      try {
+        pageSettings = JSON.parse(localStorage.getItem("SC_PageActions_Settings") || "{}");
+      } catch (error) {
+        pageSettings = {};
+      }
+      if (pageSettings.executiveCustomToggle === true) {
+        const saved = readJson(getScopedKey("SC-Saved-Bonuses"));
+        const savedCMO = Number(saved?.saleBonus);
+        const savedCOO = Number(saved?.adminBonus);
+        if (Number.isFinite(savedCMO)) skillCMO = savedCMO;
+        if (Number.isFinite(savedCOO)) skillCOO = savedCOO;
+      }
+      return { skillCMO, skillCOO };
+    }
+    function getRetailableResourceGroups(constants) {
+      const assignedIds = /* @__PURE__ */ new Set();
+      return Object.entries(constants?.data?.SALES || {}).map(([storeKind, values]) => {
+        const resourceIds = [...new Set(
+          (Array.isArray(values) ? values : []).map(Number).filter((resourceId) => Number.isInteger(resourceId) && resourceId > 0 && !assignedIds.has(resourceId))
+        )];
+        resourceIds.forEach((resourceId) => assignedIds.add(resourceId));
+        resourceIds.sort((a, b) => a - b);
+        return {
+          storeKind,
+          storeName: STORE_NAMES[storeKind] || `\u5546\u5E97 ${storeKind}`,
+          resourceIds
+        };
+      }).filter((group) => group.resourceIds.length);
+    }
+    function buildSharedContext(constants, region, economyOverride = null) {
+      const { skillCMO, skillCOO } = getExecutiveBonuses(region);
+      const salesModifier = Number(region?.salesModifier) || 0;
+      const recreationBonus = Number(region?.recreationBonus) || 0;
+      const administration = Number(region?.administration) || 1;
+      const currentEconomyState = Number(region?.economyState);
+      const economyState = [0, 1, 2].includes(economyOverride) ? economyOverride : [0, 1, 2].includes(currentEconomyState) ? currentEconomyState : 1;
+      const v = salesModifier + recreationBonus + skillCMO;
+      const b = administration - (administration - 1) * skillCOO / 100;
+      return {
+        SCD: constants,
+        SRC: region,
+        economyState,
+        acceleration: Number(region?.acceleration) || 1,
+        sellingSpeedMultiplier: region?.sellingSpeedMultiplier,
+        v,
+        b
+      };
+    }
+    const workerCode = `
+        self.onmessage = function (event) {
+            const { token, pairs, shared, constants } = event.data;
+            const { SCD, SRC, economyState, acceleration, sellingSpeedMultiplier, v, b } = shared;
+            const {
+                targetLevelProfit,
+                buildingLevel,
+                saleQuantity,
+                priceLower,
+                priceUpper,
+                SCXXCS,
+                PROFIT_PER_BUILDING_LEVEL,
+                RETAIL_ADJUSTMENT
+            } = constants;
+
+            const lwe = SCD.retailInfo;
+            const zn = SCD.data;
+
+            function wv(economy, resourceId, forceQuality) {
+                const resource = lwe?.[economy]?.[resourceId];
+                if (!resource) return null;
+                return forceQuality === null ? resource : resource.quality?.[forceQuality];
+            }
+
+            function Bpt(buildingKind, modeledData, quality, saturation, quantity, price) {
+                const adjustment = RETAIL_ADJUSTMENT[buildingKind] ?? 1;
+                const saturationFactor = Math.min(Math.max(2 - saturation, 0), 2);
+                const speedFactor = Math.max(0.9, saturationFactor / 2 + 0.5);
+                const qualityFactor = saturationFactor / 2 *
+                    (1 + (quality / 12) * zn.RETAIL_MODELING_QUALITY_WEIGHT);
+                const fixedCost = PROFIT_PER_BUILDING_LEVEL *
+                    (modeledData.buildingLevelsNeededPerUnitPerHour * modeledData.modeledUnitsSoldAnHour + 1) *
+                    adjustment *
+                    qualityFactor +
+                    (modeledData.modeledStoreWages ?? 0) * SCXXCS;
+                const unitsSold = modeledData.modeledUnitsSoldAnHour * speedFactor;
+                const productionCost = modeledData.modeledProductionCostPerUnit +
+                    (fixedCost + (modeledData.modeledStoreWages ?? 0)) / unitsSold;
+                const storeWages = modeledData.modeledStoreWages ?? 0;
+                const curve = (storeWages + fixedCost) /
+                    Math.pow(productionCost - modeledData.modeledProductionCostPerUnit, 2);
+                const adjusted = fixedCost -
+                    Math.pow(price - productionCost, 2) * curve;
+                return (quantity * ((price - modeledData.modeledProductionCostPerUnit) * 3600) - storeWages) /
+                    (adjusted + storeWages);
+            }
+
+            function zL(buildingKind, modeledData, quantity, salesModifier, price, quality, saturation, size, weather) {
+                const seconds = Bpt(buildingKind, modeledData, quality, saturation, quantity, price);
+                if (!Number.isFinite(seconds) || seconds <= 0) return NaN;
+                let scaled = seconds / acceleration / size;
+                scaled -= scaled * salesModifier / 100;
+                if (weather?.sellingSpeedMultiplier) scaled /= weather.sellingSpeedMultiplier;
+                return scaled;
+            }
+
+            function findRetailInfo(resourceId, quality) {
+                const list = SRC.ResourcesRetailInfo || [];
+                return list.find(item => (
+                    Number(item.dbLetter) === resourceId &&
+                    (resourceId !== 150 || Number(item.quality) === quality)
+                )) || null;
+            }
+
+            function stepPrice(price) {
+                if (price < 8) return 0.01;
+                if (price < 2001) return 0.1;
+                return 1;
+            }
+
+            function floorToStep(price) {
+                const step = stepPrice(price);
+                return Math.floor(price / step) * step;
+            }
+
+            function calculatePair(resourceId, quality) {
+                const retailInfo = findRetailInfo(resourceId, quality);
+                const averagePrice = Number(retailInfo?.averagePrice);
+                const saturation = Number(retailInfo?.saturation);
+                if (!Number.isFinite(averagePrice) || averagePrice <= 0 || !Number.isFinite(saturation)) {
+                    return { value: null, reason: 'missing-price-data' };
+                }
+
+                const buildingKind = Object.entries(zn.SALES || {})
+                    .find(([, resourceIds]) => resourceIds.map(Number).includes(resourceId))?.[0];
+                if (!buildingKind) return { value: null, reason: 'missing-store' };
+
+                const forceQuality = resourceId === 150 ? quality : undefined;
+                const modeledData = wv(economyState, resourceId, forceQuality ?? null);
+                if (!modeledData) return { value: null, reason: 'missing-model' };
+
+                const productionCost = Number(modeledData.modeledProductionCostPerUnit);
+                if (!Number.isFinite(productionCost)) {
+                    return { value: null, reason: 'invalid-production-cost' };
+                }
+
+                const salaryModifier = Number(SCD.buildingsSalaryModifier?.[buildingKind]) || 1;
+                const wages = (Number(zn.AVERAGE_SALARY) || 0) * salaryModifier;
+                const resourceDetail = SCD.constantsResources?.[resourceId];
+                const weather = resourceDetail?.retailSeason === 'Summer'
+                    ? sellingSpeedMultiplier
+                    : undefined;
+
+                let sellPrice = floorToStep(averagePrice * priceLower);
+                const endPrice = averagePrice * priceUpper;
+                let maxCost = -Infinity;
+                let hasValidSellingTime = false;
+
+                while (sellPrice <= endPrice + 1e-9) {
+                    const sellSeconds = zL(
+                        buildingKind,
+                        modeledData,
+                        saleQuantity,
+                        v,
+                        sellPrice,
+                        forceQuality === undefined ? quality : 0,
+                        saturation,
+                        buildingLevel,
+                        weather
+                    );
+                    if (!Number.isFinite(sellSeconds) || sellSeconds <= 0) {
+                        if (sellPrice > averagePrice) break;
+                        sellPrice = Number((sellPrice + stepPrice(sellPrice)).toFixed(6));
+                        continue;
+                    }
+                    hasValidSellingTime = true;
+
+                    const revenue = sellPrice * saleQuantity;
+                    const wagesTotal = Math.ceil(
+                        sellSeconds * wages * buildingLevel * acceleration * b / 3600
+                    );
+                    const targetProfitTotal =
+                        targetLevelProfit * sellSeconds * buildingLevel / 3600;
+                    const purchaseCost =
+                        (revenue - wagesTotal - targetProfitTotal) / saleQuantity;
+                    if (
+                        Number.isFinite(purchaseCost) &&
+                        purchaseCost >= productionCost &&
+                        purchaseCost <= productionCost * 10 &&
+                        purchaseCost > maxCost
+                    ) {
+                        maxCost = purchaseCost;
+                    }
+
+                    sellPrice = Number((sellPrice + stepPrice(sellPrice)).toFixed(6));
+                }
+
+                if (maxCost > -Infinity) return { value: maxCost, reason: null };
+                return {
+                    value: null,
+                    reason: hasValidSellingTime ? 'no-feasible-price' : 'invalid-selling-time'
+                };
+            }
+
+            try {
+                const cells = pairs.map(pair => {
+                    const result = calculatePair(pair.resourceId, pair.quality);
+                    return {
+                        resourceId: pair.resourceId,
+                        quality: pair.quality,
+                        ...result
+                    };
+                });
+                self.postMessage({ token, cells });
+            } catch (error) {
+                self.postMessage({ token, error: error?.message || String(error) });
+            }
+        };
+    `;
+    function settleWorkerError(error) {
+      const message = error?.message || "\u53CD\u63A8\u6536\u8D2D\u4EF7 Worker \u6267\u884C\u5931\u8D25";
+      for (const pending2 of pendingRequests.values()) pending2.reject(new Error(message));
+      pendingRequests.clear();
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+    }
+    function ensureWorker() {
+      if (worker) return worker;
+      const blob = new Blob([workerCode], { type: "application/javascript" });
+      worker = new Worker(URL.createObjectURL(blob));
+      worker.onmessage = (event) => {
+        const { token, cells, error } = event.data || {};
+        const pending2 = pendingRequests.get(token);
+        if (!pending2) return;
+        pendingRequests.delete(token);
+        if (error) pending2.reject(new Error(error));
+        else pending2.resolve(cells || []);
+      };
+      worker.onerror = (event) => {
+        event.preventDefault?.();
+        settleWorkerError(event.error || new Error(event.message));
+      };
+      return worker;
+    }
+    function calculate(inputSettings = loadSettings()) {
+      const settings = normalizeSettings(inputSettings);
+      const targetLevelProfit = Number(settings.targetHourlyProfit);
+      if (!Number.isFinite(targetLevelProfit) || targetLevelProfit <= 0) {
+        return Promise.reject(new Error("\u8BF7\u8F93\u5165\u6BCF\u7EA7\u65F6\u5229\u6DA6"));
+      }
+      if (!settings.resourceIds.length) {
+        return Promise.reject(new Error("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u4E2A\u8D44\u6E90"));
+      }
+      if (!settings.qualityIds.length) {
+        return Promise.reject(new Error("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u4E2A\u54C1\u8D28"));
+      }
+      let data2;
+      try {
+        data2 = readCalculationData();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      const shared = buildSharedContext(data2.constants, data2.region, settings.economyState);
+      const pairs = [];
+      settings.resourceIds.forEach((resourceId) => {
+        settings.qualityIds.forEach((quality) => {
+          pairs.push({ resourceId, quality });
+        });
+      });
+      const token = ++requestSequence;
+      for (const pending2 of pendingRequests.values()) {
+        pending2.reject(new Error("\u8BA1\u7B97\u5DF2\u88AB\u65B0\u7684\u8BF7\u6C42\u66FF\u6362"));
+      }
+      pendingRequests.clear();
+      return new Promise((resolve, reject) => {
+        pendingRequests.set(token, { resolve, reject });
+        try {
+          ensureWorker().postMessage({
+            token,
+            pairs,
+            shared,
+            constants: {
+              targetLevelProfit,
+              buildingLevel: settings.buildingLevel,
+              saleQuantity: settings.saleQuantity,
+              priceLower: PRICE_LOWER_LIMIT,
+              priceUpper: PRICE_UPPER_LIMIT,
+              SCXXCS: state2.SCXXCS,
+              PROFIT_PER_BUILDING_LEVEL: state2.PROFIT_PER_BUILDING_LEVEL,
+              RETAIL_ADJUSTMENT: state2.RETAIL_ADJUSTMENT
+            }
+          });
+        } catch (error) {
+          pendingRequests.delete(token);
+          reject(error);
+        }
+      });
+    }
+    function truncateToSig(value, digits = 4) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "--";
+      if (number === 0) return "0";
+      const magnitude = Math.floor(Math.log10(Math.abs(number))) + 1;
+      const factor = Math.pow(10, magnitude - digits);
+      const truncated = Math.floor(number / factor) * factor;
+      const decimals = Math.max(0, digits - magnitude);
+      return truncated.toFixed(decimals);
+    }
+    function serializePriceTable(table) {
+      return [...table.rows].map((row) => {
+        const values = [...row.cells].map((cell) => cell.dataset.copyText || cell.textContent.trim());
+        if (!values.length) return "";
+        if (row.parentElement?.tagName === "THEAD") {
+          const qualityHeaders = values.slice(1).map((value, index, headers) => {
+            const compact = value === "Q2 \u2B50" || index === headers.length - 1;
+            return compact ? `${value}|` : `${value} |`;
+          });
+          return `${values[0]}| ${qualityHeaders.join(" ")}`;
+        }
+        return `${values[0]}${values.slice(1).map((value) => ` | ${value}`).join("")} |`;
+      }).filter(Boolean).join("\n");
+    }
+    function fallbackCopyText(text) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.setAttribute("aria-hidden", "true");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, text.length);
+      try {
+        return document.execCommand("copy");
+      } finally {
+        textarea.remove();
+      }
+    }
+    async function copyText3(text) {
+      let clipboardError = null;
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return;
+        } catch (error) {
+          clipboardError = error;
+        }
+      }
+      if (fallbackCopyText(text)) return;
+      throw clipboardError || new Error("\u6D4F\u89C8\u5668\u4E0D\u652F\u6301\u590D\u5236");
+    }
+    function ensureStyles() {
+      if (document.getElementById("sc-reverse-purchase-price-style")) return;
+      const style2 = document.createElement("style");
+      style2.id = "sc-reverse-purchase-price-style";
+      style2.textContent = `
+            .sc-reverse-purchase-price,.sc-reverse-purchase-price *,.sc-rpp-temporary-overlay,.sc-rpp-temporary-overlay *{box-sizing:border-box}
+            .sc-reverse-purchase-price{display:grid;gap:12px;min-width:0;color:var(--sc-rpp-text);font-size:13px}
+            .sc-rpp-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+            .sc-rpp-fields label{display:grid;min-width:0;gap:5px;color:var(--sc-rpp-muted);font-size:12px}
+            .sc-rpp-fields input,.sc-rpp-fields select{width:100%;min-width:0;min-height:38px;padding:7px 9px;color:var(--sc-rpp-text);background:var(--sc-rpp-input);border:1px solid var(--sc-rpp-border);border-radius:4px}
+            .sc-rpp-data-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+            .sc-rpp-data-controls .btn,.sc-rpp-actions .btn,.sc-rpp-control-button{min-height:38px;padding:7px 12px;color:var(--sc-rpp-text);background:var(--sc-rpp-input);border:1px solid var(--sc-rpp-border);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600}
+            .sc-rpp-data-controls .btn-primary,.sc-rpp-actions .btn-primary{color:#fff;background:var(--sc-rpp-accent);border-color:var(--sc-rpp-accent)}
+            .sc-rpp-data-controls .btn:disabled,.sc-rpp-actions .btn:disabled{opacity:.5;cursor:not-allowed}
+            .sc-rpp-selection{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+            .sc-rpp-group{display:grid;gap:7px;min-width:0}
+            .sc-rpp-section-heading{color:var(--sc-rpp-text);font-size:13px}
+            .sc-rpp-resource-groups{overflow:hidden;border:1px solid var(--sc-rpp-border);border-radius:4px;background:var(--sc-rpp-surface)}
+            .sc-rpp-resource-store{display:grid;min-width:0}
+            .sc-rpp-resource-store + .sc-rpp-resource-store{border-top:1px solid var(--sc-rpp-border)}
+            .sc-rpp-store-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:7px 9px;background:var(--sc-rpp-header)}
+            .sc-rpp-store-toggle{display:flex;align-items:center;min-width:0;min-height:36px;gap:7px;padding:0;color:var(--sc-rpp-text);background:transparent;border:0;cursor:pointer;text-align:left}
+            .sc-rpp-store-toggle::before{content:"";flex:none;width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:6px solid currentColor;transition:transform .16s ease}
+            .sc-rpp-resource-store.is-expanded .sc-rpp-store-toggle::before{transform:rotate(90deg)}
+            .sc-rpp-store-toggle:focus-visible{outline:2px solid var(--sc-rpp-positive);outline-offset:2px}
+            .sc-rpp-store-title{overflow:hidden;font-size:12px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+            .sc-rpp-store-count{color:var(--sc-rpp-muted);font-size:11px;font-variant-numeric:tabular-nums}
+            .sc-rpp-store-actions{display:flex;flex:none;gap:5px}
+            .sc-rpp-mini-button{min-height:34px;padding:5px 10px;color:var(--sc-rpp-text);background:var(--sc-rpp-input);border:1px solid var(--sc-rpp-border);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600}
+            .sc-rpp-mini-button:hover,.sc-rpp-mini-button:focus-visible{background:var(--sc-rpp-surface);outline:2px solid var(--sc-rpp-positive);outline-offset:1px}
+            .sc-rpp-store-body{display:none;padding:5px 9px 9px}
+            .sc-rpp-resource-store.is-expanded .sc-rpp-store-body{display:block}
+            .sc-rpp-store-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:2px 6px}
+            .sc-rpp-store-options label{display:flex;min-width:0;min-height:36px;align-items:center;gap:7px;padding:4px 6px;border-radius:3px;cursor:pointer;white-space:nowrap}
+            .sc-rpp-store-options label:hover{background:var(--sc-rpp-header)}
+            .sc-rpp-store-options input{flex:none;accent-color:var(--sc-rpp-positive)}
+            .sc-rpp-quality-chips{display:flex;flex-wrap:wrap;gap:6px}
+            .sc-rpp-quality-chip{position:relative;display:inline-flex;min-width:48px;min-height:36px;align-items:center;justify-content:center;padding:4px 8px;color:var(--sc-rpp-muted);background:var(--sc-rpp-input);border:1px solid var(--sc-rpp-border);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600}
+            .sc-rpp-quality-chip input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+            .sc-rpp-quality-chip:has(input:checked){color:#fff;background:var(--sc-rpp-accent);border-color:var(--sc-rpp-accent)}
+            .sc-rpp-quality-chip:has(input:focus-visible){outline:2px solid var(--sc-rpp-positive);outline-offset:2px}
+            .sc-rpp-quality-warning{display:none;padding:7px 9px;color:var(--sc-rpp-warning);border:1px solid var(--sc-rpp-warning);border-radius:4px;background:var(--sc-rpp-surface)}
+            .sc-rpp-quality-warning.is-visible{display:block}
+            .sc-rpp-actions{position:sticky;bottom:-14px;z-index:4;display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 0;background:var(--sc-rpp-dialog);border-top:1px solid var(--sc-rpp-border);box-shadow:0 -8px 18px rgba(0,0,0,.08)}
+            .sc-rpp-action-buttons{display:flex;align-items:center;gap:8px}
+            .sc-rpp-status{flex:1 1 160px;min-height:20px;color:var(--sc-rpp-muted)}
+            .sc-rpp-status.is-error{color:var(--sc-rpp-negative)}
+            .sc-rpp-table-wrap{overflow:auto;border:1px solid var(--sc-rpp-border);border-radius:3px}
+            .sc-rpp-table{border-collapse:collapse;min-width:100%;font-variant-numeric:tabular-nums}
+            .sc-rpp-table th,.sc-rpp-table td{padding:5px 9px;border-right:1px solid var(--sc-rpp-border);border-bottom:1px solid var(--sc-rpp-border);text-align:right;white-space:nowrap}
+            .sc-rpp-table th:first-child,.sc-rpp-table td:first-child{text-align:left}
+            .sc-rpp-table thead th{position:sticky;top:0;background:var(--sc-rpp-header)}
+            .sc-rpp-table td.is-missing{color:var(--sc-rpp-muted)}
+            .sc-rpp-table td.is-no-feasible{color:var(--sc-rpp-warning);text-decoration:underline dotted;text-underline-offset:2px}
+            .sc-rpp-table td[data-reason]{cursor:help}
+            .sc-rpp-temporary-overlay{position:fixed;inset:0;z-index:20000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.72)}
+            .sc-rpp-temporary-dialog{width:min(980px,100%);max-height:calc(100vh - 40px);overflow:auto;padding:14px;color:var(--sc-rpp-text);background:var(--sc-rpp-dialog);border:1px solid var(--sc-rpp-border);border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
+            .sc-rpp-temporary-header{position:sticky;top:-14px;z-index:6;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-14px -14px 10px;padding:10px 14px;background:var(--sc-rpp-dialog);border-bottom:1px solid var(--sc-rpp-border)}
+            .sc-rpp-temporary-title{margin:0;font-size:16px;line-height:1.3}
+            .sc-rpp-temporary-close{width:40px;height:40px;padding:0;color:var(--sc-rpp-text);background:var(--sc-rpp-input);border:1px solid var(--sc-rpp-border);border-radius:4px;cursor:pointer;font-size:20px;line-height:1}
+            @media (max-width:600px){
+                .sc-rpp-temporary-overlay{padding:10px}
+                .sc-rpp-temporary-dialog{width:100%;height:calc(100vh - 20px);height:calc(100dvh - 20px);max-height:calc(100vh - 20px);max-height:calc(100dvh - 20px);padding:12px}
+                .sc-rpp-temporary-header{top:-12px;margin:-12px -12px 8px;padding:8px 12px}
+                .sc-rpp-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+                .sc-rpp-fields input,.sc-rpp-fields select{min-height:42px;padding:7px}
+                .sc-reverse-purchase-price{gap:10px}
+                .sc-rpp-data-controls{gap:6px}
+                .sc-rpp-store-actions{gap:4px}
+                .sc-rpp-store-options{grid-template-columns:repeat(2,minmax(0,1fr))}
+                .sc-rpp-store-options label{min-height:44px}
+                .sc-rpp-mini-button,.sc-rpp-store-toggle{min-height:44px}
+                .sc-rpp-quality-chip{flex:1 1 calc(20% - 6px);min-height:42px}
+                .sc-rpp-actions{bottom:-12px;padding:8px 0}
+                .sc-rpp-action-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+                .sc-rpp-apply-contract{grid-column:1 / -1}
+                .sc-rpp-actions .btn{width:100%;min-height:44px}
+                .sc-rpp-status{flex-basis:100%}
+            }
+        `;
+      document.head.appendChild(style2);
+    }
+    function getThemeColors() {
+      const dark = DM();
+      return {
+        text: dark ? "#f1f1f1" : "#242424",
+        muted: dark ? "rgba(255,255,255,.62)" : "rgba(0,0,0,.58)",
+        border: dark ? "rgba(255,255,255,.18)" : "rgba(0,0,0,.16)",
+        surface: dark ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.025)",
+        input: dark ? "#35373a" : "#fff",
+        dialog: dark ? "#33363a" : "#f7f7f7",
+        header: dark ? "#42454a" : "#eceff1",
+        accent: dark ? "#2f7d46" : "#2e7d3a",
+        positive: dark ? "#79d68a" : "#2e7d3a",
+        warning: dark ? "#ffd166" : "#9a6700",
+        negative: dark ? "#ff8a80" : "#b42318"
+      };
+    }
+    function applyThemeColors(element) {
+      const colors = getThemeColors();
+      element.style.setProperty("--sc-rpp-text", colors.text);
+      element.style.setProperty("--sc-rpp-muted", colors.muted);
+      element.style.setProperty("--sc-rpp-border", colors.border);
+      element.style.setProperty("--sc-rpp-surface", colors.surface);
+      element.style.setProperty("--sc-rpp-input", colors.input);
+      element.style.setProperty("--sc-rpp-dialog", colors.dialog);
+      element.style.setProperty("--sc-rpp-header", colors.header);
+      element.style.setProperty("--sc-rpp-accent", colors.accent);
+      element.style.setProperty("--sc-rpp-positive", colors.positive);
+      element.style.setProperty("--sc-rpp-warning", colors.warning);
+      element.style.setProperty("--sc-rpp-negative", colors.negative);
+    }
+    function createCheckbox(labelText, checked, onChange) {
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = checked;
+      checkbox.addEventListener("change", onChange);
+      const text = document.createElement("span");
+      text.textContent = labelText;
+      label.append(checkbox, text);
+      return { label, checkbox };
+    }
+    function getCalculationStatus(cells) {
+      const unresolved = cells.filter((cell) => cell.value === null || cell.value === void 0);
+      if (!unresolved.length) return { message: "\u8BA1\u7B97\u5B8C\u6210", type: "idle" };
+      const noFeasiblePriceReasons = /* @__PURE__ */ new Set(["no-feasible-price", "invalid-selling-time"]);
+      const noFeasiblePriceCount = unresolved.filter((cell) => noFeasiblePriceReasons.has(cell.reason)).length;
+      const missingDataCount = unresolved.length - noFeasiblePriceCount;
+      const details = [];
+      if (noFeasiblePriceCount) details.push(`${noFeasiblePriceCount} \u9879\u65E0\u53EF\u884C\u6536\u8D2D\u4EF7`);
+      if (missingDataCount) details.push(`${missingDataCount} \u9879\u7F3A\u5C11\u6570\u636E`);
+      return {
+        message: `\u8BA1\u7B97\u5B8C\u6210\uFF1B${details.join("\uFF0C")}`,
+        type: cells.some((cell) => Number.isFinite(cell.value)) ? "idle" : "error"
+      };
+    }
+    function renderMatrix(tableHost, cells, settings) {
+      const resourceIds = [...settings.resourceIds].sort((a, b) => a - b);
+      const qualityIds = [...settings.qualityIds].sort((a, b) => a - b);
+      const results = new Map(cells.map((cell) => [`${cell.resourceId}-${cell.quality}`, cell]));
+      const table = document.createElement("table");
+      table.className = "sc-rpp-table";
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      const buy = document.createElement("th");
+      buy.textContent = "BUY";
+      headerRow.appendChild(buy);
+      qualityIds.forEach((quality) => {
+        const th = document.createElement("th");
+        th.textContent = `Q${quality} \u2B50`;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      const tbody = document.createElement("tbody");
+      resourceIds.forEach((resourceId) => {
+        const row = document.createElement("tr");
+        const resourceCell = document.createElement("th");
+        resourceCell.textContent = resourceIdNameMap[resourceId] || `\u8D44\u6E90 ${resourceId}`;
+        resourceCell.dataset.copyText = `:re-${resourceId}:`;
+        row.appendChild(resourceCell);
+        qualityIds.forEach((quality) => {
+          const cell = document.createElement("td");
+          cell.dataset.resourceId = String(resourceId);
+          cell.dataset.quality = String(quality);
+          const result = results.get(`${resourceId}-${quality}`);
+          const value = result?.value;
+          if (value === null || value === void 0) {
+            const reason = result?.reason || "unknown";
+            const reasonLabel = CALCULATION_REASON_LABELS[reason] || "\u65E0\u6CD5\u8BA1\u7B97";
+            cell.textContent = "--";
+            cell.classList.add("is-missing");
+            cell.classList.toggle(
+              "is-no-feasible",
+              reason === "no-feasible-price" || reason === "invalid-selling-time"
+            );
+            cell.dataset.reason = reason;
+            cell.title = reasonLabel;
+            cell.setAttribute(
+              "aria-label",
+              `${resourceIdNameMap[resourceId] || `\u8D44\u6E90 ${resourceId}`} Q${quality} \u65E0\u6CD5\u8BA1\u7B97\uFF1A${reasonLabel}`
+            );
+          } else {
+            const formattedPrice = truncateToSig(value, 4);
+            cell.textContent = formattedPrice;
+            cell.setAttribute(
+              "aria-label",
+              `${resourceIdNameMap[resourceId] || `\u8D44\u6E90 ${resourceId}`} Q${quality} \u6536\u8D2D\u4EF7 ${formattedPrice}`
+            );
+          }
+          row.appendChild(cell);
+        });
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      tableHost.replaceChildren(table);
+    }
+    function readUiSettings() {
+      const resourceIds = [...ui.resourceBoxes].filter((entry) => entry.checkbox.checked).map((entry) => entry.resourceId);
+      const qualityIds = [...ui.qualityBoxes].filter((entry) => entry.checkbox.checked).map((entry) => entry.quality);
+      return normalizeSettings({
+        targetHourlyProfit: ui.targetInput.value,
+        buildingLevel: ui.levelInput.value,
+        saleQuantity: ui.quantityInput.value,
+        economyState: ui.economySelect.value,
+        resourceIds,
+        qualityIds
+      });
+    }
+    function updateSelectionSettings() {
+      if (!ui) return;
+      saveSettings(readUiSettings());
+      updateQualityWarning();
+      updateResourceSummary();
+    }
+    function updateQualityWarning() {
+      if (!ui?.qualityWarning) return;
+      const selectedCount = ui.qualityBoxes.filter((entry) => entry.checkbox.checked).length;
+      const visible = selectedCount > CHAT_QUALITY_COLUMN_LIMIT;
+      ui.qualityWarning.textContent = visible ? `\u5DF2\u9009\u62E9 ${selectedCount} \u4E2A\u54C1\u8D28\uFF0C\u804A\u5929\u5BA4\u4E2D\u8D85\u8FC7 ${CHAT_QUALITY_COLUMN_LIMIT} \u4E2A\u54C1\u8D28\u53EF\u80FD\u5BFC\u81F4\u6392\u7248\u6EA2\u51FA\u3002` : "";
+      ui.qualityWarning.classList.toggle("is-visible", visible);
+    }
+    function updateResourceSummary() {
+      if (!ui?.storeGroups) return;
+      let selectedTotal = 0;
+      let resourceTotal = 0;
+      ui.storeGroups.forEach((group) => {
+        const selected = group.entries.filter((entry) => entry.checkbox.checked).length;
+        selectedTotal += selected;
+        resourceTotal += group.entries.length;
+        group.count.textContent = `${selected}/${group.entries.length}`;
+      });
+      ui.resourceHeading.textContent = `\u8D44\u6E90 \xB7 \u5DF2\u9009 ${selectedTotal}/${resourceTotal}`;
+    }
+    function setStatus(message, type = "idle") {
+      if (!ui) return;
+      ui.status.textContent = message;
+      ui.status.classList.toggle("is-error", type === "error");
+    }
+    function resolveRuleResourceId(value) {
+      if (/^\d+$/.test(value)) return Number(value);
+      const entry = Object.entries(resourceIdNameMap).find(([, name]) => name === value);
+      return entry ? Number(entry[0]) : null;
+    }
+    function parseContractRule(line) {
+      const parts = line.split(/[，,]/).map((part) => part.trim());
+      if (parts.length !== 3) return null;
+      const resourceId = resolveRuleResourceId(parts[0]);
+      const quality = Number(parts[1]);
+      if (!Number.isInteger(resourceId) || !Number.isInteger(quality) || quality < 0) return null;
+      return {
+        key: `${resourceId}_${quality}`,
+        resourceId,
+        quality
+      };
+    }
+    function getContractPriceUpdatesFromTable() {
+      if (!ui) return /* @__PURE__ */ new Map();
+      const updates = /* @__PURE__ */ new Map();
+      ui.tableHost.querySelectorAll("tbody td[data-resource-id][data-quality]").forEach((cell) => {
+        const price = cell.textContent.trim();
+        if (!/^\d+(?:\.\d+)?$/.test(price)) return;
+        const resourceId = Number(cell.dataset.resourceId);
+        const quality = Number(cell.dataset.quality);
+        if (!Number.isInteger(resourceId) || !Number.isInteger(quality)) return;
+        updates.set(`${resourceId}_${quality}`, {
+          resourceId,
+          quality,
+          price
+        });
+      });
+      return updates;
+    }
+    function applyContractSecondConfirmationSettings() {
+      if (!ui) return;
+      const updates = getContractPriceUpdatesFromTable();
+      if (!updates.size) {
+        setStatus("\u4EF7\u683C\u8868\u6CA1\u6709\u53EF\u5199\u5165\u7684\u6536\u8D2D\u4EF7", "error");
+        return;
+      }
+      ui.applyContractButton.disabled = true;
+      try {
+        const raw = localStorage.getItem(CONTRACT_HIGH_PRICE_SETTINGS_KEY);
+        const current = raw ? JSON.parse(raw) : { global: "-0", individual: "" };
+        if (!current || typeof current !== "object" || Array.isArray(current)) {
+          throw new Error("\u5408\u540C\u4E8C\u6B21\u786E\u8BA4\u8BBE\u7F6E\u683C\u5F0F\u5F02\u5E38");
+        }
+        const targetKeys2 = new Set(updates.keys());
+        const preservedLines = (typeof current.individual === "string" ? current.individual : "").split("\n").map((line) => line.trim()).filter(Boolean).filter((line) => {
+          const rule = parseContractRule(line);
+          return !rule || !targetKeys2.has(rule.key);
+        });
+        const replacementLines = [...updates.values()].sort((a, b) => a.resourceId - b.resourceId || a.quality - b.quality).map((item) => `${item.resourceId},${item.quality},${item.price}`);
+        localStorage.setItem(CONTRACT_HIGH_PRICE_SETTINGS_KEY, JSON.stringify({
+          ...current,
+          individual: [...preservedLines, ...replacementLines].join("\n")
+        }));
+        setStatus(`\u5DF2\u8986\u76D6\u5408\u540C\u4E8C\u786E\u8BBE\u7F6E ${updates.size} \u9879`);
+      } catch (error) {
+        setStatus(error?.message || "\u8986\u76D6\u5408\u540C\u4E8C\u786E\u8BBE\u7F6E\u5931\u8D25", "error");
+      } finally {
+        if (ui) ui.applyContractButton.disabled = !ui.tableHost.querySelector("table");
+      }
+    }
+    async function copyPriceTable() {
+      if (!ui) return;
+      const table = ui.tableHost.querySelector("table");
+      if (!table) {
+        setStatus("\u8BF7\u5148\u8BA1\u7B97\u4EF7\u683C\u8868", "error");
+        return;
+      }
+      ui.copyButton.disabled = true;
+      try {
+        await copyText3(serializePriceTable(table));
+        setStatus("\u5DF2\u590D\u5236\u4EF7\u683C\u8868");
+      } catch (error) {
+        setStatus("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u526A\u8D34\u677F\u6743\u9650", "error");
+      } finally {
+        if (ui) ui.copyButton.disabled = !ui.tableHost.querySelector("table");
+      }
+    }
+    async function runUiCalculation() {
+      if (!ui) return;
+      const settings = saveSettings(readUiSettings());
+      const currentRequest = ++uiRequestSequence;
+      ui.calculateButton.disabled = true;
+      ui.copyButton.disabled = true;
+      ui.applyContractButton.disabled = true;
+      setStatus("\u8BA1\u7B97\u4E2D...");
+      try {
+        const cells = await calculate(settings);
+        if (currentRequest !== uiRequestSequence || !ui) return;
+        const status = getCalculationStatus(cells);
+        renderMatrix(ui.tableHost, cells, settings);
+        ui.copyButton.disabled = false;
+        ui.applyContractButton.disabled = false;
+        setStatus(status.message, status.type);
+      } catch (error) {
+        if (currentRequest !== uiRequestSequence || !ui) return;
+        if (error?.message === "\u8BA1\u7B97\u5DF2\u88AB\u65B0\u7684\u8BF7\u6C42\u66FF\u6362") return;
+        setStatus(error?.message || "\u8BA1\u7B97\u5931\u8D25", "error");
+      } finally {
+        if (ui) {
+          ui.calculateButton.disabled = false;
+          ui.copyButton.disabled = !ui.tableHost.querySelector("table");
+          ui.applyContractButton.disabled = !ui.tableHost.querySelector("table");
+        }
+      }
+    }
+    function renderUi(container) {
+      ensureStyles();
+      const settings = loadSettings();
+      const computed = (() => {
+        try {
+          return readCalculationData();
+        } catch (error) {
+          return null;
+        }
+      })();
+      const availableResourceGroups = computed ? getRetailableResourceGroups(computed.constants) : settings.resourceIds.length ? [{ storeKind: "saved", storeName: "\u5DF2\u9009\u8D44\u6E90", resourceIds: settings.resourceIds }] : [];
+      uiRoot = document.createElement("section");
+      uiRoot.className = "sc-reverse-purchase-price";
+      applyThemeColors(uiRoot);
+      const fields = document.createElement("div");
+      fields.className = "sc-rpp-fields";
+      const createNumberField = (labelText, value, step) => {
+        const label = document.createElement("label");
+        const text = document.createElement("span");
+        text.textContent = labelText;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.step = step;
+        input.value = value;
+        label.append(text, input);
+        fields.appendChild(label);
+        return input;
+      };
+      const targetInput = createNumberField("\u6BCF\u7EA7\u65F6\u5229\u6DA6", settings.targetHourlyProfit, "0.01");
+      const levelInput = createNumberField("\u5EFA\u7B51\u7B49\u7EA7", settings.buildingLevel, "1");
+      const quantityInput = createNumberField("\u9500\u552E\u6570\u91CF", settings.saleQuantity, "1");
+      const economyField = document.createElement("label");
+      const economyLabel = document.createElement("span");
+      economyLabel.textContent = "\u5468\u671F";
+      const economySelect = document.createElement("select");
+      [
+        ["", "\u5F53\u524D"],
+        ["0", "\u8427\u6761"],
+        ["1", "\u5E73\u7F13"],
+        ["2", "\u666F\u6C14"]
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        economySelect.appendChild(option);
+      });
+      economySelect.value = settings.economyState === null ? "" : String(settings.economyState);
+      economyField.append(economyLabel, economySelect);
+      fields.appendChild(economyField);
+      uiRoot.appendChild(fields);
+      const dataControls = document.createElement("div");
+      dataControls.className = "sc-rpp-data-controls";
+      const executiveToggle = createGlobalCustomToggle(
+        "executiveCustomToggle",
+        "\u81EA\u5B9A\u4E49",
+        { buttonClass: "btn btn-primary" },
+        updateSelectionSettings
+      );
+      executiveToggle.wrapper.style.marginLeft = "0";
+      const customDataButton = document.createElement("button");
+      customDataButton.type = "button";
+      customDataButton.className = "btn";
+      customDataButton.textContent = "\u81EA\u5B9A\u4E49\u9AD8\u7BA1\u6570\u636E";
+      customDataButton.addEventListener("click", () => executiveCustomButton.show());
+      dataControls.append(executiveToggle.wrapper, customDataButton);
+      uiRoot.appendChild(dataControls);
+      const selection = document.createElement("div");
+      selection.className = "sc-rpp-selection";
+      const resourceGroup = document.createElement("div");
+      resourceGroup.className = "sc-rpp-group";
+      const resourceHeading = document.createElement("strong");
+      resourceHeading.className = "sc-rpp-section-heading";
+      resourceHeading.textContent = "\u8D44\u6E90";
+      const resourceBoxesHost = document.createElement("div");
+      resourceBoxesHost.className = "sc-rpp-resource-groups";
+      const resourceBoxes = [];
+      const storeGroups = [];
+      const preferredStoreKind = availableResourceGroups.find((group) => group.resourceIds.some((resourceId) => settings.resourceIds.includes(resourceId)))?.storeKind || availableResourceGroups[0]?.storeKind;
+      availableResourceGroups.forEach((storeGroup) => {
+        const store = document.createElement("section");
+        store.className = "sc-rpp-resource-store";
+        store.dataset.storeKind = storeGroup.storeKind;
+        const expanded = storeGroup.storeKind === preferredStoreKind;
+        store.classList.toggle("is-expanded", expanded);
+        const storeHeader = document.createElement("div");
+        storeHeader.className = "sc-rpp-store-header";
+        const storeToggle = document.createElement("button");
+        storeToggle.type = "button";
+        storeToggle.className = "sc-rpp-store-toggle";
+        storeToggle.setAttribute("aria-expanded", String(expanded));
+        const storeTitle = document.createElement("span");
+        storeTitle.className = "sc-rpp-store-title";
+        storeTitle.textContent = storeGroup.storeName;
+        const storeCount = document.createElement("span");
+        storeCount.className = "sc-rpp-store-count";
+        storeToggle.append(storeTitle, storeCount);
+        const storeActions = document.createElement("div");
+        storeActions.className = "sc-rpp-store-actions";
+        const selectAllButton = document.createElement("button");
+        selectAllButton.type = "button";
+        selectAllButton.className = "sc-rpp-mini-button";
+        selectAllButton.textContent = "\u5168\u9009";
+        selectAllButton.dataset.storeAction = "select-all";
+        selectAllButton.setAttribute("aria-label", `\u5168\u9009 ${storeGroup.storeName} \u8D44\u6E90`);
+        const clearButton = document.createElement("button");
+        clearButton.type = "button";
+        clearButton.className = "sc-rpp-mini-button";
+        clearButton.textContent = "\u6E05\u7A7A";
+        clearButton.dataset.storeAction = "clear";
+        clearButton.setAttribute("aria-label", `\u6E05\u7A7A ${storeGroup.storeName} \u8D44\u6E90`);
+        storeActions.append(selectAllButton, clearButton);
+        storeHeader.append(storeToggle, storeActions);
+        const storeBody = document.createElement("div");
+        storeBody.className = "sc-rpp-store-body";
+        const storeOptions = document.createElement("div");
+        storeOptions.className = "sc-rpp-store-options";
+        const storeEntries = [];
+        storeGroup.resourceIds.forEach((resourceId) => {
+          const entry = createCheckbox(
+            resourceIdNameMap[resourceId] || `\u8D44\u6E90 ${resourceId}`,
+            settings.resourceIds.includes(resourceId),
+            updateSelectionSettings
+          );
+          entry.checkbox.dataset.resourceId = String(resourceId);
+          storeOptions.appendChild(entry.label);
+          resourceBoxes.push({ resourceId, ...entry });
+          storeEntries.push(entry);
+        });
+        const setStoreChecked = (checked) => {
+          storeEntries.forEach((entry) => {
+            entry.checkbox.checked = checked;
+          });
+          updateSelectionSettings();
+        };
+        selectAllButton.addEventListener("click", () => setStoreChecked(true));
+        clearButton.addEventListener("click", () => setStoreChecked(false));
+        storeToggle.addEventListener("click", () => {
+          const isExpanded = store.classList.toggle("is-expanded");
+          storeToggle.setAttribute("aria-expanded", String(isExpanded));
+        });
+        storeBody.appendChild(storeOptions);
+        store.append(storeHeader, storeBody);
+        resourceBoxesHost.appendChild(store);
+        storeGroups.push({
+          entries: storeEntries,
+          count: storeCount
+        });
+      });
+      resourceGroup.append(resourceHeading, resourceBoxesHost);
+      const qualityGroup = document.createElement("div");
+      qualityGroup.className = "sc-rpp-group";
+      const qualityHeading = document.createElement("strong");
+      qualityHeading.className = "sc-rpp-section-heading";
+      qualityHeading.textContent = "\u54C1\u8D28";
+      const qualityBoxesHost = document.createElement("div");
+      qualityBoxesHost.className = "sc-rpp-quality-chips";
+      const qualityBoxes = QUALITY_IDS.map((quality) => {
+        const entry = createCheckbox(
+          `Q${quality}`,
+          settings.qualityIds.includes(quality),
+          updateSelectionSettings
+        );
+        entry.label.classList.add("sc-rpp-quality-chip");
+        entry.checkbox.dataset.quality = String(quality);
+        qualityBoxesHost.appendChild(entry.label);
+        return { quality, ...entry };
+      });
+      const qualityWarning = document.createElement("div");
+      qualityWarning.className = "sc-rpp-quality-warning";
+      qualityWarning.setAttribute("role", "status");
+      qualityGroup.append(qualityHeading, qualityBoxesHost, qualityWarning);
+      selection.append(resourceGroup, qualityGroup);
+      uiRoot.appendChild(selection);
+      const actions = document.createElement("div");
+      actions.className = "sc-rpp-actions";
+      const calculateButton = document.createElement("button");
+      calculateButton.type = "button";
+      calculateButton.className = "btn btn-primary";
+      calculateButton.textContent = "\u8BA1\u7B97";
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "btn";
+      copyButton.textContent = "\u590D\u5236\u4EF7\u683C\u8868";
+      copyButton.disabled = true;
+      const applyContractButton = document.createElement("button");
+      applyContractButton.type = "button";
+      applyContractButton.className = "btn sc-rpp-apply-contract";
+      applyContractButton.textContent = "\u8986\u76D6\u4E8C\u786E\u8BBE\u7F6E";
+      applyContractButton.title = "\u4EC5\u8986\u76D6\u4EF7\u683C\u8868\u4E2D\u53EF\u8BA1\u7B97\u7684\u6536\u8D2D\u4EF7\uFF0C\u4E0D\u4FEE\u6539\u7F3A\u5931\u4EF7\u683C\u548C\u672A\u6D89\u53CA\u8D44\u6E90";
+      applyContractButton.disabled = true;
+      const status = document.createElement("div");
+      status.className = "sc-rpp-status";
+      status.setAttribute("role", "status");
+      const actionButtons = document.createElement("div");
+      actionButtons.className = "sc-rpp-action-buttons";
+      actionButtons.append(calculateButton, copyButton, applyContractButton);
+      actions.append(actionButtons, status);
+      uiRoot.appendChild(actions);
+      const tableHost = document.createElement("div");
+      tableHost.className = "sc-rpp-table-wrap";
+      uiRoot.appendChild(tableHost);
+      ui = {
+        targetInput,
+        levelInput,
+        quantityInput,
+        economySelect,
+        resourceHeading,
+        resourceBoxes,
+        storeGroups,
+        qualityBoxes,
+        qualityWarning,
+        calculateButton,
+        copyButton,
+        applyContractButton,
+        status,
+        tableHost
+      };
+      [targetInput, levelInput, quantityInput, economySelect].forEach((input) => {
+        input.addEventListener("change", updateSelectionSettings);
+      });
+      calculateButton.addEventListener("click", runUiCalculation);
+      copyButton.addEventListener("click", copyPriceTable);
+      applyContractButton.addEventListener("click", applyContractSecondConfirmationSettings);
+      updateResourceSummary();
+      updateQualityWarning();
+      container.replaceChildren(uiRoot);
+      if (!computed) {
+        setStatus("\u7F3A\u5C11\u57FA\u7840\u6570\u636E\u6216\u9886\u57DF\u6570\u636E\uFF0C\u8BF7\u5148\u66F4\u65B0\u6570\u636E", "error");
+      }
+    }
+    function init5(container) {
+      const target = typeof container === "string" ? document.querySelector(container) : container;
+      if (!(target instanceof Element)) return false;
+      if (mountedRoot === target && uiRoot?.isConnected) return true;
+      destroy4();
+      mountedRoot = target;
+      renderUi(target);
+      return true;
+    }
+    function openTemporaryPage() {
+      if (temporaryOverlay?.isConnected) return true;
+      ensureStyles();
+      const overlay = document.createElement("div");
+      overlay.className = "sc-rpp-temporary-overlay";
+      overlay.dataset.scReversePurchasePriceOverlay = "true";
+      applyThemeColors(overlay);
+      const dialog = document.createElement("div");
+      dialog.className = "sc-rpp-temporary-dialog";
+      const header = document.createElement("div");
+      header.className = "sc-rpp-temporary-header";
+      const title = document.createElement("h2");
+      title.className = "sc-rpp-temporary-title";
+      title.textContent = "\u53CD\u63A8\u6536\u8D2D\u4EF7";
+      const closeButton = document.createElement("button");
+      closeButton.type = "button";
+      closeButton.className = "sc-rpp-temporary-close";
+      closeButton.textContent = "\xD7";
+      closeButton.setAttribute("aria-label", "\u5173\u95ED\u53CD\u63A8\u6536\u8D2D\u4EF7");
+      header.append(title, closeButton);
+      const content = document.createElement("div");
+      dialog.append(header, content);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+      closeButton.addEventListener("click", destroy4);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) destroy4();
+      });
+      if (!init5(content)) {
+        overlay.remove();
+        return false;
+      }
+      temporaryOverlay = overlay;
+      temporaryKeyHandler = (event) => {
+        if (event.key === "Escape") destroy4();
+      };
+      document.addEventListener("keydown", temporaryKeyHandler);
+      return true;
+    }
+    function destroy4() {
+      uiRequestSequence++;
+      requestSequence++;
+      for (const pending2 of pendingRequests.values()) {
+        pending2.reject(new Error("\u8BA1\u7B97\u5DF2\u53D6\u6D88"));
+      }
+      pendingRequests.clear();
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+      if (temporaryKeyHandler) {
+        document.removeEventListener("keydown", temporaryKeyHandler);
+        temporaryKeyHandler = null;
+      }
+      temporaryOverlay?.remove();
+      temporaryOverlay = null;
+      uiRoot?.remove();
+      uiRoot = null;
+      mountedRoot = null;
+      ui = null;
+    }
+    function getSettings() {
+      return loadSettings();
+    }
+    function updateSettings(settings) {
+      return saveSettings(settings);
+    }
+    return {
+      init: init5,
+      openTemporaryPage,
+      destroy: destroy4,
+      calculate,
+      getSettings,
+      saveSettings: updateSettings
+    };
+  })();
+  window.SC_Modules = window.SC_Modules || {};
+  window.SC_Modules.reversePurchasePrice = ReversePurchasePrice;
+
   // src/features/autoUpdaters.js
   var ConstantsAutoUpdater = (() => {
     const STORAGE_KEY = "SimcompaniesConstantsData";
@@ -13651,7 +15908,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             }
             if (key === "autoPricing" && typeof window.refreshAutoPricingButtons === "function") {
               window.refreshAutoPricingButtons();
-              if (newState && /\/b\/\d+\/?$/.test(location.href) && typeof window.initAutoPricing === "function") {
+              if (newState && /\/b\/\d+(?:\/retail\/[^\/?#]+)?\/?(?:[?#].*)?$/.test(location.href) && typeof window.initAutoPricing === "function") {
                 window.initAutoPricing();
               }
             }
@@ -13786,7 +16043,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           box.style.cssText = "display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px;color:var(--sc-panel-fg,#efefef);";
           const options = [
             ["autoPricingHourlyButton", "\u6700\u5927\u65F6\u5229\u6DA6"],
-            ["autoPricingTotalButton", "\u6700\u5927\u5229\u6DA6"],
+            ["autoPricingTotalButton", "\u6700\u5927\u603B\u5229\u6DA6"],
             ["autoPricingUnitCostInput", "\u5047\u8BBE\u5355\u4F4D\u6210\u672C"]
           ];
           let config = {};
@@ -14000,6 +16257,19 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             btn.onclick = showSaturationTable;
             return btn;
           })(),
+          (() => {
+            const btn = createActionButton("\u53CD\u63A8\u6536\u8D2D\u4EF7", "reversePurchasePrice");
+            btn.onclick = (e) => {
+              e.stopPropagation();
+              const module = window.SC_Modules?.reversePurchasePrice;
+              if (typeof module?.openTemporaryPage !== "function") {
+                btn.textContent = "\u53CD\u63A8\u6536\u8D2D\u4EF7\uFF08\u672A\u52A0\u8F7D\uFF09";
+                return;
+              }
+              module.openTemporaryPage();
+            };
+            return btn;
+          })(),
           // createActionButton('MP-?%', 'mpShow'), // 2026-08 暂时隐藏：改为"备份插件设置"
           (() => {
             const btn = document.createElement("button");
@@ -14009,6 +16279,14 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             return btn;
           })(),
           createActionButton("\u8BA1\u7B97\u5F53\u524D\u51B0\u6DC7\u6DCB\u5269\u4F59\u91CF", "calculateDecay"),
+          (() => {
+            const btn = document.createElement("button");
+            btn.className = "SimcompaniesRetailCalculation-action-btn";
+            btn.textContent = "\u2699\uFE0F \u529F\u80FD\u5F00\u5173\u8BBE\u7F6E";
+            btn.style.backgroundColor = "#607D8B";
+            btn.onclick = () => switchMenu(true);
+            return btn;
+          })(),
           (() => {
             const btn = document.createElement("button");
             btn.className = "SimcompaniesRetailCalculation-action-btn";
@@ -14033,14 +16311,6 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                 };
               }
             }, 500);
-            return btn;
-          })(),
-          (() => {
-            const btn = document.createElement("button");
-            btn.className = "SimcompaniesRetailCalculation-action-btn";
-            btn.textContent = "\u2699\uFE0F \u529F\u80FD\u5F00\u5173\u8BBE\u7F6E";
-            btn.style.backgroundColor = "#607D8B";
-            btn.onclick = () => switchMenu(true);
             return btn;
           })()
         );
@@ -14882,6 +17152,11 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     })();
     (function() {
       const RETAIL_BUTTON_HIDDEN_CLASS = "sc-retail-store-button-hidden";
+      const LEGACY_RETAIL_CARD_SELECTOR = 'div[style="overflow: visible;"]';
+      const NEW_RETAIL_ROW_SELECTOR = 'div[class*="test-resource-row-"]:not(.row)';
+      const NEW_RETAIL_PRICE_SELECTOR = 'input[name="price"][id^="retail-price-"]';
+      const RETAIL_DECAY_TICK_MINUTES = 4;
+      let retailPricingTargetSequence = 0;
       function getRetailStoreButtonConfig() {
         let config = {};
         try {
@@ -14900,7 +17175,117 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (document.getElementById("sc-retail-store-button-settings-style")) return;
         const style2 = document.createElement("style");
         style2.id = "sc-retail-store-button-settings-style";
-        style2.textContent = `.${RETAIL_BUTTON_HIDDEN_CLASS}{display:none !important;}`;
+        style2.textContent = `
+                .${RETAIL_BUTTON_HIDDEN_CLASS}{display:none !important;}
+                .sc-retail-pricing-native{
+                    flex:1 0 100%;
+                    width:100%;
+                    display:grid;
+                    gap:6px;
+                    margin-top:2px;
+                }
+                .sc-retail-pricing-native .sc-retail-store-button-row{
+                    display:grid;
+                    grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+                    gap:6px;
+                    width:100%;
+                }
+                .sc-retail-pricing-native .auto-profit-display{
+                    min-height:42px;
+                    padding:0;
+                    color:var(--sc-retail-text);
+                    background:transparent;
+                    border:0;
+                    font-weight:normal;
+                }
+                .sc-retail-pricing-native .sc-retail-pricing-metrics{
+                    display:grid;
+                    grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+                    gap:6px;
+                }
+                .sc-retail-pricing-metric{
+                    display:flex;
+                    min-width:0;
+                    flex-direction:column;
+                    justify-content:center;
+                    gap:2px;
+                    padding:5px 9px;
+                    border:1px solid var(--sc-retail-border);
+                    border-radius:3px;
+                    background:var(--sc-retail-surface);
+                }
+                .sc-retail-pricing-metric span{
+                    color:var(--sc-retail-muted);
+                    font-size:11px;
+                    line-height:1.2;
+                }
+                .sc-retail-pricing-metric strong{
+                    overflow:hidden;
+                    color:var(--sc-retail-positive);
+                    font-size:14px;
+                    font-variant-numeric:tabular-nums;
+                    line-height:1.25;
+                    text-overflow:ellipsis;
+                    white-space:nowrap;
+                }
+                .sc-retail-pricing-metric strong.is-negative{
+                    color:var(--sc-retail-negative);
+                }
+                .sc-retail-pricing-native .sc-retail-status-message{
+                    display:flex;
+                    min-height:34px;
+                    align-items:center;
+                    justify-content:center;
+                    padding:5px 9px;
+                    border:1px solid var(--sc-retail-border);
+                    border-radius:3px;
+                    background:var(--sc-retail-surface);
+                    font-size:12px;
+                    text-align:center;
+                }
+                .sc-retail-pricing-native .sc-retail-status-empty{
+                    display:none !important;
+                }
+                .sc-retail-pricing-native .sc-retail-status-message.is-busy{
+                    color:var(--sc-retail-busy);
+                    border-color:color-mix(in srgb,var(--sc-retail-busy) 55%,transparent);
+                }
+                .sc-retail-pricing-native .sc-retail-status-message.is-error{
+                    color:var(--sc-retail-negative);
+                    border-color:color-mix(in srgb,var(--sc-retail-negative) 55%,transparent);
+                }
+                .sc-retail-pricing-native .sc-retail-status-message.is-success{
+                    color:var(--sc-retail-positive);
+                    border-color:color-mix(in srgb,var(--sc-retail-positive) 55%,transparent);
+                }
+                .sc-retail-cost-field{
+                    display:grid;
+                    grid-template-columns:minmax(100px,1fr) minmax(120px,170px);
+                    align-items:center;
+                    gap:8px;
+                    min-width:0;
+                    color:var(--sc-retail-muted);
+                    font-size:12px;
+                }
+                .sc-retail-cost-field > span{
+                    min-width:0;
+                    overflow:hidden;
+                    text-overflow:ellipsis;
+                    white-space:nowrap;
+                }
+                .sc-retail-cost-field .custom-unit-cost-input{
+                    min-width:0;
+                }
+                @media (max-width:420px){
+                    .sc-retail-pricing-native .sc-retail-store-button-row{
+                        grid-template-columns:1fr;
+                    }
+                    .sc-retail-cost-field{
+                        grid-template-columns:1fr;
+                        gap:4px;
+                    }
+                }
+            `;
         document.head.appendChild(style2);
       }
       function refreshAutoPricingButtons() {
@@ -14911,10 +17296,14 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           const btnHourly = card.querySelector(".btn-max-hourly-profit");
           const btnTotal = card.querySelector(".btn-max-total-profit");
           const customCostInput = card.querySelector(".custom-unit-cost-input");
+          const costField = card.querySelector(".sc-retail-cost-field");
+          const profitDisplay = card.querySelector(".auto-profit-display");
           if (btnHourly) btnHourly.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.hourly);
           if (btnTotal) btnTotal.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.total);
           if (customCostInput) customCostInput.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.unitCost);
+          if (costField) costField.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.unitCost);
           if (btnContainer) btnContainer.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.hourly && !config.total);
+          if (profitDisplay) profitDisplay.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !config.enabled || !config.hourly && !config.total);
         });
       }
       window.refreshAutoPricingButtons = refreshAutoPricingButtons;
@@ -14942,12 +17331,271 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }
         return null;
       }
+      function isExplicitNewRetailPricingInput(priceInput) {
+        return Boolean(priceInput?.id?.startsWith("retail-price-"));
+      }
+      function getRetailPricingHost(priceInput) {
+        if (!priceInput) return null;
+        const legacyHost = priceInput.closest(LEGACY_RETAIL_CARD_SELECTOR);
+        const newHost = priceInput.closest(NEW_RETAIL_ROW_SELECTOR);
+        if (isExplicitNewRetailPricingInput(priceInput) && !findReactComponent(priceInput)) {
+          return newHost || legacyHost;
+        }
+        return legacyHost || newHost;
+      }
+      function isNewRetailPricingHost(priceInput, host) {
+        if (!host || !isExplicitNewRetailPricingInput(priceInput)) return false;
+        return !findReactComponent(priceInput);
+      }
+      function getRetailPricingTargetKey(priceInput, host) {
+        const inputId = priceInput.id || "";
+        if (!host.dataset.scRetailPricingTarget || host.dataset.scRetailPricingInputId !== inputId) {
+          const targetLabel = priceInput.id || "sc-retail-price-target";
+          host.dataset.scRetailPricingTarget = `${targetLabel}-${++retailPricingTargetSequence}`;
+          host.dataset.scRetailPricingInputId = inputId;
+        }
+        return host.dataset.scRetailPricingTarget;
+      }
+      function findPricingInputByTargetKey(targetKey) {
+        if (!targetKey) return null;
+        const byId = document.getElementById(targetKey);
+        if (byId?.matches('input[name="price"]')) return byId;
+        const host = Array.from(document.querySelectorAll("[data-sc-retail-pricing-target]")).find((node) => node.dataset.scRetailPricingTarget === targetKey);
+        return host?.querySelector('input[name="price"]') || null;
+      }
+      function findFunctionalRetailFiber(element) {
+        const reactKeys = Object.keys(element).filter(
+          (key) => key.startsWith("__reactInternalInstance") || key.startsWith("__reactFiber")
+        );
+        for (const key of reactKeys) {
+          let fiberNode = element[key];
+          while (fiberNode) {
+            const props = fiberNode.memoizedProps;
+            if (props && props.resource?.dbLetter !== void 0 && props.buildingKind !== void 0 && props.size !== void 0) {
+              return fiberNode;
+            }
+            fiberNode = fiberNode.return;
+          }
+        }
+        return null;
+      }
+      function parseExplicitRetailQuantity(rawValue) {
+        const normalized = String(rawValue ?? "").replace(/\s/g, "");
+        let numericText = normalized;
+        if (/^\d{1,3}(?:,\d{3})+$/.test(numericText)) {
+          numericText = numericText.replace(/,/g, "");
+        } else if (/^\d+,\d+$/.test(numericText)) {
+          numericText = numericText.replace(",", ".");
+        }
+        if (!/^\d+(?:\.\d+)?$/.test(numericText)) return null;
+        const quantity2 = Math.floor(Number(numericText));
+        return Number.isFinite(quantity2) && quantity2 > 0 ? quantity2 : null;
+      }
+      function parseRetailDurationSeconds(rawValue) {
+        const text = String(rawValue ?? "").trim().toLowerCase();
+        if (!text) return null;
+        let match2 = /^(\d+):([0-5]\d):([0-5]\d)$/.exec(text);
+        if (match2) {
+          return Number(match2[1]) * 3600 + Number(match2[2]) * 60 + Number(match2[3]);
+        }
+        match2 = /^(\d+)(min|s)$/.exec(text);
+        if (match2) {
+          return match2[2] === "min" ? Number(match2[1]) * 60 : Number(match2[1]);
+        }
+        const count = parseInt(text, 10);
+        if (Number.isNaN(count)) return null;
+        if (text.endsWith("hr")) return count * 3600;
+        if (text.endsWith("m")) return count * 60;
+        if (text.endsWith("s")) return count;
+        const clockMatch = text.match(/(am|pm)$/);
+        if (!clockMatch) return null;
+        const minuteMatch = text.match(/:(\d{2})(?:am|pm)$/);
+        const minutes = minuteMatch ? parseInt(minuteMatch[1], 10) : 0;
+        const now = /* @__PURE__ */ new Date();
+        const target = new Date(now);
+        target.setMinutes(minutes);
+        target.setSeconds(0, 0);
+        if (clockMatch[1] === "pm") {
+          target.setHours(count === 12 ? 12 : (count + 12) % 24);
+        } else {
+          target.setHours(count === 12 ? 24 : count % 24);
+        }
+        let targetTime = target.getTime();
+        if (targetTime < now.getTime()) targetTime += 24 * 60 * 60 * 1e3;
+        return (targetTime - now.getTime()) / 1e3;
+      }
+      function getRetailModel(retailInfo2, economyState2, resourceId, forceQuality2) {
+        const economyData = retailInfo2?.[economyState2] ?? retailInfo2?.[String(economyState2)];
+        const resourceModel = economyData?.[resourceId];
+        if (!resourceModel) return null;
+        if (forceQuality2 === null || forceQuality2 === void 0) return resourceModel;
+        return resourceModel.quality?.[forceQuality2] || null;
+      }
+      function getRetailStacks(props, constantsResources2, now) {
+        const resourceId = props.resource?.dbLetter;
+        const decay = Number(constantsResources2?.[resourceId]?.decay ?? 0);
+        return (props.resources || []).filter((stack) => !stack.blocked).filter((stack) => String(stack.kind) === String(resourceId)).filter((stack) => props.forceQuality === void 0 || stack.quality === props.forceQuality).map((stack) => {
+          let amountConsideringDecay = Number(stack.amount) || 0;
+          if (decay > 0 && stack.datetime) {
+            const elapsedHours = Math.round(
+              Math.abs(now - Date.parse(stack.datetime)) / (1e3 * 60) / RETAIL_DECAY_TICK_MINUTES
+            ) * RETAIL_DECAY_TICK_MINUTES / 60;
+            amountConsideringDecay = Math.floor(amountConsideringDecay * Math.pow(1 - decay, elapsedHours));
+          }
+          return { ...stack, amountConsideringDecay };
+        }).sort((a, b) => b.quality - a.quality);
+      }
+      function getRetailCostState(stacks, quantity2) {
+        let remaining = quantity2;
+        let qualityTotal = 0;
+        let cogs2 = 0;
+        for (const stack of stacks) {
+          const amount = Math.min(remaining, stack.amountConsideringDecay);
+          if (amount <= 0) continue;
+          const costTotal = Object.values(stack.cost || {}).reduce((sum, value) => sum + (typeof value === "number" ? value : 0), 0);
+          const unitCost = stack.amountConsideringDecay > 0 ? costTotal / stack.amountConsideringDecay : 0;
+          cogs2 += amount * unitCost;
+          qualityTotal += amount * stack.quality;
+          remaining -= amount;
+        }
+        if (remaining > 0) {
+          const available = quantity2 - remaining;
+          if (available > 0) {
+            const scale = quantity2 / available;
+            cogs2 *= scale;
+            qualityTotal *= scale;
+          }
+        }
+        return {
+          cogs: cogs2,
+          quality: quantity2 > 0 ? qualityTotal / quantity2 : 0,
+          missing: remaining
+        };
+      }
+      function calculateRetailSellSeconds(buildingKind2, modeledData, quantity2, salesModifier, price, quality2, saturation2, acceleration2, size2, weather, qualityWeight) {
+        if (!modeledData) return NaN;
+        const retailAdjustment = RETAIL_ADJUSTMENT5[buildingKind2] ?? 1;
+        const saturationFactor = Math.min(Math.max(2 - saturation2, 0), 2);
+        const speedFactor = Math.max(0.9, saturationFactor / 2 + 0.5);
+        const qualityFactor = saturationFactor / 2 * (1 + quality2 / 12 * (qualityWeight || 0));
+        const fixedCost = PROFIT_PER_BUILDING_LEVEL5 * (modeledData.buildingLevelsNeededPerUnitPerHour * modeledData.modeledUnitsSoldAnHour + 1) * retailAdjustment * qualityFactor + (modeledData.modeledStoreWages ?? 0) * SCXXCS5;
+        const unitsSold = modeledData.modeledUnitsSoldAnHour * speedFactor;
+        const productionCost = modeledData.modeledProductionCostPerUnit + (fixedCost + (modeledData.modeledStoreWages ?? 0)) / unitsSold;
+        const overhead = (modeledData.modeledStoreWages ?? 0) / Math.pow(productionCost - modeledData.modeledProductionCostPerUnit, 2);
+        const adjusted = fixedCost - (price - productionCost) * (price - productionCost) * overhead;
+        const seconds = (quantity2 * ((price - modeledData.modeledProductionCostPerUnit) * 3600) - (modeledData.modeledStoreWages ?? 0)) / (adjusted + (modeledData.modeledStoreWages ?? 0));
+        if (!Number.isFinite(seconds) || seconds <= 0) return NaN;
+        let duration = seconds / acceleration2 / size2;
+        duration -= duration * salesModifier / 100;
+        if (weather?.sellingSpeedMultiplier) duration /= weather.sellingSpeedMultiplier;
+        return duration;
+      }
+      function calculateRetailQuantityFromDuration(durationSeconds, currentPrice, props, stacks, constantsData2) {
+        const forceQuality2 = props.forceQuality ?? null;
+        const modeledData = getRetailModel(constantsData2?.retailInfo, props.economyState, props.resource?.dbLetter, forceQuality2);
+        if (!modeledData?.modeledUnitsSoldAnHour || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+        const averagePrice = Number(props.averagePrice) || 0;
+        const price = Number(currentPrice) || averagePrice;
+        if (!price) return null;
+        const salesModifier = (props.salesModifierWithRecreationBonus || 0) + Math.floor((props.skillCMO || 0) / 3);
+        const weather = props.resource?.retailSeason === "Summer" ? props.weather : void 0;
+        const estimateUnits = Math.ceil(modeledData.modeledUnitsSoldAnHour * durationSeconds / 3600);
+        const estimateSeconds = (quality2) => calculateRetailSellSeconds(
+          props.buildingKind,
+          modeledData,
+          estimateUnits,
+          salesModifier,
+          price,
+          props.forceQuality === void 0 ? quality2 : 0,
+          props.saturation,
+          props.acceleration,
+          props.size,
+          weather,
+          constantsData2?.data?.RETAIL_MODELING_QUALITY_WEIGHT
+        );
+        const minQuality = stacks.length > 0 ? Math.min(...stacks.map((stack) => stack.quality)) : 0;
+        const maxQuality = stacks.length > 0 ? Math.max(...stacks.map((stack) => stack.quality)) : 12;
+        const minSeconds = estimateSeconds(minQuality);
+        const maxSeconds = estimateSeconds(maxQuality);
+        if (!Number.isFinite(minSeconds) || !Number.isFinite(maxSeconds)) return null;
+        let low = Math.floor(durationSeconds * estimateUnits / minSeconds);
+        let high = Math.floor(durationSeconds * estimateUnits / maxSeconds);
+        if (minQuality === maxQuality) return low;
+        if ((stacks[0]?.amountConsideringDecay || 0) >= high) return high;
+        let best = low;
+        for (let i = 0; low <= high && i < 13; i++) {
+          const candidate = Math.floor((low + high) / 2);
+          let remaining = candidate;
+          let qualityTotal = 0;
+          let counted = 0;
+          for (const stack of stacks) {
+            const amount = Math.min(remaining, stack.amountConsideringDecay);
+            qualityTotal += amount * stack.quality;
+            counted += amount;
+            remaining -= amount;
+          }
+          const weightedQuality = counted > 0 ? qualityTotal / counted : 0;
+          const seconds = estimateSeconds(weightedQuality);
+          if (!Number.isFinite(seconds)) return null;
+          const remainder = durationSeconds - seconds * candidate / estimateUnits;
+          if (remainder < 0) {
+            best = low;
+            break;
+          }
+          if (remainder < maxSeconds / estimateUnits) {
+            best = candidate;
+            break;
+          }
+          if (remainder > 0) low = candidate + 1;
+          else high = candidate - 1;
+        }
+        return best;
+      }
+      function resolveRetailPricingComponent(priceInput) {
+        const legacyComponent = findReactComponent(priceInput);
+        if (legacyComponent) {
+          return { kind: "legacy", props: legacyComponent.props, state: legacyComponent.state };
+        }
+        const host = getRetailPricingHost(priceInput);
+        const fiberNode = findFunctionalRetailFiber(priceInput);
+        if (!host || !fiberNode?.memoizedProps) return null;
+        let constantsData2 = null;
+        try {
+          constantsData2 = JSON.parse(localStorage.getItem("SimcompaniesConstantsData") || "null");
+        } catch (e) {
+        }
+        const props = fiberNode.memoizedProps;
+        const quantityInput = host.querySelector('input[name="quantity"]');
+        const rawQuantity = quantityInput?.value ?? "";
+        const stacks = getRetailStacks(props, constantsData2?.constantsResources, Date.now());
+        let quantity2 = parseExplicitRetailQuantity(rawQuantity);
+        if (quantity2 === null) {
+          const durationSeconds = parseRetailDurationSeconds(rawQuantity);
+          quantity2 = calculateRetailQuantityFromDuration(
+            durationSeconds,
+            priceInput.value,
+            props,
+            stacks,
+            constantsData2
+          );
+        }
+        const costState = Number.isFinite(quantity2) && quantity2 > 0 ? getRetailCostState(stacks, quantity2) : { cogs: null, quality: null, missing: 0 };
+        return {
+          kind: "functional",
+          props,
+          state: {
+            cogs: costState.cogs,
+            quality: costState.quality,
+            quantity: quantity2
+          }
+        };
+      }
       const workerCode = `
         self.onmessage = function(e) {
         const { lwe, zn, size, acceleration, economyState, resource, salesModifierWithRecreationBonus,
             skillCMO, skillCOO, saturation, administrationOverhead, wages, buildingKind, forceQuality, weather,
             v, b,
-            cogs, quality, quantity, cardIndex, retryCount,
+            cogs, quality, quantity, targetKey, retryCount,
             SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT,
             calcMode} = e.data;
 
@@ -15000,7 +17648,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             if (!modeledData) {
                 self.postMessage({
                     error: '\u672A\u627E\u5230\u8D44\u6E90 ' + resource.dbLetter + ' \u7684\u96F6\u552E\u6A21\u578B\uFF08\u7ECF\u6D4E\u5468\u671F ' + economyState + '\uFF09\uFF0C\u8BF7\u66F4\u65B0\u57FA\u7840\u6570\u636E',
-                    cardIndex,
+                    targetKey,
                     retryCount,
                     calcMode
                 });
@@ -15054,7 +17702,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             bestPrice: bestPrice,
             maxProfit: maxProfit,
             calculatedWages: calculatedWages,
-            cardIndex: cardIndex,
+            targetKey: targetKey,
+            quantity: parseFloat(quantity),
             retryCount: retryCount,
             calcMode: calcMode,
             finalTotalProfit: (bestPrice * parseFloat(quantity)) - cogs - calculatedWages,
@@ -15064,7 +17713,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     };
     `;
       const profitWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: "application/javascript" })));
-      function triggerCalculation(comp, index, retryCount = 0, calcMode = "hourly") {
+      function triggerCalculation(comp, targetKey, retryCount = 0, calcMode = "hourly") {
         if (localStorage.getItem("SimcompaniesConstantsData") == null) {
           showToast("\u8BF7\u5148\u70B9\u51FB\u5DE6\u4E0B\u89D2\u66F4\u65B0\u57FA\u7840\u6570\u636E", "error");
           return;
@@ -15087,10 +17736,13 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           weather
         } = comp.props;
         const { cogs: originalCogs, quality: quality2, quantity: quantity2 } = comp.state;
-        const cardEl = document.querySelectorAll('div[style="overflow: visible;"]')[index];
+        const quantityValue = Number(quantity2);
+        const priceInput = findPricingInputByTargetKey(targetKey);
+        const cardEl = getRetailPricingHost(priceInput);
         const customCostEl = cardEl?.querySelector(".custom-unit-cost-input");
         const customUnitCostVal = getRetailStoreButtonConfig().unitCost && customCostEl ? parseFloat(customCostEl.value) || 0 : 0;
-        const cogs2 = customUnitCostVal > 0 ? customUnitCostVal * quantity2 : originalCogs;
+        const cogs2 = customUnitCostVal > 0 ? customUnitCostVal * quantityValue : Number(originalCogs);
+        if (!Number.isFinite(quantityValue) || quantityValue <= 0 || !Number.isFinite(cogs2)) return;
         const vVal = salesModifierWithRecreationBonus2 + Math.floor(skillCMO2 / 3);
         const bVal = Ul(administrationOverhead2, skillCOO2);
         profitWorker.postMessage({
@@ -15113,8 +17765,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           // 备用
           cogs: cogs2,
           quality: quality2,
-          quantity: quantity2,
-          cardIndex: index,
+          quantity: quantityValue,
+          targetKey,
           retryCount,
           SCXXCS: SCXXCS5,
           PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL5,
@@ -15124,79 +17776,202 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       }
       profitWorker.onmessage = (event) => {
         if (event.data?.error) {
-          const card2 = document.querySelectorAll('div[style="overflow: visible;"]')[event.data.cardIndex];
+          const priceInput2 = findPricingInputByTargetKey(event.data.targetKey);
+          const card2 = getRetailPricingHost(priceInput2);
           const profitDisplay2 = card2?.querySelector(".auto-profit-display");
           const btnHourly2 = card2?.querySelector(".btn-max-hourly-profit");
           const btnTotal2 = card2?.querySelector(".btn-max-total-profit");
           if (profitDisplay2) {
-            profitDisplay2.textContent = event.data.error;
-            profitDisplay2.style.background = "#f44336";
-            profitDisplay2.style.color = "white";
+            updateRetailStatus(profitDisplay2, event.data.error, "error", DM());
           }
           if (btnHourly2) {
             btnHourly2.textContent = "\u6700\u5927\u65F6\u5229\u6DA6";
             btnHourly2.disabled = false;
           }
           if (btnTotal2) {
-            btnTotal2.textContent = "\u6700\u5927\u5229\u6DA6";
+            btnTotal2.textContent = "\u6700\u5927\u603B\u5229\u6DA6";
             btnTotal2.disabled = false;
           }
           return;
         }
-        const { bestPrice, maxProfit, calculatedWages, cardIndex, retryCount, calcMode, finalTotalProfit, finalW } = event.data;
+        const {
+          bestPrice,
+          calculatedWages,
+          targetKey,
+          quantity: calculationQuantity,
+          retryCount,
+          calcMode,
+          finalTotalProfit,
+          finalW
+        } = event.data;
         const mode = calcMode || "hourly";
-        const card = document.querySelectorAll('div[style="overflow: visible;"]')[cardIndex];
-        if (!card) return;
-        const priceInput = card.querySelector('input[name="price"]');
+        const priceInput = findPricingInputByTargetKey(targetKey);
+        const card = getRetailPricingHost(priceInput);
+        if (!card || !priceInput) return;
         const btnHourly = card.querySelector(".btn-max-hourly-profit");
         const btnTotal = card.querySelector(".btn-max-total-profit");
         const profitDisplay = card.querySelector(".auto-profit-display");
         if (!priceInput || !profitDisplay) return;
-        const comp = findReactComponent(priceInput);
+        const comp = resolveRetailPricingComponent(priceInput);
         if (!comp) return;
         const size2 = comp.props.size || 1;
         setInput(priceInput, bestPrice.toFixed(2));
         const hourlyProfit = finalW > 0 ? finalTotalProfit / finalW / size2 * 3600 : 0;
-        profitDisplay.innerHTML = `
-                <div>\u603B\u5229\u6DA6: ${finalTotalProfit.toFixed(2)}</div>
-                <div style="margin-top: 2px;">\u6BCF\u7EA7\u65F6\u5229\u6DA6: ${hourlyProfit.toFixed(2)}</div>
-            `;
-        profitDisplay.style.background = "#4CAF50";
-        profitDisplay.style.color = "white";
-        profitDisplay.style.fontWeight = "bold";
+        updateRetailProfitResult(profitDisplay, finalTotalProfit, hourlyProfit, DM());
         if (btnHourly) {
           btnHourly.textContent = "\u6700\u5927\u65F6\u5229\u6DA6";
           btnHourly.disabled = false;
         }
         if (btnTotal) {
-          btnTotal.textContent = "\u6700\u5927\u5229\u6DA6";
+          btnTotal.textContent = "\u6700\u5927\u603B\u5229\u6DA6";
           btnTotal.disabled = false;
         }
         setTimeout(() => {
-          const updatedComp = findReactComponent(priceInput);
+          const currentPriceInput = findPricingInputByTargetKey(targetKey) || priceInput;
+          const currentCard = getRetailPricingHost(currentPriceInput);
+          const updatedComp = resolveRetailPricingComponent(currentPriceInput);
           if (!updatedComp) return;
           const actualWages = updatedComp.state.wagesTotal;
-          if (Math.abs(calculatedWages - actualWages) > 1) {
+          const quantityChanged = updatedComp.kind === "functional" && Number.isFinite(calculationQuantity) && Number.isFinite(updatedComp.state.quantity) && Math.abs(updatedComp.state.quantity - calculationQuantity) > 0.5;
+          const wagesChanged = updatedComp.kind === "legacy" && Number.isFinite(actualWages) && Math.abs(calculatedWages - actualWages) > 1;
+          if (quantityChanged || wagesChanged) {
             if (retryCount < 5) {
-              const newQty = updatedComp.state.quantity;
-              profitDisplay.style.background = "#2196F3";
-              profitDisplay.style.color = "white";
-              profitDisplay.innerHTML = "\u{1F504} \u4FEE\u6B63\u6570\u91CF\u4E2D...";
-              if (typeof card.doAutoCalc === "function") {
-                card.doAutoCalc(updatedComp, retryCount + 1, mode);
+              updateRetailStatus(profitDisplay, "\u4FEE\u6B63\u6570\u91CF\u4E2D...", "busy", DM());
+              if (typeof currentCard?.doAutoCalc === "function") {
+                currentCard.doAutoCalc(updatedComp, retryCount + 1, mode);
               } else if (typeof triggerCalculation === "function") {
-                triggerCalculation(updatedComp, cardIndex, retryCount + 1, mode);
+                triggerCalculation(updatedComp, targetKey, retryCount + 1, mode);
               } else {
               }
             } else {
-              profitDisplay.style.background = "#f44336";
-              profitDisplay.style.color = "white";
-              profitDisplay.innerHTML = "\u26A0\uFE0F \u8BA1\u7B97\u504F\u5DEE\u8FC7\u5927";
-              showToast("\u5229\u6DA6\u8BA1\u7B97\u504F\u5DEE\uFF1A\u5EFA\u8BAE\u624B\u52A8\u8F93\u5165\u5177\u4F53\u6570\u91CF\u6216\u66F4\u65B0\u57FA\u7840\u6570\u636E,\u4F9D\u7136\u62A5\u9519\u8BF7\u8054\u7CFBRabbit House", "error");
+              const nativeStatus = profitDisplay.classList.contains("sc-retail-pricing-status");
+              updateRetailStatus(profitDisplay, "\u8BA1\u7B97\u504F\u5DEE\u8FC7\u5927", "error", DM());
+              if (!nativeStatus) {
+                showToast("\u5229\u6DA6\u8BA1\u7B97\u504F\u5DEE\uFF1A\u5EFA\u8BAE\u624B\u52A8\u8F93\u5165\u5177\u4F53\u6570\u91CF\u6216\u66F4\u65B0\u57FA\u7840\u6570\u636E,\u4F9D\u7136\u62A5\u9519\u8BF7\u8054\u7CFBRabbit House", "error");
+              }
             }
           }
-        }, 100);
+        }, comp.kind === "functional" ? 180 : 100);
       };
+      function findNativeRetailActionButton(host) {
+        const group = host.querySelector('div[role="group"][aria-labelledby^="retail-by-time-"]');
+        if (!group) return null;
+        const buttons = Array.from(group.querySelectorAll("button"));
+        return buttons.find((button) => button.textContent.trim().toUpperCase() === "MAX") || buttons[buttons.length - 1] || null;
+      }
+      function createRetailPricingButton(label, className, nativeButton) {
+        const button = nativeButton ? nativeButton.cloneNode(true) : document.createElement("button");
+        button.type = "button";
+        button.className = nativeButton ? `${nativeButton.className} ${className}` : `btn btn-secondary ${className}`;
+        button.textContent = label;
+        button.disabled = false;
+        button.removeAttribute("id");
+        button.removeAttribute("aria-label");
+        button.removeAttribute("aria-haspopup");
+        button.removeAttribute("aria-expanded");
+        button.removeAttribute("aria-pressed");
+        button.removeAttribute("aria-disabled");
+        button.style.textTransform = "none";
+        button.style.whiteSpace = "nowrap";
+        button.style.width = "100%";
+        button.style.minWidth = "0";
+        return button;
+      }
+      function getNewRetailPanelMount(priceInput, host) {
+        const quantityInput = host.querySelector('input[name="quantity"]');
+        if (quantityInput) {
+          let quantityPriceRow2 = priceInput.parentElement;
+          while (quantityPriceRow2 && quantityPriceRow2 !== host && !quantityPriceRow2.contains(quantityInput)) {
+            quantityPriceRow2 = quantityPriceRow2.parentElement;
+          }
+          if (quantityPriceRow2 && quantityPriceRow2 !== host) {
+            quantityPriceRow2.style.flexWrap = "wrap";
+            return quantityPriceRow2;
+          }
+        }
+        let priceField = null;
+        if (priceInput.id) {
+          const label = Array.from(host.querySelectorAll("label[for]")).find((node) => node.htmlFor === priceInput.id);
+          priceField = label?.closest("div") || null;
+        }
+        priceField ||= priceInput.parentElement?.parentElement?.parentElement || null;
+        const quantityPriceRow = priceField?.parentElement || null;
+        return quantityPriceRow || priceField || host;
+      }
+      function createNewRetailCostInput(priceInput, targetKey) {
+        const input = priceInput.cloneNode(false);
+        input.id = `${targetKey}-unit-cost`;
+        input.name = "sc-retail-unit-cost";
+        input.type = "number";
+        input.value = "";
+        input.placeholder = "\u5047\u8BBE\u5355\u4F4D\u6210\u672C";
+        input.min = "0";
+        input.step = "0.01";
+        input.autocomplete = "off";
+        input.className = `${priceInput.className || ""} custom-unit-cost-input`.trim();
+        Array.from(input.attributes).forEach((attribute) => {
+          if (attribute.name.startsWith("aria-")) input.removeAttribute(attribute.name);
+        });
+        input.removeAttribute("aria-invalid");
+        input.removeAttribute("aria-describedby");
+        input.style.width = "100%";
+        input.style.boxSizing = "border-box";
+        return input;
+      }
+      function formatRetailProfit(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "-";
+        return number.toLocaleString("zh-CN", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+      }
+      function updateRetailStatus(display, message, type = "idle", dark = false) {
+        if (!display) return;
+        if (display.classList.contains("sc-retail-pricing-status")) {
+          display.classList.remove("sc-retail-pricing-metrics", "is-idle", "is-busy", "is-error", "is-success");
+          display.classList.add("sc-retail-status-message", `is-${type}`);
+          display.classList.toggle("sc-retail-status-empty", type === "idle" || type === "busy");
+          display.textContent = message;
+          return;
+        }
+        display.textContent = message;
+        display.style.background = type === "error" ? "#f44336" : type === "success" ? "#4CAF50" : type === "busy" ? "#2196F3" : dark ? "#555" : "#e0e0e0";
+        display.style.color = type === "idle" ? dark ? "#fff" : "#333" : "white";
+        display.style.fontWeight = type === "idle" ? "normal" : "bold";
+      }
+      function updateRetailProfitResult(display, totalProfit, hourlyProfit, dark = false) {
+        if (!display) return;
+        if (display.classList.contains("sc-retail-pricing-status")) {
+          display.classList.remove(
+            "sc-retail-status-message",
+            "sc-retail-status-empty",
+            "is-idle",
+            "is-busy",
+            "is-error",
+            "is-success"
+          );
+          display.classList.add("sc-retail-pricing-metrics", "is-success");
+          display.innerHTML = `
+                    <div class="sc-retail-pricing-metric">
+                        <span>\u603B\u5229\u6DA6</span>
+                        <strong${totalProfit < 0 ? ' class="is-negative"' : ""}>${formatRetailProfit(totalProfit)}</strong>
+                    </div>
+                    <div class="sc-retail-pricing-metric">
+                        <span>\u6BCF\u7EA7\u65F6\u5229\u6DA6</span>
+                        <strong${hourlyProfit < 0 ? ' class="is-negative"' : ""}>${formatRetailProfit(hourlyProfit)}</strong>
+                    </div>
+                `;
+          return;
+        }
+        display.innerHTML = `
+                <div>\u603B\u5229\u6DA6: ${totalProfit.toFixed(2)}</div>
+                <div style="margin-top:2px;">\u6BCF\u7EA7\u65F6\u5229\u6DA6: ${hourlyProfit.toFixed(2)}</div>
+            `;
+        display.style.background = "#4CAF50";
+        display.style.color = "white";
+        display.style.fontWeight = "bold";
+      }
       function initAutoPricing() {
         try {
           const buttonConfig = getRetailStoreButtonConfig();
@@ -15205,53 +17980,114 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             return;
           }
           ensureRetailStoreButtonStyles();
-          const input = document.querySelector('input[name="price"]');
-          if (!input) return;
-          const reactInstance = findReactComponent(input);
-          if (!reactInstance) return;
-          const cards = document.querySelectorAll('div[style="overflow: visible;"]');
-          cards.forEach((card, index) => {
-            if (card.dataset.autoPricingAdded) return;
-            const priceInput = card.querySelector('input[name="price"]');
-            if (!priceInput) return;
-            const comp = findReactComponent(priceInput);
-            if (!comp) return;
+          const processedHosts = /* @__PURE__ */ new Set();
+          document.querySelectorAll('input[name="price"]').forEach((priceInput, index) => {
+            const card = getRetailPricingHost(priceInput);
+            if (!card || processedHosts.has(card)) return;
+            processedHosts.add(card);
+            const existingPanel = card.querySelector(".sc-retail-store-button-container");
+            const inputId = priceInput.id || "";
+            if (card.dataset.autoPricingAdded && existingPanel && card.dataset.scRetailPricingInputId === inputId) {
+              return;
+            }
+            if (existingPanel) {
+              existingPanel.remove();
+            }
+            if (card.dataset.autoPricingAdded) delete card.dataset.autoPricingAdded;
+            const isNewUI = isNewRetailPricingHost(priceInput, card);
+            const targetKey = getRetailPricingTargetKey(priceInput, card);
+            const nativeButton = isNewUI ? findNativeRetailActionButton(card) : null;
             const btnContainer = document.createElement("div");
-            btnContainer.className = "sc-retail-store-button-container";
-            btnContainer.style = `display: flex; flex-direction: column; gap: 4px; margin-top: 5px;`;
-            const btnHourly = document.createElement("button");
-            btnHourly.textContent = "\u6700\u5927\u65F6\u5229\u6DA6";
-            btnHourly.type = "button";
-            btnHourly.className = "btn-max-hourly-profit";
-            btnHourly.setAttribute("data-index", index);
-            btnHourly.style = `background: #2196F3; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; width: 100%;`;
-            const btnTotal = document.createElement("button");
-            btnTotal.textContent = "\u6700\u5927\u5229\u6DA6";
-            btnTotal.type = "button";
-            btnTotal.className = "btn-max-total-profit";
-            btnTotal.setAttribute("data-index", index);
-            btnTotal.style = `background: #e91e63; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; width: 100%;`;
-            btnContainer.appendChild(btnHourly);
-            btnContainer.appendChild(btnTotal);
+            btnContainer.className = `sc-retail-store-button-container${isNewUI ? " sc-retail-pricing-native" : ""}`;
+            btnContainer.dataset.layout = isNewUI ? "native" : "legacy";
+            if (!isNewUI) {
+              btnContainer.style = "display:flex;flex-direction:column;gap:4px;margin-top:5px;";
+            }
+            const buttonRow = document.createElement("div");
+            buttonRow.className = "sc-retail-store-button-row";
+            if (!isNewUI) {
+              buttonRow.style = "display:flex;flex-direction:column;gap:4px;width:100%;";
+            }
+            const btnHourly = createRetailPricingButton("\u6700\u5927\u65F6\u5229\u6DA6", "btn-max-hourly-profit", nativeButton);
+            const btnTotal = createRetailPricingButton("\u6700\u5927\u603B\u5229\u6DA6", "btn-max-total-profit", nativeButton);
+            if (!isNewUI) {
+              btnHourly.style.cssText = "background:#2196F3;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:13px;width:100%;";
+              btnTotal.style.cssText = "background:#e91e63;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:13px;width:100%;";
+            }
+            buttonRow.appendChild(btnHourly);
+            buttonRow.appendChild(btnTotal);
             const d = DM();
             const profitDisplay = document.createElement("div");
-            profitDisplay.className = "auto-profit-display";
-            profitDisplay.textContent = `\u7B49\u5F85\u8BA1\u7B97...`;
-            profitDisplay.style = `margin-top: 5px; font-size: 14px; color: ${d ? "#fff" : "#333"}; background: ${d ? "#555" : "#e0e0e0"}; padding: 4px 8px; text-align: center; border-radius: 4px;`;
-            const customCostInput = document.createElement("input");
-            customCostInput.type = "number";
-            customCostInput.className = "custom-unit-cost-input";
-            customCostInput.placeholder = "\u5047\u8BBE\u5355\u4F4D\u6210\u672C";
-            customCostInput.min = "0";
-            customCostInput.step = "0.01";
-            customCostInput.style = `margin-top: 5px; width: 100%; padding: 4px 8px; border: 1px solid ${d ? "#555" : "#bbb"}; border-radius: 4px; background: ${d ? "#333" : "#fff"}; color: ${d ? "#fff" : "#333"}; font-size: 13px; box-sizing: border-box;`;
+            profitDisplay.className = `auto-profit-display${isNewUI ? " sc-retail-pricing-status sc-retail-status-message is-idle sc-retail-status-empty" : ""}`;
+            profitDisplay.textContent = isNewUI ? "" : "\u7B49\u5F85\u8BA1\u7B97...";
+            if (isNewUI) {
+              const surface = d ? "rgba(0,0,0,.18)" : "rgba(0,0,0,.035)";
+              const border = d ? "rgba(255,255,255,.17)" : "rgba(0,0,0,.16)";
+              const muted = d ? "rgba(255,255,255,.62)" : "rgba(0,0,0,.56)";
+              btnContainer.style.setProperty("--sc-retail-surface", surface);
+              btnContainer.style.setProperty("--sc-retail-border", border);
+              btnContainer.style.setProperty("--sc-retail-muted", muted);
+              btnContainer.style.setProperty("--sc-retail-text", d ? "#f1f1f1" : "#242424");
+              btnContainer.style.setProperty("--sc-retail-positive", d ? "#79d68a" : "#2e7d3a");
+              btnContainer.style.setProperty("--sc-retail-negative", d ? "#ff8a80" : "#b42318");
+              btnContainer.style.setProperty("--sc-retail-busy", d ? "#74b7ff" : "#1769aa");
+            } else {
+              profitDisplay.style = `font-size:14px;color:${d ? "#fff" : "#333"};background:${d ? "#555" : "#e0e0e0"};padding:4px 8px;text-align:center;border-radius:4px;`;
+            }
+            const customCostInput = isNewUI ? createNewRetailCostInput(priceInput, targetKey) : document.createElement("input");
+            if (!isNewUI) {
+              customCostInput.type = "number";
+              customCostInput.className = "custom-unit-cost-input";
+              customCostInput.placeholder = "\u5047\u8BBE\u5355\u4F4D\u6210\u672C";
+              customCostInput.min = "0";
+              customCostInput.step = "0.01";
+              customCostInput.style = `width:100%;padding:4px 8px;border:1px solid ${d ? "#555" : "#bbb"};border-radius:4px;background:${d ? "#333" : "#fff"};color:${d ? "#fff" : "#333"};font-size:13px;box-sizing:border-box;`;
+            }
+            let costField = null;
+            if (isNewUI) {
+              costField = document.createElement("label");
+              costField.className = "sc-retail-cost-field";
+              const costLabel = document.createElement("span");
+              costLabel.textContent = "\u5047\u8BBE\u5355\u4F4D\u6210\u672C";
+              costField.append(costLabel, customCostInput);
+            }
+            btnContainer.appendChild(buttonRow);
+            btnContainer.appendChild(profitDisplay);
+            btnContainer.appendChild(costField || customCostInput);
             btnHourly.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly);
             btnTotal.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.total);
             customCostInput.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.unitCost);
+            costField?.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.unitCost);
             btnContainer.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly && !buttonConfig.total);
+            profitDisplay.classList.toggle(RETAIL_BUTTON_HIDDEN_CLASS, !buttonConfig.hourly && !buttonConfig.total);
+            const resetButtons = () => {
+              btnHourly.textContent = "\u6700\u5927\u65F6\u5229\u6DA6";
+              btnHourly.disabled = false;
+              btnTotal.textContent = "\u6700\u5927\u603B\u5229\u6DA6";
+              btnTotal.disabled = false;
+            };
+            const setStatus = (message, type = "idle") => {
+              updateRetailStatus(profitDisplay, message, type, d);
+            };
             const startCalc = (targetComp, retryIdx = 0, mode = "hourly") => {
-              if (localStorage.getItem("SimcompaniesConstantsData") == null) {
-                showToast("\u8BF7\u5C1D\u8BD5\u66F4\u65B0\u57FA\u672C\u6570\u636E\uFF08\u5DE6\u4E0B\u89D2\u6309\u94AE\uFF09");
+              const latestComp = resolveRetailPricingComponent(priceInput) || targetComp;
+              if (!latestComp) {
+                setStatus("\u672A\u627E\u5230\u96F6\u552E\u8BA1\u7B97\u6570\u636E\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u540E\u91CD\u8BD5", "error");
+                resetButtons();
+                return;
+              }
+              const rawConstants = localStorage.getItem("SimcompaniesConstantsData");
+              if (!rawConstants) {
+                setStatus("\u8BF7\u5148\u5728\u63D2\u4EF6\u83DC\u5355\u66F4\u65B0\u57FA\u7840\u6570\u636E", "error");
+                resetButtons();
+                return;
+              }
+              let constantsData2;
+              try {
+                constantsData2 = JSON.parse(rawConstants);
+              } catch (e) {
+                setStatus("\u57FA\u7840\u6570\u636E\u635F\u574F\uFF0C\u8BF7\u91CD\u65B0\u66F4\u65B0\u57FA\u7840\u6570\u636E", "error");
+                resetButtons();
                 return;
               }
               if (retryIdx === 0) {
@@ -15262,19 +18098,43 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                   btnTotal.textContent = "\u8BA1\u7B97\u4E2D...";
                   btnTotal.disabled = true;
                 }
+              } else if (mode === "hourly") {
+                btnHourly.textContent = "\u4FEE\u6B63\u4E2D...";
+                btnHourly.disabled = true;
+              } else {
+                btnTotal.textContent = "\u4FEE\u6B63\u4E2D...";
+                btnTotal.disabled = true;
               }
-              profitDisplay.textContent = retryIdx > 0 ? `\u4FEE\u6B63\u4E2D(${retryIdx})...` : `\u8BA1\u7B97\u4E2D...`;
-              const lwe2 = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).retailInfo;
-              const zn2 = JSON.parse(localStorage.getItem("SimcompaniesConstantsData")).data;
-              const { size: size2, acceleration: acceleration2, economyState: economyState2, resource: resource2, salesModifierWithRecreationBonus: salesModifierWithRecreationBonus2, skillCMO: skillCMO2, skillCOO: skillCOO2, saturation: saturation2, administrationOverhead: administrationOverhead2, wages: wages2, buildingKind: buildingKind2, forceQuality: forceQuality2, weather = null } = targetComp.props;
-              const { cogs: originalCogs, quality: quality2, quantity: quantity2 } = targetComp.state;
+              setStatus(retryIdx > 0 ? `\u4FEE\u6B63\u4E2D(${retryIdx})...` : "\u8BA1\u7B97\u4E2D...", "busy");
+              const {
+                size: size2,
+                acceleration: acceleration2,
+                economyState: economyState2,
+                resource: resource2,
+                salesModifierWithRecreationBonus: salesModifierWithRecreationBonus2,
+                skillCMO: skillCMO2,
+                skillCOO: skillCOO2,
+                saturation: saturation2,
+                administrationOverhead: administrationOverhead2,
+                wages: wages2,
+                buildingKind: buildingKind2,
+                forceQuality: forceQuality2,
+                weather = null
+              } = latestComp.props;
+              const { cogs: originalCogs, quality: quality2, quantity: quantity2 } = latestComp.state;
+              const quantityValue = Number(quantity2);
               const customUnitCost = getRetailStoreButtonConfig().unitCost ? parseFloat(customCostInput.value) || 0 : 0;
-              const cogs2 = customUnitCost > 0 ? customUnitCost * quantity2 : originalCogs;
-              const v = salesModifierWithRecreationBonus2 + Math.floor(skillCMO2 / 3);
+              const cogs2 = customUnitCost > 0 ? customUnitCost * quantityValue : Number(originalCogs);
+              if (!Number.isFinite(quantityValue) || quantityValue <= 0 || !Number.isFinite(cogs2)) {
+                setStatus("\u8BF7\u5148\u8F93\u5165\u6709\u6548\u6570\u91CF\u548C\u5E93\u5B58\u6210\u672C", "error");
+                resetButtons();
+                return;
+              }
+              const v = (salesModifierWithRecreationBonus2 || 0) + Math.floor((skillCMO2 || 0) / 3);
               const b = Ul(administrationOverhead2, skillCOO2);
               profitWorker.postMessage({
-                lwe: lwe2,
-                zn: zn2,
+                lwe: constantsData2.retailInfo,
+                zn: constantsData2.data,
                 size: size2,
                 acceleration: acceleration2,
                 economyState: economyState2,
@@ -15292,10 +18152,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                 b,
                 cogs: cogs2,
                 quality: quality2,
-                quantity: quantity2,
-                cardIndex: index,
+                quantity: quantityValue,
+                targetKey,
                 retryCount: retryIdx,
-                // 发送当前是第几次尝试
                 SCXXCS: SCXXCS5,
                 PROFIT_PER_BUILDING_LEVEL: PROFIT_PER_BUILDING_LEVEL5,
                 RETAIL_ADJUSTMENT: RETAIL_ADJUSTMENT5,
@@ -15305,21 +18164,24 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             btnHourly.onclick = (e) => {
               e.preventDefault();
               e.stopPropagation();
-              startCalc(comp, 0, "hourly");
+              startCalc(null, 0, "hourly");
             };
             btnTotal.onclick = (e) => {
               e.preventDefault();
               e.stopPropagation();
-              startCalc(comp, 0, "total");
+              startCalc(null, 0, "total");
             };
             card.doAutoCalc = startCalc;
-            priceInput.parentNode.insertBefore(btnContainer, priceInput.nextSibling);
-            priceInput.parentNode.insertBefore(profitDisplay, btnContainer.nextSibling);
-            priceInput.parentNode.insertBefore(customCostInput, profitDisplay.nextSibling);
+            if (isNewUI) {
+              getNewRetailPanelMount(priceInput, card).appendChild(btnContainer);
+            } else {
+              priceInput.parentNode.insertBefore(btnContainer, priceInput.nextSibling);
+            }
             card.dataset.autoPricingAdded = "true";
           });
           refreshAutoPricingButtons();
         } catch (err) {
+          console.warn("[\u96F6\u552E\u5B9A\u4EF7] \u521D\u59CB\u5316\u5931\u8D25", err);
         }
       }
       window.initAutoPricing = initAutoPricing;
@@ -15331,13 +18193,19 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           clearTimeout(debounceTimer);
           clearTimeout(lateCheckTimer);
           debounceTimer = setTimeout(() => {
-            const hasNewCards = mutationsList.some((mutation) => {
-              return mutation.type === "childList" && mutation.addedNodes.length > 0 && Array.from(mutation.addedNodes).some((node) => {
-                return node.nodeType === 1 && // 元素节点
-                (node.matches('div[style="overflow: visible;"]') || node.querySelector('div[style="overflow: visible;"]'));
+            const hasRelevantChanges = mutationsList.some((mutation) => {
+              if (mutation.type !== "childList") return false;
+              const hasAddedCard = mutation.addedNodes.length > 0 && Array.from(mutation.addedNodes).some((node) => {
+                return node.nodeType === 1 && (node.matches(`${LEGACY_RETAIL_CARD_SELECTOR}, ${NEW_RETAIL_ROW_SELECTOR}, ${NEW_RETAIL_PRICE_SELECTOR}`) || node.querySelector(`${LEGACY_RETAIL_CARD_SELECTOR}, ${NEW_RETAIL_ROW_SELECTOR}, ${NEW_RETAIL_PRICE_SELECTOR}`));
               });
+              if (hasAddedCard) return true;
+              const target = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
+              const host = target?.closest?.(`${LEGACY_RETAIL_CARD_SELECTOR}, ${NEW_RETAIL_ROW_SELECTOR}`);
+              return Boolean(
+                host && host.querySelector('input[name="price"]') && !host.querySelector(".sc-retail-store-button-container")
+              );
             });
-            if (hasNewCards) {
+            if (hasRelevantChanges) {
               initAutoPricing();
               lateCheckTimer = setTimeout(() => {
                 initAutoPricing();
@@ -16471,6 +19339,16 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         "y": 0,
         "z": 241.5
       };
+      const ADMIN_OVERHEAD_EXCLUDED_KINDS = /* @__PURE__ */ new Set(["3", "4", "5", "n"]);
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        })[char]);
+      }
       function getBuildingsData() {
         const realmId = typeof getRealmIdFromLink === "function" ? getRealmIdFromLink() : null;
         if (realmId === null) return [];
@@ -16496,19 +19374,52 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           return null;
         }
       }
-      function calcTotalAdminFee(buildings, SRC) {
-        if (!buildings || buildings.length === 0 || !SRC) return 0;
-        const adminOverhead = SRC.administration || 1;
-        if (adminOverhead <= 1) return 0;
-        let total = 0;
+      function getAdministrationStats(buildings) {
+        let totalBuildingLevel = 0;
+        for (const building of buildings || []) {
+          if (String(building.position) === "P") continue;
+          if (ADMIN_OVERHEAD_EXCLUDED_KINDS.has(String(building.kind))) continue;
+          const level = Number(building.size);
+          if (Number.isFinite(level) && level > 0) totalBuildingLevel += level;
+        }
+        const overheadRate = Math.max(0, (totalBuildingLevel - 1) / 170);
+        return {
+          totalBuildingLevel,
+          overheadRate,
+          administrationOverhead: 1 + overheadRate
+        };
+      }
+      function getAdminFeeBreakdown(buildings, adminStats) {
+        if (!buildings || buildings.length === 0 || !adminStats) return [];
+        const overheadRate = adminStats.overheadRate;
+        if (overheadRate <= 0) return [];
+        const groups = /* @__PURE__ */ new Map();
         for (const b of buildings) {
           if (String(b.position) === "P") continue;
           const baseWage = BASE_WAGES[b.kind];
           if (baseWage === void 0 || baseWage === 0) continue;
+          const level = Number(b.size);
+          if (!Number.isFinite(level) || level <= 0) continue;
           const robotMultiplier = typeof b.robotsSpecialization === "number" ? 0.97 : 1;
-          total += baseWage * b.size * 24 * robotMultiplier * (adminOverhead - 1);
+          const fee = baseWage * level * 24 * robotMultiplier * overheadRate;
+          let group = groups.get(b.kind);
+          if (!group) {
+            group = {
+              kind: b.kind,
+              name: getBuildingName(b.kind, `\u5EFA\u7B51 ${b.kind}`),
+              count: 0,
+              totalLevel: 0,
+              robotLevel: 0,
+              fee: 0
+            };
+            groups.set(b.kind, group);
+          }
+          group.count += 1;
+          group.totalLevel += level;
+          group.fee += fee;
+          if (robotMultiplier < 1) group.robotLevel += level;
         }
-        return total;
+        return Array.from(groups.values()).sort((a, b) => b.fee - a.fee || a.name.localeCompare(b.name));
       }
       function showCOOCalcModal() {
         const existing = document.getElementById("sc-coo-calc-overlay");
@@ -16523,8 +19434,61 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           alert("\u672A\u627E\u5230\u9886\u57DF\u6570\u636E\uFF0C\u8BF7\u5148\u66F4\u65B0\u9886\u57DF\u6570\u636E\uFF08\u5DE6\u4E0B\u89D2\u6309\u94AE\uFF09\u3002");
           return;
         }
-        const totalFee = calcTotalAdminFee(buildings, SRC);
+        const adminStats = getAdministrationStats(buildings);
+        const feeGroups = getAdminFeeBreakdown(buildings, adminStats);
+        const totalFee = feeGroups.reduce((sum, group) => sum + group.fee, 0);
+        const paidBuildingCount = feeGroups.reduce((sum, group) => sum + group.count, 0);
+        const totalBuildingLevel = feeGroups.reduce((sum, group) => sum + group.totalLevel, 0);
         const defaultCOO = SRC.adminBonus || 0;
+        const formatMoney = (value) => "$" + (Number(value) || 0).toLocaleString(void 0, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+        const detailRowsHtml = feeGroups.length > 0 ? feeGroups.map((group) => {
+          return `
+                        <div class="sc-coo-detail-row" data-building-fee="${group.fee}">
+                            <div class="sc-coo-building-cell">
+                                <span class="sc-coo-detail-name">${escapeHtml(group.name)} <span class="sc-coo-detail-count">\xD7${group.count}</span></span>
+                            </div>
+                            <div class="sc-coo-level-cell">
+                                <span class="sc-coo-level-total">${group.totalLevel}\u7EA7</span>
+                                ${group.robotLevel > 0 ? `<span class="sc-coo-level-robot">\u673A\u5668\u4EBA ${group.robotLevel}\u7EA7</span>` : ""}
+                            </div>
+                            <div class="sc-coo-money-cell sc-coo-base-cell">
+                                <span class="sc-coo-money-label">\u8D39\u7528</span>
+                                <strong>${formatMoney(group.fee)}</strong>
+                            </div>
+                            <div class="sc-coo-money-cell sc-coo-saved-cell">
+                                <span class="sc-coo-money-label">\u8282\u7701</span>
+                                <strong data-coo-saved>${formatMoney(0)}</strong>
+                            </div>
+                            <div class="sc-coo-money-cell sc-coo-remain-cell">
+                                <span class="sc-coo-money-label">\u5B9E\u9645</span>
+                                <strong data-coo-remain>${formatMoney(group.fee)}</strong>
+                            </div>
+                        </div>
+                    `;
+        }).join("") : '<div class="sc-coo-detail-empty">\u5F53\u524D\u5EFA\u7B51\u4E0D\u4EA7\u751F\u7BA1\u7406\u8D39</div>';
+        const detailTotalHtml = `
+                <div class="sc-coo-total-row">
+                    <div class="sc-coo-building-cell sc-coo-total-label">\u5408\u8BA1</div>
+                    <div class="sc-coo-level-cell">
+                        <span class="sc-coo-level-total">${totalBuildingLevel}\u7EA7</span>
+                    </div>
+                    <div class="sc-coo-money-cell sc-coo-base-cell">
+                        <span class="sc-coo-money-label">\u8D39\u7528</span>
+                        <strong>${formatMoney(totalFee)}</strong>
+                    </div>
+                    <div class="sc-coo-money-cell sc-coo-saved-cell">
+                        <span class="sc-coo-money-label">\u8282\u7701</span>
+                        <strong data-total-coo-saved>${formatMoney(0)}</strong>
+                    </div>
+                    <div class="sc-coo-money-cell sc-coo-remain-cell">
+                        <span class="sc-coo-money-label">\u5B9E\u9645</span>
+                        <strong data-total-coo-remain>${formatMoney(totalFee)}</strong>
+                    </div>
+                </div>
+            `;
         const d17 = DM();
         const bg = d17 ? "#1e1e1e" : "#fff";
         const fg = d17 ? "#efefef" : "#333";
@@ -16532,10 +19496,6 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         const border = d17 ? "#555" : "#ccc";
         const inputBg = d17 ? "#333" : "#f5f5f5";
         const inputFg = d17 ? "#efefef" : "#333";
-        const accentBg = d17 ? "#1a3a5c" : "#e3f2fd";
-        const accentBorder = d17 ? "#2a5a8c" : "#bbdefb";
-        const resultBg = d17 ? "#1a3a1a" : "#e8f5e9";
-        const resultBorder = d17 ? "#2a5a2a" : "#c8e6c9";
         const origOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
         const overlay = document.createElement("div");
@@ -16547,23 +19507,264 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                 opacity: 0; transition: opacity 0.2s;
             `;
         const modal = document.createElement("div");
+        modal.className = "sc-coo-modal";
         modal.style.cssText = `
                 background: ${bg}; color: ${fg}; border-radius: 12px;
-                width: 440px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+                max-height: 85vh; overflow-y: auto;
                 padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
                 font-family: sans-serif; transform: scale(0.95);
-                transition: transform 0.2s;
             `;
         modal.innerHTML = `
+                <style>
+                    .sc-coo-modal {
+                        width: min(440px, 92vw);
+                        box-sizing: border-box;
+                        transition: transform 0.2s;
+                    }
+                    @media (min-width: 720px) {
+                        .sc-coo-modal {
+                            width: min(720px, 94vw);
+                        }
+                    }
+                    .sc-coo-building-details {
+                        margin: 0 0 16px;
+                        padding: 12px;
+                        border: 1px solid ${border};
+                        border-radius: 8px;
+                        background: ${d17 ? "#252525" : "#fafafa"};
+                        --sc-coo-detail-grid: minmax(120px, 1.35fr) 82px minmax(100px, 1fr) minmax(90px, 0.9fr) minmax(90px, 0.9fr);
+                    }
+                    .sc-coo-detail-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: baseline;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        margin-bottom: 8px;
+                        color: ${fg};
+                        font-size: 13px;
+                    }
+                    .sc-coo-detail-header span {
+                        color: ${fg2};
+                        font-size: 11px;
+                        font-weight: normal;
+                    }
+                    .sc-coo-table-head,
+                    .sc-coo-detail-row {
+                        display: grid;
+                        grid-template-columns: var(--sc-coo-detail-grid);
+                        gap: 8px;
+                        align-items: center;
+                    }
+                    .sc-coo-table-head {
+                        position: sticky;
+                        top: 0;
+                        z-index: 2;
+                        padding: 5px 4px 7px;
+                        border-bottom: 1px solid ${border};
+                        background: ${d17 ? "#252525" : "#fafafa"};
+                        color: ${fg2};
+                        font-size: 11px;
+                        text-align: right;
+                    }
+                    .sc-coo-table-head > :first-child {
+                        text-align: left;
+                    }
+                    .sc-coo-detail-scroll {
+                        max-height: clamp(190px, 32vh, 320px);
+                        overflow-y: auto;
+                        overscroll-behavior-y: auto;
+                        scrollbar-gutter: stable;
+                        -webkit-overflow-scrolling: touch;
+                    }
+                    .sc-coo-detail-row {
+                        padding: 9px 4px;
+                        border-bottom: 1px solid ${border};
+                        font-variant-numeric: tabular-nums;
+                    }
+                    .sc-coo-detail-row:last-child {
+                        border-bottom: 0;
+                    }
+                    .sc-coo-detail-row:nth-child(even) {
+                        background: rgba(127, 127, 127, 0.06);
+                    }
+                    .sc-coo-building-cell {
+                        min-width: 0;
+                        text-align: left;
+                    }
+                    .sc-coo-detail-name {
+                        color: ${fg};
+                        font-size: 14px;
+                        font-weight: bold;
+                        overflow-wrap: anywhere;
+                    }
+                    .sc-coo-detail-count {
+                        color: ${fg2};
+                        font-size: 11px;
+                        font-weight: normal;
+                    }
+                    .sc-coo-level-cell {
+                        display: flex;
+                        min-height: 34px;
+                        flex-direction: column;
+                        align-items: flex-end;
+                        justify-content: center;
+                        gap: 1px;
+                        text-align: right;
+                    }
+                    .sc-coo-level-total {
+                        color: ${fg};
+                        font-size: 14px;
+                        font-weight: bold;
+                        white-space: nowrap;
+                    }
+                    .sc-coo-level-robot {
+                        color: ${fg2};
+                        font-size: 12px;
+                        line-height: 1.25;
+                        white-space: nowrap;
+                    }
+                    .sc-coo-money-cell {
+                        display: flex;
+                        min-width: 0;
+                        flex-direction: column;
+                        align-items: flex-end;
+                        gap: 1px;
+                        color: ${fg};
+                        font-size: 14px;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                    }
+                    .sc-coo-money-cell strong {
+                        color: ${fg};
+                        font-weight: bold;
+                    }
+                    .sc-coo-base-cell strong {
+                        color: #2196F3;
+                    }
+                    .sc-coo-money-label {
+                        display: none;
+                        color: ${fg2};
+                        font-size: 11px;
+                        font-weight: normal;
+                    }
+                    .sc-coo-total-row {
+                        position: sticky;
+                        bottom: 0;
+                        z-index: 2;
+                        display: grid;
+                        grid-template-columns: var(--sc-coo-detail-grid);
+                        align-items: center;
+                        gap: 8px;
+                        margin-top: 2px;
+                        padding: 10px 4px 3px;
+                        border-top: 2px solid ${border};
+                        background: ${d17 ? "#252525" : "#fafafa"};
+                        color: ${fg};
+                        font-size: 14px;
+                        font-weight: bold;
+                        font-variant-numeric: tabular-nums;
+                    }
+                    .sc-coo-total-label {
+                        font-size: 14px;
+                    }
+                    .sc-coo-detail-empty {
+                        color: ${fg2};
+                        font-size: 11px;
+                        line-height: 1.55;
+                    }
+                    .sc-coo-detail-empty {
+                        padding: 12px 4px;
+                    }
+                    @media (max-width: 640px) {
+                        .sc-coo-modal {
+                            padding: 18px;
+                        }
+                        .sc-coo-building-details {
+                            padding: 10px;
+                        }
+                        .sc-coo-detail-header span {
+                            flex: 1 1 100%;
+                        }
+                        .sc-coo-detail-scroll {
+                            max-height: clamp(220px, 42vh, 360px);
+                        }
+                        .sc-coo-table-head {
+                            display: none;
+                        }
+                        .sc-coo-detail-row,
+                        .sc-coo-total-row {
+                            grid-template-columns: repeat(2, minmax(0, 1fr));
+                            grid-template-areas:
+                                "building fee"
+                                "level level"
+                                "saved saved"
+                                "remain remain";
+                            gap: 5px 10px;
+                        }
+                        .sc-coo-detail-row {
+                            padding: 10px 2px;
+                        }
+                        .sc-coo-building-cell {
+                            grid-area: building;
+                            align-self: center;
+                        }
+                        .sc-coo-level-cell {
+                            grid-area: level;
+                            min-height: 0;
+                            flex-direction: row;
+                            flex-wrap: wrap;
+                            align-items: baseline;
+                            justify-content: flex-start;
+                            gap: 3px 8px;
+                            text-align: left;
+                        }
+                        .sc-coo-base-cell {
+                            grid-area: fee;
+                        }
+                        .sc-coo-saved-cell {
+                            grid-area: saved;
+                        }
+                        .sc-coo-remain-cell {
+                            grid-area: remain;
+                        }
+                        .sc-coo-money-cell {
+                            flex-direction: row;
+                            flex-wrap: wrap;
+                            align-items: baseline;
+                            gap: 4px;
+                            font-size: 13px;
+                        }
+                        .sc-coo-money-cell strong {
+                            min-width: 0;
+                            white-space: normal;
+                            overflow-wrap: anywhere;
+                        }
+                        .sc-coo-saved-cell {
+                            justify-content: space-between;
+                        }
+                        .sc-coo-remain-cell {
+                            justify-content: space-between;
+                        }
+                        .sc-coo-base-cell {
+                            justify-content: flex-end;
+                        }
+                        .sc-coo-money-label {
+                            display: inline;
+                        }
+                        .sc-coo-total-row {
+                            padding: 10px 2px 3px;
+                            font-size: 13px;
+                        }
+                        .sc-coo-total-row .sc-coo-level-cell {
+                            grid-area: level;
+                        }
+                    }
+                </style>
+
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid ${border}; padding-bottom:12px; margin-bottom:16px;">
                     <h3 style="margin:0; font-size:18px;">\u{1F4B0}COO\u6536\u76CA\u8BA1\u7B97</h3>
                     <button id="sc-coo-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d17 ? "#aaa" : "#999"}; line-height:1;">&times;</button>
-                </div>
-
-                <div style="background:${accentBg}; border:1px solid ${accentBorder}; border-radius:8px; padding:12px; margin-bottom:16px;">
-                    <div style="font-size:13px; color:${fg2}; margin-bottom:4px;">\u5F53\u524D\u5730\u56FE\u4E0A\u6240\u6709\u5EFA\u7B51\u8FD0\u884C24\u5C0F\u65F6\u7684\u7BA1\u7406\u8D39</div>
-                    <div id="sc-coo-total-fee" style="font-size:24px; font-weight:bold; color:#2196F3;">$${totalFee.toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                    <div style="font-size:11px; color:${d17 ? "#888" : "#999"}; margin-top:4px;">\u7BA1\u7406\u8D39\u7528: ${(((SRC.administration || 1) - 1) * 100).toFixed(1)}% | \u5EFA\u7B51\u6570: ${buildings.length}</div>
                 </div>
 
                 <div style="margin-bottom:16px;">
@@ -16573,14 +19774,25 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                         background:${inputBg}; color:${inputFg}; font-size:16px; box-sizing:border-box;">
                 </div>
 
-                <div style="background:${resultBg}; border:1px solid ${resultBorder}; border-radius:8px; padding:12px;">
-                    <div style="font-size:13px; color:${fg2}; margin-bottom:4px;">COO\u8282\u7701\u7684\u7BA1\u7406\u8D39</div>
-                    <div id="sc-coo-saved-fee" style="font-size:24px; font-weight:bold; color:#4CAF50;">$0.00</div>
-                    <div style="font-size:13px; color:${fg2}; margin-top:8px; margin-bottom:4px;">\u6BCF\u65E5\u5B9E\u9645\u7BA1\u7406\u8D39</div>
-                    <div id="sc-coo-remain-fee" style="font-size:24px; font-weight:bold; color:#FF9800;">$0.00</div>
+                <div id="sc-coo-building-details" class="sc-coo-building-details">
+                    <div class="sc-coo-detail-header">
+                        <strong>\u5EFA\u7B51\u7BA1\u7406\u8D39\u660E\u7EC6</strong>
+                        <span>\u7BA1\u7406\u8D39\u7528 ${(adminStats.overheadRate * 100).toFixed(2)}% \xB7 \u603B\u5EFA\u7B51\u7B49\u7EA7 ${adminStats.totalBuildingLevel} \xB7 \u8BA1\u8D39\u5EFA\u7B51 ${paidBuildingCount} / ${buildings.length} \u680B \xB7 ${feeGroups.length} \u79CD</span>
+                    </div>
+                    <div class="sc-coo-detail-scroll">
+                        <div class="sc-coo-table-head">
+                            <span>\u5EFA\u7B51</span>
+                            <span>\u603B\u7B49\u7EA7</span>
+                            <span>24h\u7BA1\u7406\u8D39</span>
+                            <span>COO\u8282\u7701</span>
+                            <span>\u5B9E\u9645</span>
+                        </div>
+                        <div class="sc-coo-detail-list">${detailRowsHtml}</div>
+                        ${detailTotalHtml}
+                    </div>
                 </div>
 
-                <div style="margin-top:16px; font-size:11px; color:${d17 ? "#888" : "#999"}; text-align:center;">
+                <div style="margin-top:16px; font-size:12px; color:${d17 ? "#888" : "#999"}; text-align:center;">
                     \u8BA1\u7B97\u516C\u5F0F\uFF1A\u67D0\u5EFA\u7B51\u7BA1\u7406\u8D39 = \u4E00\u7EA7\u57FA\u672C\u5DE5\u8D44*\u7B49\u7EA7*24h*\u673A\u5668\u4EBA*\u7BA1\u7406\u8D39\u7528 | COO\u8282\u7701\u7684\u7BA1\u7406\u8D39 = \u5EFA\u7B51\u7BA1\u7406\u8D39\u603B\u548C * COO\u6709\u6548\u70B9\u6570%
                 </div>
             `;
@@ -16594,10 +19806,19 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           const cooPoints = parseFloat(document.getElementById("sc-coo-input")?.value) || 0;
           const savedFee = totalFee * (cooPoints / 100);
           const remainFee = totalFee - savedFee;
-          const savedEl = document.getElementById("sc-coo-saved-fee");
-          const remainEl = document.getElementById("sc-coo-remain-fee");
-          if (savedEl) savedEl.textContent = "$" + savedFee.toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          if (remainEl) remainEl.textContent = "$" + remainFee.toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          document.querySelectorAll(".sc-coo-detail-row").forEach((row) => {
+            const baseFee = Number(row.getAttribute("data-building-fee")) || 0;
+            const groupSaved = baseFee * (cooPoints / 100);
+            const groupRemain = baseFee - groupSaved;
+            const groupSavedEl = row.querySelector("[data-coo-saved]");
+            const groupRemainEl = row.querySelector("[data-coo-remain]");
+            if (groupSavedEl) groupSavedEl.textContent = formatMoney(groupSaved);
+            if (groupRemainEl) groupRemainEl.textContent = formatMoney(groupRemain);
+          });
+          const totalSavedEl = document.querySelector("[data-total-coo-saved]");
+          const totalRemainEl = document.querySelector("[data-total-coo-remain]");
+          if (totalSavedEl) totalSavedEl.textContent = formatMoney(savedFee);
+          if (totalRemainEl) totalRemainEl.textContent = formatMoney(remainFee);
         };
         document.getElementById("sc-coo-input").addEventListener("input", updateResult);
         updateResult();
@@ -17576,4 +20797,4 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
   })();
 })();
 
-// @changelog <strong>销售办公室优化</strong><br>复制按钮和全部交单按钮移至货物需求下方，支持连续点击不同订单；新增复制所有大楼缺货，以及交单顺序和品质选择建议。<br><br><strong>测试提醒：有问题请及时反馈。寻优功能未测试，请勿完全依赖结果，欢迎反馈。</strong><br><br><strong>手机聊天体验</strong><br>改善键盘遮挡输入框、聊天室布局错位和底部空白问题；修复表情按钮浮到其他页面、跟随迟缓及空提示显示异常。<br><br><strong>其他调整</strong><br>打开 Snipboard 大图后，手机返回键优先关闭图片预览；零售商店按钮的子设置改为横向排列，小屏自动换行。
+// @changelog 入库合同：显示更多改为详细显示设置、增加显示上次合同接受时间；新增反推收购价功能；自定义高管数据增加按有效点数计算；COO收益计算增加明细；交易所建筑等级增加按实际建筑等级计算；适配未来新零售ui。
