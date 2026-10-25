@@ -836,6 +836,7 @@ export const executiveCustomButton = (function () {
         let optResearchInput = '';   // 目标研究类生产提升(%)，仅 research 模式
         let optRunId = 0;            // 计算令牌：切换/重算/关闭时自增以取消旧任务
         let optBusy = false;         // 是否正在后台计算
+        let optPanelOpen = false;    // 当前是否展开最优摆放建议
 
         const OPT_MODE_LABELS = {
             admin: '管理费用最低',
@@ -974,9 +975,28 @@ export const executiveCustomButton = (function () {
         }
 
         // 渲染「最优摆放建议」面板：先手动选择目标，点「计算摆法」后台计算
+        function setOptimizerPanelOpen(open) {
+            const container = document.getElementById('sc-boardroom-opt-results');
+            const button = document.getElementById('sc-boardroom-opt-btn');
+            optPanelOpen = open === true;
+            if (container) {
+                container.classList.toggle('sc-boardroom-hidden', !optPanelOpen);
+                container.setAttribute('aria-hidden', String(!optPanelOpen));
+                if (!optPanelOpen) {
+                    if (optBusy) {
+                        optRunId++;
+                        optBusy = false;
+                    }
+                    container.replaceChildren();
+                }
+            }
+            if (button) button.setAttribute('aria-expanded', String(optPanelOpen));
+        }
+
         function renderOptimizerResults() {
             const container = document.getElementById('sc-boardroom-opt-results');
             if (!container) return;
+            setOptimizerPanelOpen(true);
 
             // 若有旧计算在跑，先取消
             if (optBusy) {
@@ -1540,6 +1560,7 @@ export const executiveCustomButton = (function () {
             injectStyles();
             loadSavedBoardroom();
             loadExecutiveSettings();
+            optPanelOpen = false;
 
             const modal = document.createElement('div');
             modal.id = 'sc-calc-modal';
@@ -1569,7 +1590,7 @@ export const executiveCustomButton = (function () {
                         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                             <button id="sc-boardroom-save-btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">保存</button>
                             <button id="sc-boardroom-fetch-btn" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">获取当前最新高管数据</button>
-                            <button id="sc-boardroom-opt-btn" style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">最优摆放建议</button>
+                            <button id="sc-boardroom-opt-btn" aria-controls="sc-boardroom-opt-results" aria-expanded="false" style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">最优摆放建议</button>
                         </div>
                         <div class="sc-exec-mode-switch">
                             <label class="sc-exec-mode-option">
@@ -1604,7 +1625,7 @@ export const executiveCustomButton = (function () {
                                 </label>
                             </div>
                         </div>
-                        <div id="sc-boardroom-opt-results"></div>
+                        <div id="sc-boardroom-opt-results" class="sc-boardroom-hidden" aria-hidden="true"></div>
                         <div style="font-size: 11px; color: var(--sc-fg3); margin-bottom: 15px;">* 拖拽高管卡片，或点击两个高管卡片进行切换。</div>
                         <div id="sc-slots-container"></div>
                     </div>
@@ -1662,7 +1683,11 @@ export const executiveCustomButton = (function () {
             if (btnOpt) {
                 btnOpt.onclick = (e) => {
                     e.preventDefault();
-                    renderOptimizerResults();
+                    if (optPanelOpen) {
+                        setOptimizerPanelOpen(false);
+                    } else {
+                        renderOptimizerResults();
+                    }
                 };
             }
 
@@ -1742,8 +1767,7 @@ export const executiveCustomButton = (function () {
                     executiveSettings.academyLevel = parseInt(radio.value, 10);
                     saveExecutiveSettings();
                     calculateResults();
-                    const optimizerResults = document.getElementById('sc-boardroom-opt-results');
-                    if (optimizerResults && optimizerResults.innerHTML) {
+                    if (optPanelOpen) {
                         renderOptimizerResults();
                     }
                 };

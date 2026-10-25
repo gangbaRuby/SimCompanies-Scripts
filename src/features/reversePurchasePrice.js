@@ -12,7 +12,6 @@ const PRICE_LOWER_LIMIT = 0.01;
 const PRICE_UPPER_LIMIT = 10;
 const QUALITY_IDS = Array.from({ length: 13 }, (_, index) => index);
 const CHAT_QUALITY_COLUMN_LIMIT = 5;
-const MASKED_PRICE = '-----';
 const STORE_NAMES = {
     '2': '车行',
     G: '生鲜商店',
@@ -569,9 +568,7 @@ const ReversePurchasePrice = (function () {
             .sc-rpp-table th,.sc-rpp-table td{padding:5px 9px;border-right:1px solid var(--sc-rpp-border);border-bottom:1px solid var(--sc-rpp-border);text-align:right;white-space:nowrap}
             .sc-rpp-table th:first-child,.sc-rpp-table td:first-child{text-align:left}
             .sc-rpp-table thead th{position:sticky;top:0;background:var(--sc-rpp-header)}
-            .sc-rpp-table td.is-price{cursor:pointer}
-            .sc-rpp-table td.is-price:hover,.sc-rpp-table td.is-price:focus-visible{background:var(--sc-rpp-header);outline:2px solid var(--sc-rpp-positive);outline-offset:-2px}
-            .sc-rpp-table td.is-masked,.sc-rpp-table td.is-missing{color:var(--sc-rpp-muted)}
+            .sc-rpp-table td.is-missing{color:var(--sc-rpp-muted)}
             .sc-rpp-table td.is-no-feasible{color:var(--sc-rpp-warning);text-decoration:underline dotted;text-underline-offset:2px}
             .sc-rpp-table td[data-reason]{cursor:help}
             .sc-rpp-temporary-overlay{position:fixed;inset:0;z-index:20000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.72)}
@@ -648,8 +645,7 @@ const ReversePurchasePrice = (function () {
 
     function getCalculationStatus(cells) {
         const unresolved = cells.filter(cell => cell.value === null || cell.value === undefined);
-        const hint = '点击价格可以留空';
-        if (!unresolved.length) return { message: `计算完成，${hint}`, type: 'idle' };
+        if (!unresolved.length) return { message: '计算完成', type: 'idle' };
 
         const noFeasiblePriceReasons = new Set(['no-feasible-price', 'invalid-selling-time']);
         const noFeasiblePriceCount = unresolved.filter(cell => noFeasiblePriceReasons.has(cell.reason)).length;
@@ -658,7 +654,7 @@ const ReversePurchasePrice = (function () {
         if (noFeasiblePriceCount) details.push(`${noFeasiblePriceCount} 项无可行收购价`);
         if (missingDataCount) details.push(`${missingDataCount} 项缺少数据`);
         return {
-            message: `计算完成，${hint}；${details.join('，')}`,
+            message: `计算完成；${details.join('，')}`,
             type: cells.some(cell => Number.isFinite(cell.value)) ? 'idle' : 'error'
         };
     }
@@ -712,34 +708,11 @@ const ReversePurchasePrice = (function () {
                     );
                 } else {
                     const formattedPrice = truncateToSig(value, 4);
-                    const updateToggleLabel = () => {
-                        const masked = cell.dataset.masked === 'true';
-                        cell.setAttribute(
-                            'aria-label',
-                            `${resourceIdNameMap[resourceId] || `资源 ${resourceId}`} Q${quality} 收购价 ${masked ? MASKED_PRICE : formattedPrice}`
-                        );
-                    };
-                    const togglePrice = () => {
-                        const masked = cell.dataset.masked !== 'true';
-                        cell.dataset.masked = String(masked);
-                        cell.textContent = masked ? MASKED_PRICE : formattedPrice;
-                        cell.classList.toggle('is-masked', masked);
-                        cell.setAttribute('aria-pressed', String(masked));
-                        updateToggleLabel();
-                    };
                     cell.textContent = formattedPrice;
-                    cell.classList.add('is-price');
-                    cell.dataset.masked = 'false';
-                    cell.tabIndex = 0;
-                    cell.setAttribute('role', 'button');
-                    cell.setAttribute('aria-pressed', 'false');
-                    updateToggleLabel();
-                    cell.addEventListener('click', togglePrice);
-                    cell.addEventListener('keydown', event => {
-                        if (event.key !== 'Enter' && event.key !== ' ') return;
-                        event.preventDefault();
-                        togglePrice();
-                    });
+                    cell.setAttribute(
+                        'aria-label',
+                        `${resourceIdNameMap[resourceId] || `资源 ${resourceId}`} Q${quality} 收购价 ${formattedPrice}`
+                    );
                 }
                 row.appendChild(cell);
             });
@@ -1131,7 +1104,7 @@ const ReversePurchasePrice = (function () {
         applyContractButton.type = 'button';
         applyContractButton.className = 'btn sc-rpp-apply-contract';
         applyContractButton.textContent = '覆盖二确设置';
-        applyContractButton.title = '仅覆盖价格表中保留的收购价，不修改留空项和未涉及资源';
+        applyContractButton.title = '仅覆盖价格表中可计算的收购价，不修改缺失价格和未涉及资源';
         applyContractButton.disabled = true;
         const status = document.createElement('div');
         status.className = 'sc-rpp-status';

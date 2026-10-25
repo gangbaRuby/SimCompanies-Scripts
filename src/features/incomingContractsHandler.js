@@ -31,6 +31,35 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
         let processDebounceTimer = null; // 防抖计时器
         let activeObserver = null;       // 当前活跃的 MutationObserver
         let checkPageTimer = null;       // 页面轮询计时器（SAP 离开检测）
+        const CONTRACT_HISTORY_EVENT = 'sc-incoming-contract-history';
+        const CONTRACT_HISTORY_WAIT_MS = 5000;
+        const MARKET_FETCH_CONCURRENCY = 2;
+        const MARKET_FETCH_TIMEOUT_MS = 10000;
+        const MARKET_RATE_LIMIT_COOLDOWN_MS = 30000;
+        const CONTRACT_DISPLAY_SETTINGS_KEY = 'contractDisplaySettings';
+        const DEFAULT_CONTRACT_DISPLAY_SETTINGS = Object.freeze({
+            referencePrice: false,
+            marketMaxProfit: false,
+            exchangeLink: false,
+            lastAcceptedTime: false
+        });
+        let contractHistoryByOffer = new Map();
+        let contractHistoryByBaseOffer = new Map();
+        let contractHistoryByProduct = new Map();
+        let contractHistorySellerIds = new Map();
+        let contractHistorySellerIdsBySlug = new Map();
+        let contractHistoryLoaded = false;
+        let contractHistoryUnavailable = false;
+        let contractHistoryRealmId = null;
+        let contractHistoryListener = null;
+        let contractHistoryWaitTimer = null;
+        let contractDisplaySettingsModal = null;
+        let mpFetchSequence = 0;
+        let activeMarketFetches = 0;
+        let marketRateLimitUntil = 0;
+        const marketFetchQueue = [];
+        const marketFetchInFlight = new Map();
+        const marketFetchCooldownUntil = new Map();
 
         // Worker 代码 —— 批量处理版本：一次接收所有卡片，共享数据只传一次
         const workerCode = `
@@ -417,12 +446,25 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
         }
 
         // --- 计算单张卡片的 MP 信息（游戏机制：高Q可替代低Q，但低Q不可替代高Q） ---
-        function calcMpInfo(cardData, marketData, status) {
+        function calcMpInfo(cardData, marketData, status, httpStatus = null) {
             const resourceId = parseInt(cardData.dbLetter);
             const targetQuality = (cardData.quality !== null && cardData.quality !== undefined) ? cardData.quality : 0;
 
-            if (status === 'error') {
-                return { mpPercent: null, mpValue: null, mpNotes: 'MP请求失败', mpBestQuality: null };
+            if (status !== 'ok' && status !== 'fallback_expired') {
+                const failureNotes = {
+                    rate_limited: 'MP获取失败（请求过多，稍后重试）',
+                    timeout: 'MP获取失败（请求超时）',
+                    http_error: httpStatus ? `MP获取失败（HTTP ${httpStatus}）` : 'MP获取失败（HTTP 错误）',
+                    invalid_response: 'MP获取失败（数据异常）',
+                    internal_error: 'MP获取失败（内部错误）',
+                    error: 'MP获取失败'
+                };
+                return {
+                    mpPercent: null,
+                    mpValue: null,
+                    mpNotes: failureNotes[status] || 'MP获取失败',
+                    mpBestQuality: null
+                };
             }
 
             const expiredNote = (status === 'fallback_expired') ? ' (缓存已过期)' : '';
@@ -467,6 +509,17 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             return { mpPercent: null, mpValue: null, mpNotes: '市场无对应品质' + expiredNote, mpBestQuality: null };
         }
 
+        function showMpFailureForCards(cards, note) {
+            for (const card of cards) {
+                card.__mpPercent = null;
+                card.__mpValue = null;
+                card.__mpBestQuality = null;
+                card.__mpNotes = note;
+                card.__mpPending = false;
+                updateCardMpDisplay(card, null, null, note);
+            }
+        }
+
         // --- 批量处理所有卡片（时利润与 MP 分离：时利润立即发送 Worker，MP 后台拉取） ---
         async function processAllCards(cards, forceReset = false) {
             if (!cards || cards.length === 0) return;
@@ -484,13 +537,23 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     Storage.save('region', regionData);
                 } catch (err) {
                     console.error('[合同批量] 数据初始化失败:', err);
+                    showMpFailureForCards(cards, 'MP获取失败（数据未就绪）');
                     return;
                 }
             }
 
-            const SCD = JSON.parse(localStorage.getItem(constantsKey));
-            const SRC = JSON.parse(localStorage.getItem(regionKey));
-            if (!SCD || !SRC) return;
+            let SCD = null;
+            let SRC = null;
+            try {
+                SCD = JSON.parse(localStorage.getItem(constantsKey));
+                SRC = JSON.parse(localStorage.getItem(regionKey));
+            } catch (error) {
+                console.error('[合同批量] 本地数据解析失败:', error);
+            }
+            if (!SCD || !SRC) {
+                showMpFailureForCards(cards, 'MP获取失败（数据未就绪）');
+                return;
+            }
 
             // 2. 读取自定义开关
             const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
@@ -509,18 +572,26 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
 
             for (const card of cards) {
                 const data = parseContractCard(card);
-                if (!data || !data.dbLetter) continue;
+                if (!data || !data.dbLetter) {
+                    showMpFailureForCards([card], 'MP获取失败（无法识别资源）');
+                    continue;
+                }
 
+                card.__contractData = data;
+                updateLastAcceptedDisplay(card, data);
+                const displaySettings = getContractDisplaySettings();
                 const currentSignature = `${data.dbLetter}_${data.quantity}_${data.quality}_${data.unitPrice}`;
 
                 if (!forceReset && card.hasAttribute('data-found') && !card.hasAttribute('data-retry')) {
                     if (card.__contractSignature === currentSignature) {
                         // 检查 UI 是否丢失 (React 可能会重绘卡片内部并抹除我们注入的 DOM)
                         const hasProfitUI = card.__profitDisplayEl && document.body.contains(card.__profitDisplayEl);
+                        const hasLastAcceptedUI = !displaySettings.lastAcceptedTime ||
+                            (card.__lastAcceptedDisplayEl && document.body.contains(card.__lastAcceptedDisplayEl));
                         const acceptBtn = card.querySelector(ACCEPT_CONTRACT_SELECTOR);
                         const lostInterceptor = card.__wasHighPrice && acceptBtn && !acceptBtn.__hasHighPriceInterceptor;
 
-                        if (hasProfitUI && !lostInterceptor) {
+                        if (hasProfitUI && hasLastAcceptedUI && !lostInterceptor) {
                             continue;
                         }
                     } else {
@@ -538,6 +609,8 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     delete card.__profitDisplayEl;
                     delete card.__wasHighPrice;
                     delete card.__mpValue;
+                    delete card.__isRetail;
+                    delete card.__contractUnitPrice;
                 }
 
                 card.__contractSignature = currentSignature;
@@ -605,29 +678,23 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
 
         // --- 后台拉取 MP 数据并更新卡片显示（与利润计算并行） ---
         async function fetchMpDataAndUpdate(cardInfos, realmId, SCD, SRC) {
-            // 1. 收集唯一资源ID
-            const uniqueIds = new Set();
-            for (const { data } of cardInfos) {
-                if (data.dbLetter) uniqueIds.add(data.dbLetter);
+            const sequence = ++mpFetchSequence;
+            const cardInfosByResource = new Map();
+            for (const cardInfo of cardInfos) {
+                const rid = cardInfo.data.dbLetter;
+                if (!rid) continue;
+                if (!cardInfosByResource.has(rid)) cardInfosByResource.set(rid, []);
+                cardInfosByResource.get(rid).push(cardInfo);
             }
-            if (uniqueIds.size === 0) return;
+            if (cardInfosByResource.size === 0) {
+                showMpFailureForCards(cardInfos.map(info => info.card), 'MP获取失败（无法识别资源）');
+                return;
+            }
 
-            // 2. 并行获取所有市场数据
-            const marketDataMap = {};
-            const marketPromises = [...uniqueIds].map(async (rid) => {
-                marketDataMap[rid] = await getMarketDataForResource(realmId, rid);
-            });
-            await Promise.all(marketPromises);
+            const displaySettings = getContractDisplaySettings();
+            const marketMaxProfitEnabled = displaySettings.marketMaxProfit || displaySettings.exchangeLink;
 
-            // 3. 计算并更新每张卡片的 MP 信息
-            const marketMaxProfitEnabled = (() => {
-                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-                return cfg['marketMaxProfitToggle'] === true;
-            })();
-
-            // 收集需要发送给市场最大时利 Worker 的订单
-            pendingMarketCards.clear(); // 清理上一次计算的残留
-            const marketOrders = [];
+            pendingMarketCards.clear();
             let customBonuses = null;
             if (marketMaxProfitEnabled) {
                 const pageActionsConfig = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
@@ -646,58 +713,76 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 }
             }
 
-            for (const { card, data, isRetail } of cardInfos) {
-                const marketResult = marketDataMap[data.dbLetter] || { data: null, status: 'error' };
-                const mpInfo = calcMpInfo(data, marketResult.data, marketResult.status);
-                card.__resourceId = data.dbLetter;  // 供跳转链接使用
-                card.__mpPercent = mpInfo.mpPercent;
-                card.__mpValue = mpInfo.mpValue;
-                card.__mpBestQuality = mpInfo.mpBestQuality;
-                if (mpInfo.mpNotes) card.__mpNotes = mpInfo.mpNotes;
-                card.__mpPending = false;
+            const updateResource = async (rid) => {
+                let marketResult;
+                try {
+                    marketResult = await getMarketDataForResource(realmId, rid);
+                } catch (error) {
+                    console.error('[合同MP] 市场数据处理失败:', error);
+                    marketResult = { data: null, status: 'internal_error' };
+                }
+                if (sequence !== mpFetchSequence) return;
 
-                // 如果开启了"显示市场最大时利"，收集订单稍后发送给 Worker
-                if (marketMaxProfitEnabled && isRetail && marketResult.data && marketResult.data.length > 0) {
-                    const cid = marketCardIdCounter++;
-                    pendingMarketCards.set(cid, {
-                        card,
-                        mpPercent: mpInfo.mpPercent,
-                        mpValue: mpInfo.mpValue,
-                        mpNotes: mpInfo.mpNotes
-                    });
-                    marketOrders.push({
-                        cardId: cid,
-                        marketData: marketResult.data,
-                        targetQuality: (data.quality !== null && data.quality !== undefined) ? data.quality : 0,
-                        quantity: data.quantity,
-                        resourceId: data.dbLetter
-                    });
-                    // 暂时置空，等 Worker 回调填充
-                    card.__marketMaxProfit = null;
-                } else {
-                    card.__marketMaxProfit = null;
+                const marketOrders = [];
+                for (const { card, data, isRetail } of cardInfosByResource.get(rid) || []) {
+                    const mpInfo = calcMpInfo(data, marketResult.data, marketResult.status, marketResult.httpStatus);
+                    card.__isRetail = isRetail === true;
+                    card.__contractUnitPrice = Number(data.unitPrice);
+                    card.__resourceId = data.dbLetter;
+                    card.__mpPercent = mpInfo.mpPercent;
+                    card.__mpValue = mpInfo.mpValue;
+                    card.__mpBestQuality = mpInfo.mpBestQuality;
+                    if (mpInfo.mpNotes) {
+                        card.__mpNotes = mpInfo.mpNotes;
+                    } else {
+                        delete card.__mpNotes;
+                    }
+                    card.__mpPending = false;
+
+                    if (marketMaxProfitEnabled && isRetail && marketResult.data && marketResult.data.length > 0) {
+                        const cid = marketCardIdCounter++;
+                        pendingMarketCards.set(cid, {
+                            card,
+                            mpPercent: mpInfo.mpPercent,
+                            mpValue: mpInfo.mpValue,
+                            mpNotes: mpInfo.mpNotes
+                        });
+                        marketOrders.push({
+                            cardId: cid,
+                            marketData: marketResult.data,
+                            targetQuality: (data.quality !== null && data.quality !== undefined) ? data.quality : 0,
+                            quantity: data.quantity,
+                            resourceId: data.dbLetter
+                        });
+                        card.__marketMaxProfit = null;
+                    } else {
+                        card.__marketMaxProfit = null;
+                    }
+
+                    updateCardMpDisplay(card, mpInfo.mpPercent, mpInfo.mpValue, mpInfo.mpNotes);
                 }
 
-                // 更新卡片上的 MP 显示区域（市场最大时利暂未算出，先显示 MP-%）
-                updateCardMpDisplay(card, mpInfo.mpPercent, mpInfo.mpValue, mpInfo.mpNotes);
-            }
+                if (marketOrders.length > 0 && sequence === mpFetchSequence) {
+                    marketProfitWorker.postMessage({
+                        orders: marketOrders,
+                        shared: { SCD, SRC },
+                        customBonuses: customBonuses,
+                        SCXXCS,
+                        PROFIT_PER_BUILDING_LEVEL,
+                        RETAIL_ADJUSTMENT
+                    });
+                }
+            };
 
-            // 发送市场最大时利订单给 Worker（异步计算）
-            if (marketOrders.length > 0) {
-                marketProfitWorker.postMessage({
-                    orders: marketOrders,
-                    shared: { SCD, SRC },
-                    customBonuses: customBonuses,
-                    SCXXCS,
-                    PROFIT_PER_BUILDING_LEVEL,
-                    RETAIL_ADJUSTMENT
-                });
-            }
+            await Promise.allSettled([...cardInfosByResource.keys()].map(updateResource));
         }
 
         function init() {
             // 先清理上一次遗留的 observer / timer
-            cleanupAll();
+            cleanupAll(false);
+            bindContractHistoryEvents();
+            loadContractHistorySnapshot();
+            scheduleContractHistoryUnavailable();
 
             const isOnIncomingPage = () => /^https:\/\/www\.simcompanies\.com(\/[a-z-]+)?\/headquarters\/warehouse\/incoming-contracts\/?$/.test(location.href);
 
@@ -723,7 +808,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             }, 500);
         }
 
-        function cleanupAll() {
+        function cleanupAll(invalidateMpFetches = true) {
             if (activeObserver) {
                 activeObserver.disconnect();
                 activeObserver = null;
@@ -736,8 +821,30 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 clearTimeout(processDebounceTimer);
                 processDebounceTimer = null;
             }
-            // 清理 pendingCards 中残留的 DOM 引用
-            pendingCards.clear();
+            if (invalidateMpFetches) {
+                // 仅在真正离开页面时丢弃在途计算结果
+                pendingCards.clear();
+                pendingMarketCards.clear();
+                mpFetchSequence++;
+            }
+            if (contractHistoryListener) {
+                window.removeEventListener(CONTRACT_HISTORY_EVENT, contractHistoryListener);
+                contractHistoryListener = null;
+            }
+            contractHistoryByOffer.clear();
+            contractHistoryByBaseOffer.clear();
+            contractHistoryByProduct.clear();
+            contractHistorySellerIds.clear();
+            contractHistorySellerIdsBySlug.clear();
+            contractHistoryLoaded = false;
+            contractHistoryUnavailable = false;
+            contractHistoryRealmId = null;
+            if (contractHistoryWaitTimer) {
+                clearTimeout(contractHistoryWaitTimer);
+                contractHistoryWaitTimer = null;
+            }
+            removeContractDisplaySettingsModal();
+            document.querySelectorAll('[data-sc-last-accepted="true"]').forEach(el => el.remove());
             removeWarningNotice();
         }
 
@@ -755,8 +862,22 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     return;
                 }
 
+                const isPluginOwnedNode = (node) => {
+                    const element = node?.nodeType === 1 ? node : node?.parentElement;
+                    return !!element?.closest('[data-sc-contract="true"], [data-sc-last-accepted="true"]');
+                };
+                const isPluginOnlyMutation = (mutation) => {
+                    if (mutation.target?.nodeType === 1 &&
+                        mutation.target.closest('[data-sc-contract="true"], [data-sc-last-accepted="true"]')) {
+                        return true;
+                    }
+                    const changedNodes = [...mutation.addedNodes, ...mutation.removedNodes];
+                    return changedNodes.length > 0 && changedNodes.every(isPluginOwnedNode);
+                };
+
                 // 判断是否目标卡片发生变化
                 const hasRelevantChanges = mutationsList.some(mutation => {
+                    if (isPluginOnlyMutation(mutation)) return false;
                     return mutation.type === 'childList' && (
                         // 添加了新节点，且包含合同卡片
                         (mutation.addedNodes.length > 0 && Array.from(mutation.addedNodes).some(node => node.nodeType === 1 && (node.matches('div[tabindex="0"]') || node.querySelector('div[tabindex="0"]')))) ||
@@ -791,10 +912,476 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             return null;
         }
 
-        // 获取市场数据（含1分钟缓存过期检查）
+        function normalizeSellerName(name) {
+            return String(name || '')
+                .normalize('NFKC')
+                .trim()
+                .replace(/\s+/g, ' ')
+                .toLowerCase();
+        }
+
+        function getSellerSlugKey(companyName) {
+            return String(companyName || '')
+                .normalize('NFKC')
+                .trim()
+                .replace(/\s+/g, '-')
+                .toLowerCase();
+        }
+
+        function getContractBaseOfferKey(realmId, sellerId, kind, quality, price) {
+            const numericKind = Number(kind);
+            const numericQuality = Number(quality);
+            const numericPrice = Number(price);
+            if (
+                realmId === null ||
+                sellerId === null ||
+                sellerId === undefined ||
+                !Number.isFinite(numericKind) ||
+                !Number.isFinite(numericQuality) ||
+                !Number.isFinite(numericPrice)
+            ) {
+                return null;
+            }
+            return [
+                realmId,
+                sellerId,
+                numericKind,
+                numericQuality,
+                Math.round(numericPrice * 100)
+            ].join('|');
+        }
+
+        function getContractProductKey(realmId, sellerId, kind, quality) {
+            const numericKind = Number(kind);
+            const numericQuality = Number(quality);
+            if (
+                realmId === null ||
+                sellerId === null ||
+                sellerId === undefined ||
+                !Number.isFinite(numericKind) ||
+                !Number.isFinite(numericQuality)
+            ) {
+                return null;
+            }
+            return [realmId, sellerId, numericKind, numericQuality].join('|');
+        }
+
+        function getContractOfferKey(realmId, sellerId, kind, quality, price, quantity) {
+            const baseKey = getContractBaseOfferKey(realmId, sellerId, kind, quality, price);
+            const numericQuantity = Number(quantity);
+            if (!baseKey || !Number.isFinite(numericQuantity)) return null;
+            return `${baseKey}|${numericQuantity}`;
+        }
+
+        function getPageActionsConfig() {
+            try {
+                return JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function getContractDisplaySettings() {
+            const config = getPageActionsConfig();
+            const stored = config[CONTRACT_DISPLAY_SETTINGS_KEY];
+            if (stored && typeof stored === 'object') {
+                return {
+                    referencePrice: stored.referencePrice === true,
+                    marketMaxProfit: stored.marketMaxProfit === true,
+                    exchangeLink: stored.exchangeLink === true,
+                    lastAcceptedTime: stored.lastAcceptedTime === true
+                };
+            }
+
+            // 兼容旧版“显示更多”：只迁移原有三项，不默认开启上次接受时间。
+            const legacyEnabled = config.marketMaxProfitToggle === true;
+            return {
+                ...DEFAULT_CONTRACT_DISPLAY_SETTINGS,
+                referencePrice: legacyEnabled,
+                marketMaxProfit: legacyEnabled,
+                exchangeLink: legacyEnabled
+            };
+        }
+
+        function saveContractDisplaySettings(settings) {
+            const config = getPageActionsConfig();
+            config[CONTRACT_DISPLAY_SETTINGS_KEY] = {
+                referencePrice: settings.referencePrice === true,
+                marketMaxProfit: settings.marketMaxProfit === true,
+                exchangeLink: settings.exchangeLink === true,
+                lastAcceptedTime: settings.lastAcceptedTime === true
+            };
+            localStorage.setItem('SC_PageActions_Settings', JSON.stringify(config));
+        }
+
+        function shouldShowExchangeLink(card) {
+            if (!getContractDisplaySettings().exchangeLink || card.__resourceId == null) return false;
+
+            if (card.__isRetail === true) {
+                const marketMaxProfit = Number(card.__marketMaxProfit);
+                const contractProfit = Number(card.__contractProfit);
+                return Number.isFinite(marketMaxProfit) &&
+                    Number.isFinite(contractProfit) &&
+                    marketMaxProfit > contractProfit;
+            }
+
+            const marketPrice = Number(card.__mpValue);
+            const contractPrice = Number(card.__contractUnitPrice);
+            return Number.isFinite(marketPrice) &&
+                Number.isFinite(contractPrice) &&
+                marketPrice > 0 &&
+                contractPrice > marketPrice;
+        }
+
+        function indexContractHistory(detail) {
+            if (!detail || !Array.isArray(detail.data)) return;
+            const currentRealmId = getRealmIdFromLink();
+            if (currentRealmId !== null && detail.realmId !== currentRealmId) return;
+
+            const nextOffers = new Map();
+            const nextBaseOffers = new Map();
+            const nextProductOffers = new Map();
+            const nextSellerIds = new Map();
+            const nextSellerIdsBySlug = new Map();
+            for (const entry of detail.data) {
+                const sellerId = entry?.seller?.id;
+                const sellerNameKey = normalizeSellerName(entry?.seller?.company);
+                if (sellerId !== null && sellerId !== undefined && sellerNameKey) {
+                    nextSellerIds.set(sellerNameKey, sellerId);
+                    nextSellerIdsBySlug.set(getSellerSlugKey(entry.seller.company), sellerId);
+                }
+
+                const baseOfferKey = getContractBaseOfferKey(
+                    detail.realmId,
+                    sellerId,
+                    entry?.kind,
+                    entry?.quality,
+                    entry?.price
+                );
+                const productKey = getContractProductKey(
+                    detail.realmId,
+                    sellerId,
+                    entry?.kind,
+                    entry?.quality
+                );
+                const offerKey = getContractOfferKey(
+                    detail.realmId,
+                    sellerId,
+                    entry?.kind,
+                    entry?.quality,
+                    entry?.price,
+                    entry?.quantity
+                );
+                const timestamp = Date.parse(entry?.datetime);
+                if (!baseOfferKey || !offerKey || !Number.isFinite(timestamp)) continue;
+
+                const record = {
+                    timestamp,
+                    datetime: entry.datetime,
+                    quantity: Number(entry.quantity),
+                    price: Number(entry.price)
+                };
+                const previousExact = nextOffers.get(offerKey);
+                if (!previousExact || timestamp > previousExact.timestamp) {
+                    nextOffers.set(offerKey, record);
+                }
+                const previousBase = nextBaseOffers.get(baseOfferKey);
+                if (!previousBase || timestamp > previousBase.timestamp) {
+                    nextBaseOffers.set(baseOfferKey, record);
+                }
+                const previousProduct = productKey ? nextProductOffers.get(productKey) : null;
+                if (productKey && (!previousProduct || timestamp > previousProduct.timestamp)) {
+                    nextProductOffers.set(productKey, record);
+                }
+            }
+
+            contractHistoryByOffer = nextOffers;
+            contractHistoryByBaseOffer = nextBaseOffers;
+            contractHistoryByProduct = nextProductOffers;
+            contractHistorySellerIds = nextSellerIds;
+            contractHistorySellerIdsBySlug = nextSellerIdsBySlug;
+            contractHistoryRealmId = detail.realmId;
+            contractHistoryLoaded = true;
+            contractHistoryUnavailable = false;
+            if (contractHistoryWaitTimer) {
+                clearTimeout(contractHistoryWaitTimer);
+                contractHistoryWaitTimer = null;
+            }
+            refreshLastAcceptedDisplays();
+        }
+
+        function loadContractHistorySnapshot() {
+            const snapshot = window.__SC_IncomingContractHistory;
+            if (snapshot) indexContractHistory(snapshot);
+        }
+
+        function bindContractHistoryEvents() {
+            if (contractHistoryListener) return;
+            contractHistoryListener = (event) => indexContractHistory(event?.detail);
+            window.addEventListener(CONTRACT_HISTORY_EVENT, contractHistoryListener);
+        }
+
+        function scheduleContractHistoryUnavailable() {
+            if (contractHistoryLoaded || contractHistoryWaitTimer) return;
+            contractHistoryWaitTimer = setTimeout(() => {
+                contractHistoryWaitTimer = null;
+                if (contractHistoryLoaded) return;
+                contractHistoryUnavailable = true;
+                refreshLastAcceptedDisplays();
+            }, CONTRACT_HISTORY_WAIT_MS);
+        }
+
+        function formatLastAcceptedTime(timestamp) {
+            const date = new Date(timestamp);
+            const pad = value => String(value).padStart(2, '0');
+            return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        function formatContractPrice(price) {
+            return Number(price).toLocaleString('zh-CN', {
+                maximumFractionDigits: 2
+            });
+        }
+
+        function getLastAcceptedInfo(data) {
+            if (!contractHistoryLoaded) {
+                return { status: contractHistoryUnavailable ? 'unavailable' : 'loading' };
+            }
+            if (!data || (!data.sellerCompany && !data.sellerSlug)) return { status: 'none' };
+            const currentRealmId = getRealmIdFromLink();
+            if (currentRealmId !== null && currentRealmId !== contractHistoryRealmId) {
+                return { status: 'loading' };
+            }
+
+            const sellerId = contractHistorySellerIds.get(normalizeSellerName(data.sellerCompany))
+                ?? contractHistorySellerIdsBySlug.get(getSellerSlugKey(data.sellerSlug));
+            const baseOfferKey = getContractBaseOfferKey(
+                contractHistoryRealmId,
+                sellerId,
+                data.dbLetter,
+                data.quality,
+                data.unitPrice
+            );
+            const productKey = getContractProductKey(
+                contractHistoryRealmId,
+                sellerId,
+                data.dbLetter,
+                data.quality
+            );
+            const offerKey = getContractOfferKey(
+                contractHistoryRealmId,
+                sellerId,
+                data.dbLetter,
+                data.quality,
+                data.unitPrice,
+                data.quantity
+            );
+            const record = offerKey ? contractHistoryByOffer.get(offerKey) : null;
+            if (record) return { status: 'found', matchType: 'exact', ...record };
+
+            const fallbackRecord = baseOfferKey ? contractHistoryByBaseOffer.get(baseOfferKey) : null;
+            if (fallbackRecord) return { status: 'found', matchType: 'price', ...fallbackRecord };
+
+            const productRecord = productKey ? contractHistoryByProduct.get(productKey) : null;
+            return productRecord
+                ? { status: 'found', matchType: 'product', ...productRecord }
+                : { status: 'none' };
+        }
+
+        function removeLastAcceptedDisplay(card) {
+            const display = card.__lastAcceptedDisplayEl;
+            if (display?.parentNode) display.remove();
+            card.__lastAcceptedDisplayEl = null;
+            const fallback = card.querySelector('[data-sc-last-accepted="true"]');
+            if (fallback) fallback.remove();
+        }
+
+        function updateLastAcceptedDisplay(card, data) {
+            if (!getContractDisplaySettings().lastAcceptedTime) {
+                removeLastAcceptedDisplay(card);
+                return;
+            }
+
+            const sellerLink = card.querySelector('a[aria-label][href*="/company/"]');
+            const infoDiv = sellerLink?.parentElement || Array.from(card.querySelectorAll('div'))
+                .find(div => div.textContent?.includes('@') && div.querySelector('b'));
+            if (!infoDiv) return;
+
+            let display = card.__lastAcceptedDisplayEl;
+            if (!display || !infoDiv.contains(display)) {
+                const fallback = card.querySelector('[data-sc-last-accepted="true"]');
+                display = fallback || document.createElement('div');
+                display.dataset.scLastAccepted = 'true';
+                display.style.cssText = `
+                    display: block;
+                    margin-top: 3px;
+                    font-size: 11px;
+                    line-height: 1.4;
+                    white-space: nowrap;
+                `;
+                if (!infoDiv.contains(display)) infoDiv.appendChild(display);
+            }
+
+            const info = getLastAcceptedInfo(data);
+            const dark = DM();
+            if (info.status === 'found') {
+                const timeText = formatLastAcceptedTime(info.timestamp);
+                if (info.matchType === 'exact') {
+                    display.textContent = `上次接受：${timeText}`;
+                } else if (info.matchType === 'price') {
+                    display.textContent = `同价格上次接受：${timeText}（数量${info.quantity}）`;
+                } else {
+                    display.textContent = `同商品上次接受：${timeText}（Q${data.quality} $${formatContractPrice(info.price)}，数量${info.quantity}）`;
+                }
+                display.title = new Date(info.timestamp).toLocaleString(undefined, {
+                    dateStyle: 'full',
+                    timeStyle: 'long'
+                });
+                display.style.color = dark ? '#f0b44c' : '#8a5a00';
+            } else if (info.status === 'loading') {
+                display.textContent = '上次接受：加载中...';
+                display.removeAttribute('title');
+                display.style.color = dark ? '#aaa' : '#777';
+            } else if (info.status === 'unavailable') {
+                display.textContent = '上次接受：历史暂未加载';
+                display.removeAttribute('title');
+                display.style.color = dark ? '#aaa' : '#777';
+            } else {
+                display.textContent = '上次接受：近期无记录';
+                display.removeAttribute('title');
+                display.style.color = dark ? '#aaa' : '#777';
+            }
+            card.__lastAcceptedDisplayEl = display;
+        }
+
+        function refreshLastAcceptedDisplays() {
+            document.querySelectorAll('div[tabindex="0"]').forEach(card => {
+                const data = card.__contractData || parseContractCard(card);
+                if (data?.dbLetter) updateLastAcceptedDisplay(card, data);
+            });
+        }
+
+        function refreshMpDisplaysWithoutFetch() {
+            document.querySelectorAll('div[tabindex="0"]').forEach(card => {
+                if (card.__mpPercent !== undefined) {
+                    updateCardMpDisplay(card, card.__mpPercent, card.__mpValue, card.__mpNotes);
+                }
+            });
+        }
+
+        function applyContractDisplaySettingsChange(previous, next, changedKey) {
+            if (changedKey === 'lastAcceptedTime') {
+                refreshLastAcceptedDisplays();
+                return;
+            }
+
+            const marketWasEnabled = previous.marketMaxProfit || previous.exchangeLink;
+            const marketNowEnabled = next.marketMaxProfit || next.exchangeLink;
+            if (!marketWasEnabled && marketNowEnabled) {
+                refreshAllContractProfits();
+                return;
+            }
+            refreshMpDisplaysWithoutFetch();
+        }
+
+        function drainMarketFetchQueue() {
+            while (activeMarketFetches < MARKET_FETCH_CONCURRENCY && marketFetchQueue.length > 0) {
+                const item = marketFetchQueue.shift();
+                activeMarketFetches++;
+                Promise.resolve()
+                    .then(item.task)
+                    .then(item.resolve, item.reject)
+                    .finally(() => {
+                        activeMarketFetches--;
+                        drainMarketFetchQueue();
+                    });
+            }
+        }
+
+        function enqueueMarketFetch(task) {
+            return new Promise((resolve, reject) => {
+                marketFetchQueue.push({ task, resolve, reject });
+                drainMarketFetchQueue();
+            });
+        }
+
+        async function fetchMarketDataWithLimit(realmId, resourceId, cacheKey, cachedData) {
+            const cooldownUntil = marketFetchCooldownUntil.get(cacheKey) || 0;
+            const now = Date.now();
+            if (marketRateLimitUntil > now || cooldownUntil > now) {
+                return { data: null, status: 'rate_limited', retryAt: Math.max(marketRateLimitUntil, cooldownUntil) };
+            }
+
+            return enqueueMarketFetch(async () => {
+                const currentCooldown = marketFetchCooldownUntil.get(cacheKey) || 0;
+                const currentNow = Date.now();
+                if (marketRateLimitUntil > currentNow || currentCooldown > currentNow) {
+                    return {
+                        data: null,
+                        status: 'rate_limited',
+                        retryAt: Math.max(marketRateLimitUntil, currentCooldown)
+                    };
+                }
+
+                const controller = new AbortController();
+                let timedOut = false;
+                const timeoutTimer = setTimeout(() => {
+                    timedOut = true;
+                    controller.abort();
+                }, MARKET_FETCH_TIMEOUT_MS);
+
+                try {
+                    const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
+                    const response = await fetch(url, { signal: controller.signal });
+                    if (response.status === 429) {
+                        const retryAt = Date.now() + MARKET_RATE_LIMIT_COOLDOWN_MS;
+                        marketRateLimitUntil = retryAt;
+                        marketFetchCooldownUntil.set(cacheKey, retryAt);
+                        return { data: null, status: 'rate_limited', retryAt };
+                    }
+                    if (!response.ok) {
+                        return cachedData
+                            ? { data: cachedData, status: 'fallback_expired' }
+                            : { data: null, status: 'http_error', httpStatus: response.status };
+                    }
+
+                    let json;
+                    try {
+                        json = await response.json();
+                    } catch (error) {
+                        return cachedData
+                            ? { data: cachedData, status: 'fallback_expired' }
+                            : { data: null, status: 'invalid_response' };
+                    }
+                    if (!Array.isArray(json)) {
+                        return cachedData
+                            ? { data: cachedData, status: 'fallback_expired' }
+                            : { data: null, status: 'invalid_response' };
+                    }
+
+                    try {
+                        localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: json }));
+                    } catch (error) {
+                        console.warn('[合同MP] 市场数据缓存写入失败:', error);
+                    }
+                    return { data: json, status: 'ok' };
+                } catch (error) {
+                    if (timedOut || error?.name === 'AbortError') {
+                        return { data: null, status: 'timeout' };
+                    }
+                    return cachedData
+                        ? { data: cachedData, status: 'fallback_expired' }
+                        : { data: null, status: 'error' };
+                } finally {
+                    clearTimeout(timeoutTimer);
+                }
+            });
+        }
+
+        // 获取市场数据（含缓存、请求去重、并发限制、超时和 429 冷却）
         async function getMarketDataForResource(realmId, resourceId) {
-            const key = `market_all_${realmId}_${resourceId}`;
-            const raw = localStorage.getItem(key);
+            const cacheKey = `market_all_${realmId}_${resourceId}`;
+            const raw = localStorage.getItem(cacheKey);
 
             let cachedData = null;
             let cachedValid = false;
@@ -810,29 +1397,21 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 } catch (e) { /* 缓存损坏 */ }
             }
 
-            // 如果缓存有效，直接使用它并标记状态为 ok
             if (cachedValid && cachedData) {
                 return { data: cachedData, status: 'ok' };
             }
 
-            // 否则尝试拉取最新数据
-            try {
-                const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Network response was not ok');
-                const json = await response.json();
-                if (Array.isArray(json)) {
-                    localStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data: json }));
-                    return { data: json, status: 'ok' };
-                }
-            } catch (e) {
-                // 请求失败时，如果存在过期缓存则回退，并标记为过期
-                if (cachedData) {
-                    return { data: cachedData, status: 'fallback_expired' };
-                }
-            }
-            // 完全获取不到且无缓存
-            return { data: null, status: 'error' };
+            const existingRequest = marketFetchInFlight.get(cacheKey);
+            if (existingRequest) return existingRequest;
+
+            const request = fetchMarketDataWithLimit(realmId, resourceId, cacheKey, cachedData)
+                .finally(() => {
+                    if (marketFetchInFlight.get(cacheKey) === request) {
+                        marketFetchInFlight.delete(cacheKey);
+                    }
+                });
+            marketFetchInFlight.set(cacheKey, request);
+            return request;
         }
 
         function refreshAllContractProfits() {
@@ -854,6 +1433,8 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 delete card.__mpValue;
                 delete card.__mpBestQuality;
                 delete card.__mpPending;
+                delete card.__isRetail;
+                delete card.__contractUnitPrice;
                 delete card.__marketMaxProfit;
                 delete card.__marketMaxPrice;
                 delete card.__marketMaxQuality;
@@ -871,6 +1452,8 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 imageSrc: null,
                 resourcePath: null,
                 dbLetter: null,
+                sellerCompany: null,
+                sellerSlug: null,
             };
 
             const label = card.getAttribute('aria-label') || '';
@@ -906,10 +1489,21 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     .replace(/^\/static\//, '')
                     .replace(/\.[0-9a-f]{6,}\.(png|jpg|jpeg|gif|svg)$/, '.$1');
 
-                const constants = JSON.parse(localStorage.getItem('SimcompaniesConstantsData') || '{}');
-                const resources = Object.values(constants?.constantsResources || {});
-                const matched = resources.find(r => r.image === result.resourcePath);
-                if (matched) result.dbLetter = matched.dbLetter;
+                try {
+                    const constants = JSON.parse(localStorage.getItem('SimcompaniesConstantsData') || '{}');
+                    const resources = Object.values(constants?.constantsResources || {});
+                    const matched = resources.find(r => r.image === result.resourcePath);
+                    if (matched) result.dbLetter = matched.dbLetter;
+                } catch (error) {
+                    console.warn('[合同卡片] 基础数据解析失败:', error);
+                }
+            }
+
+            const sellerLink = card.querySelector('a[aria-label][href*="/company/"]');
+            if (sellerLink) {
+                result.sellerCompany = (sellerLink.getAttribute('aria-label') || sellerLink.textContent || '').trim() || null;
+                const sellerMatch = (sellerLink.getAttribute('href') || '').match(/\/company\/\d+\/([^/?#]+)/);
+                result.sellerSlug = sellerMatch ? decodeURIComponent(sellerMatch[1]) : null;
             }
             return result;
         }
@@ -1002,10 +1596,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             // MP 占位（后续由 updateCardMpDisplay 填充）或直接显示已有 MP 数据
             const dPh = DM();
             let mpHtml = '';
-            const mmpEnabled = (() => {
-                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-                return cfg['marketMaxProfitToggle'] === true;
-            })();
+            const displaySettings = getContractDisplaySettings();
             if (card.__mpPending) {
                 mpHtml = `<span class="sc-mp-part" style="color:${dPh ? '#aaa' : '#888'};white-space:nowrap;"> | MP计算中...</span>`;
             } else {
@@ -1016,7 +1607,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     const mpColor = card.__mpPercent < 0 ? 'color:#ef5350;' : '';
                     mpPartHtml = ` | <span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(card.__mpPercent).toFixed(2)}%`;
                     // 开关开启时追加参考价格
-                    if (mmpEnabled && card.__mpValue != null && isFinite(card.__mpValue)) {
+                    if (displaySettings.referencePrice && card.__mpValue != null && isFinite(card.__mpValue)) {
                         mpPartHtml += ` ($${card.__mpValue.toFixed(2)})`;
                     }
                     if (card.__mpNotes) {
@@ -1026,7 +1617,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 }
                 // 开关开启时追加市场最大时利
                 let mmpPartHtml = '';
-                if (mmpEnabled && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+                if (displaySettings.marketMaxProfit && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
                     const mmp = card.__marketMaxProfit;
                     const mmpColor = mmp < 0 ? 'color:#ff1744;' : 'color:#4caf50;';
                     let mmpNote = '';
@@ -1038,10 +1629,9 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                         mmpPartHtml += `<span style="color:${dPh ? '#aaa' : '#777'};font-size:0.85em;">${mmpNote}</span>`;
                     }
                     mmpPartHtml += `</span>`;
-                    if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
-                        const lnkColor = '#ff9800';
-                        mmpPartHtml += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:${lnkColor};text-decoration:none;">📈交易所</a>`;
-                    }
+                }
+                if (shouldShowExchangeLink(card)) {
+                    mmpPartHtml += `${mmpPartHtml ? ' ' : ' | '}<a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">📈交易所</a>`;
                 }
                 mpHtml = `<span class="sc-mp-part">${mpPartHtml}${mmpPartHtml}</span>`;
             }
@@ -1063,11 +1653,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 return;
             }
 
-            // 检查是否开启了"显示更多"
-            const marketMaxProfitEnabled = (() => {
-                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-                return cfg['marketMaxProfitToggle'] === true;
-            })();
+            const displaySettings = getContractDisplaySettings();
 
             // 已有时利润元素：更新 MP 部分
             const mpSpan = displayEl.querySelector('.sc-mp-part');
@@ -1081,7 +1667,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
                 mpPartHtml = `${sep}<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
-                if (marketMaxProfitEnabled && mpValue != null && isFinite(mpValue)) {
+                if (displaySettings.referencePrice && mpValue != null && isFinite(mpValue)) {
                     mpPartHtml += ` ($${mpValue.toFixed(2)})`;
                 }
                 if (mpNotes) {
@@ -1097,7 +1683,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
 
             // 2. 开关开启时追加市场最大时利
             let mmpPartHtml = '';
-            if (marketMaxProfitEnabled && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+            if (displaySettings.marketMaxProfit && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
                 const mmp = card.__marketMaxProfit;
                 const mmpColor = mmp < 0 ? 'color:#ff1744;' : 'color:#4caf50;';
                 let mmpNote = '';
@@ -1109,9 +1695,9 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     mmpPartHtml += `<span style="color:${dMp ? '#aaa' : '#777'};font-size:0.85em;">${mmpNote}</span>`;
                 }
                 mmpPartHtml += `</span>`;
-                if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
-                    mmpPartHtml += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">📈交易所</a>`;
-                }
+            }
+            if (shouldShowExchangeLink(card)) {
+                mmpPartHtml += `${mmpPartHtml ? ' ' : ' | '}<a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">📈交易所</a>`;
             }
 
             const mpHtml = mpPartHtml + mmpPartHtml;
@@ -1155,11 +1741,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             }
 
             const dMpNote = DM();
-            // 检查是否开启了"显示更多"
-            const mmpEnabledLegacy = (() => {
-                const cfg = JSON.parse(localStorage.getItem('SC_PageActions_Settings') || '{}');
-                return cfg['marketMaxProfitToggle'] === true;
-            })();
+            const displaySettings = getContractDisplaySettings();
 
             // 1. 构建 MP-% 部分（始终显示，参考价格仅在开关开启时显示）
             if (mpPercent !== null && mpPercent !== undefined && isFinite(mpPercent)) {
@@ -1167,7 +1749,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                 const prefix = mpPercent < 0 ? 'MP+' : 'MP-';
                 const mpColor = mpPercent < 0 ? 'color:#ef5350;' : '';
                 let mpBaseText = `<span style="${mpColor}white-space:nowrap;">${prefix}${Math.abs(mpPercent).toFixed(2)}%`;
-                if (mmpEnabledLegacy && mpValue != null && isFinite(mpValue)) {
+                if (displaySettings.referencePrice && mpValue != null && isFinite(mpValue)) {
                     mpBaseText += ` ($${mpValue.toFixed(2)})`;
                 }
                 if (mpNotes) {
@@ -1181,7 +1763,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             }
 
             // 2. 开关开启时追加市场最大时利
-            if (mmpEnabledLegacy && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
+            if (displaySettings.marketMaxProfit && card.__marketMaxProfit != null && isFinite(card.__marketMaxProfit)) {
                 if (displayText) displayText += ' |';
                 const mmp = card.__marketMaxProfit;
                 const mmpColor = mmp < 0 ? 'color:#ff1744;' : 'color:#4caf50;';
@@ -1194,10 +1776,11 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     mmpText += `<span style="color:${dMpNote ? '#aaa' : '#777'};font-size:0.85em;">${mmpNote}</span>`;
                 }
                 mmpText += `</span>`;
-                if (card.__contractProfit != null && mmp > card.__contractProfit && card.__resourceId != null) {
-                    mmpText += ` <a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">📈交易所</a>`;
-                }
                 displayText += mmpText;
+            }
+            if (shouldShowExchangeLink(card)) {
+                if (displayText) displayText += ' ';
+                displayText += `<a href="https://www.simcompanies.com/zh-cn/market/resource/${card.__resourceId}/" target="_blank" style="font-size:0.85em;color:#ff9800;text-decoration:none;">📈交易所</a>`;
             }
 
             if (!displayText) return;
@@ -1310,17 +1893,18 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
             customBtn.onclick = () => executiveCustomButton.show();
             btnGroup.appendChild(customBtn);
 
-            // 2c. 显示更多信息开关按钮
-            const marketToggle = createGlobalCustomToggle(
-                'marketMaxProfitToggle',
-                '显示更多',
-                {},
-                () => {
-                    refreshAllContractProfits();
-                }
-            );
-            marketToggle.wrapper.style.marginLeft = "0";
-            btnGroup.appendChild(marketToggle.wrapper);
+            // 2c. 卡片详细显示设置
+            const displaySettingsBtn = document.createElement('button');
+            displaySettingsBtn.type = 'button';
+            displaySettingsBtn.className = 'sc-contract-display-settings-button';
+            displaySettingsBtn.textContent = '详细显示设置';
+            displaySettingsBtn.style.cssText = `
+                padding: 4px 10px; background: #607d8b;
+                color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;
+                font-weight: bold; white-space: nowrap; flex-shrink: 0;
+            `;
+            displaySettingsBtn.onclick = () => showContractDisplaySettingsModal();
+            btnGroup.appendChild(displaySettingsBtn);
 
             // 2d. 二次确认设置按钮
             const priceSetBtn = document.createElement('button');
@@ -1568,6 +2152,140 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
                     resetAcceptBtn(acceptBtn);
                 }
             }
+        }
+
+        function removeContractDisplaySettingsModal() {
+            if (!contractDisplaySettingsModal) return;
+            if (contractDisplaySettingsModal.__keydownHandler) {
+                document.removeEventListener('keydown', contractDisplaySettingsModal.__keydownHandler);
+            }
+            contractDisplaySettingsModal.remove();
+            contractDisplaySettingsModal = null;
+        }
+
+        function showContractDisplaySettingsModal() {
+            if (contractDisplaySettingsModal) return;
+
+            const modal = document.createElement('div');
+            modal.id = 'sc-contract-display-settings-modal';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            modal.setAttribute('aria-label', '入库合同详细显示设置');
+            modal.style.cssText = `
+                position: fixed; inset: 0; padding: 12px;
+                background: rgba(0, 0, 0, 0.6); z-index: 22000;
+                display: flex; justify-content: center; align-items: center;
+                box-sizing: border-box;
+            `;
+            modal.style.setProperty('--sc-bg', theme.bg);
+            modal.style.setProperty('--sc-bg2', theme.bg2);
+            modal.style.setProperty('--sc-fg', theme.fg);
+            modal.style.setProperty('--sc-fg2', theme.fg2);
+            modal.style.setProperty('--sc-fg3', theme.fg3);
+            modal.style.setProperty('--sc-border', theme.border);
+            modal.style.setProperty('--sc-border2', theme.border2);
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = `
+                background: var(--sc-bg); border: 1px solid var(--sc-border);
+                border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                width: min(380px, calc(100vw - 24px)); max-height: min(560px, calc(100vh - 24px));
+                color: var(--sc-fg); font-family: sans-serif; display: flex; flex-direction: column; overflow: hidden;
+                box-sizing: border-box;
+            `;
+
+            const header = document.createElement('div');
+            header.style.cssText = `
+                padding: 12px 16px; background: #607d8b; color: white;
+                display: flex; justify-content: space-between; align-items: center;
+                user-select: none; font-weight: bold; font-size: 15px;
+            `;
+            const title = document.createElement('span');
+            title.textContent = '入库合同详细显示设置';
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.setAttribute('aria-label', '关闭详细显示设置');
+            closeBtn.textContent = '×';
+            closeBtn.style.cssText = `
+                padding: 0; border: 0; background: transparent; color: white;
+                cursor: pointer; font-size: 22px; line-height: 1;
+            `;
+            closeBtn.onclick = removeContractDisplaySettingsModal;
+            header.append(title, closeBtn);
+
+            const content = document.createElement('div');
+            content.style.cssText = `
+                padding: 14px 16px 16px; overflow-y: auto;
+                display: flex; flex-direction: column; gap: 2px;
+            `;
+
+            const settingLabels = {
+                referencePrice: '参考价格',
+                marketMaxProfit: '市场最大时利',
+                exchangeLink: '交易所链接',
+                lastAcceptedTime: '上次接受时间'
+            };
+            let currentSettings = getContractDisplaySettings();
+            for (const [key, labelText] of Object.entries(settingLabels)) {
+                const row = document.createElement('label');
+                row.style.cssText = `
+                    display: flex; align-items: center; gap: 10px;
+                    min-height: 38px; padding: 4px 2px; cursor: pointer;
+                    color: var(--sc-fg); font-size: 13px;
+                `;
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = currentSettings[key] === true;
+                checkbox.style.cssText = 'width: 17px; height: 17px; margin: 0; flex: 0 0 auto;';
+                checkbox.onchange = () => {
+                    const previous = currentSettings;
+                    currentSettings = {
+                        ...previous,
+                        [key]: checkbox.checked
+                    };
+                    saveContractDisplaySettings(currentSettings);
+                    applyContractDisplaySettingsChange(previous, currentSettings, key);
+                };
+                const label = document.createElement('span');
+                label.textContent = labelText;
+                row.append(checkbox, label);
+                content.appendChild(row);
+            }
+
+            const note = document.createElement('div');
+            note.style.cssText = `
+                margin-top: 8px; padding-top: 10px;
+                border-top: 1px solid var(--sc-border2);
+                color: var(--sc-fg3); font-size: 11px; line-height: 1.5;
+                display: flex; flex-direction: column; gap: 4px;
+            `;
+            const displayConditions = [
+                ['参考价格', '能计算出 MP 时，同时显示市场参考单价。'],
+                ['市场最大时利', '零售商品在交易所按当前订单能算出利润时显示。'],
+                ['交易所链接', '零售商品在交易所赚得更多，或非零售商品在交易所买得更便宜时显示。'],
+                ['上次接受时间', '找到相同卖家、商品和品质的入库记录时显示时间；没有记录时显示“近期无记录”，记录未加载时显示“历史暂未加载”。']
+            ];
+            for (const [labelText, conditionText] of displayConditions) {
+                const line = document.createElement('div');
+                const label = document.createElement('b');
+                label.textContent = `${labelText}：`;
+                line.append(label, document.createTextNode(conditionText));
+                note.appendChild(line);
+            }
+            content.appendChild(note);
+
+            wrapper.append(header, content);
+            modal.appendChild(wrapper);
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) removeContractDisplaySettingsModal();
+            });
+            modal.__keydownHandler = (event) => {
+                if (event.key === 'Escape') removeContractDisplaySettingsModal();
+            };
+            document.addEventListener('keydown', modal.__keydownHandler);
+            document.body.appendChild(modal);
+            contractDisplaySettingsModal = modal;
+            closeBtn.focus();
         }
 
         function showContractPriceModal() {
