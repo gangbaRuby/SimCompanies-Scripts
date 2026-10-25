@@ -172,3 +172,58 @@ import { RegionData } from '../features/regionData.js';
         return originalXHR.apply(this, arguments);
     };
 })();
+
+// ======================
+// 模块2-3：入库合同历史
+// ======================
+(function () {
+    const contractHistory_URL_PATTERN = /\/api\/v2\/contracts-history-incoming\/?(?:[?#].*)?$/;
+    const CONTRACT_HISTORY_EVENT = 'sc-incoming-contract-history';
+
+    function getRequestUrl(input) {
+        if (typeof input === 'string') return input;
+        if (input instanceof URL) return input.href;
+        if (input && typeof input.url === 'string') return input.url;
+        return '';
+    }
+
+    function handleData(data) {
+        if (!Array.isArray(data)) return;
+        const realmId = data.find(item => item?.seller?.realmId === 0 || item?.seller?.realmId === 1)?.seller?.realmId
+            ?? getRealmIdFromLink();
+        if (realmId !== 0 && realmId !== 1) return;
+
+        const detail = {
+            realmId,
+            data,
+            receivedAt: Date.now()
+        };
+        window.__SC_IncomingContractHistory = detail;
+        window.dispatchEvent(new CustomEvent(CONTRACT_HISTORY_EVENT, { detail }));
+    }
+
+    // Hook fetch
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+        const response = await originalFetch(...args);
+        try {
+            const url = response?.url || getRequestUrl(args[0]);
+            if (contractHistory_URL_PATTERN.test(url)) {
+                response.clone().json().then(handleData).catch(err => console.error("❌ 入库合同历史 JSON 解析失败:", err));
+            }
+        } catch (e) { console.error(e); }
+        return response;
+    };
+
+    // Hook XHR（备用）
+    const originalXHR = window.XMLHttpRequest.prototype.open;
+    window.XMLHttpRequest.prototype.open = function (method, url) {
+        this.addEventListener("load", function () {
+            if (url && contractHistory_URL_PATTERN.test(String(url)) && this.responseText) {
+                try { handleData(JSON.parse(this.responseText)); }
+                catch (e) { console.error("❌ 入库合同历史 JSON 解析失败:", e); }
+            }
+        });
+        return originalXHR.apply(this, arguments);
+    };
+})();
