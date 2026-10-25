@@ -26,6 +26,7 @@ import { RegionData } from './features/regionData.js';
 import { Storage } from './features/dataStorage.js';
 import { ConstantsAutoUpdater, RegionAutoUpdater } from './features/autoUpdaters.js';
 import { resourceIdNameMap } from './constants/resourceMap.js';
+import { getBuildingName } from './constants/buildingMap.js';
 import './features/pageModuleConfig.js';
 import { getRealmIdFromLink, getScopedKey } from './core/storage.js';
 import { isDarkMode, DM, theme, showToast } from './utils/ui.js';
@@ -4549,6 +4550,18 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             'x': 483, 'Y': 414, 'y': 0, 'z': 241.5
         };
 
+        const ADMIN_OVERHEAD_EXCLUDED_KINDS = new Set(['3', '4', '5', 'n']);
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            })[char]);
+        }
+
         function getBuildingsData() {
             const realmId = typeof getRealmIdFromLink === 'function' ? getRealmIdFromLink() : null;
             if (realmId === null) return [];
@@ -4576,22 +4589,60 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             }
         }
 
-        // 计算当前所有建筑运行24小时的管理费
-        function calcTotalAdminFee(buildings, SRC) {
-            if (!buildings || buildings.length === 0 || !SRC) return 0;
-            const adminOverhead = SRC.administration || 1;
-            if (adminOverhead <= 1) return 0;
-            let total = 0;
+        // 管理费用比例 = (参与管理费计算的建筑总等级 - 1) / 170
+        function getAdministrationStats(buildings) {
+            let totalBuildingLevel = 0;
+            for (const building of buildings || []) {
+                if (String(building.position) === 'P') continue;
+                if (ADMIN_OVERHEAD_EXCLUDED_KINDS.has(String(building.kind))) continue;
+                const level = Number(building.size);
+                if (Number.isFinite(level) && level > 0) totalBuildingLevel += level;
+            }
+            const overheadRate = Math.max(0, (totalBuildingLevel - 1) / 170);
+            return {
+                totalBuildingLevel,
+                overheadRate,
+                administrationOverhead: 1 + overheadRate
+            };
+        }
+
+        // 按建筑种类合并24小时管理费，同一种建筑汇总总等级和机器人建筑等级
+        function getAdminFeeBreakdown(buildings, adminStats) {
+            if (!buildings || buildings.length === 0 || !adminStats) return [];
+            const overheadRate = adminStats.overheadRate;
+            if (overheadRate <= 0) return [];
+            const groups = new Map();
+
             for (const b of buildings) {
                 // P 位置（如停车场/装饰）不产生管理费，其余位置均计入
                 if (String(b.position) === 'P') continue;
                 const baseWage = BASE_WAGES[b.kind];
                 if (baseWage === undefined || baseWage === 0) continue;
+                const level = Number(b.size);
+                if (!Number.isFinite(level) || level <= 0) continue;
                 // 机器人：robotsSpecialization 为数字则表示安装了机器人，减少3%管理费即 *0.97
                 const robotMultiplier = (typeof b.robotsSpecialization === 'number') ? 0.97 : 1;
-                total += baseWage * b.size * 24 * robotMultiplier * (adminOverhead - 1);
+                const fee = baseWage * level * 24 * robotMultiplier * overheadRate;
+                let group = groups.get(b.kind);
+                if (!group) {
+                    group = {
+                        kind: b.kind,
+                        name: getBuildingName(b.kind, `建筑 ${b.kind}`),
+                        count: 0,
+                        totalLevel: 0,
+                        robotLevel: 0,
+                        fee: 0
+                    };
+                    groups.set(b.kind, group);
+                }
+                group.count += 1;
+                group.totalLevel += level;
+                group.fee += fee;
+                if (robotMultiplier < 1) group.robotLevel += level;
             }
-            return total;
+
+            return Array.from(groups.values())
+                .sort((a, b) => b.fee - a.fee || a.name.localeCompare(b.name));
         }
 
         function showCOOCalcModal() {
@@ -4611,8 +4662,63 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 return;
             }
 
-            const totalFee = calcTotalAdminFee(buildings, SRC);
+            const adminStats = getAdministrationStats(buildings);
+            const feeGroups = getAdminFeeBreakdown(buildings, adminStats);
+            const totalFee = feeGroups.reduce((sum, group) => sum + group.fee, 0);
+            const paidBuildingCount = feeGroups.reduce((sum, group) => sum + group.count, 0);
+            const totalBuildingLevel = feeGroups.reduce((sum, group) => sum + group.totalLevel, 0);
             const defaultCOO = SRC.adminBonus || 0;
+            const formatMoney = value => '$' + (Number(value) || 0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            const detailRowsHtml = feeGroups.length > 0
+                ? feeGroups.map(group => {
+                    return `
+                        <div class="sc-coo-detail-row" data-building-fee="${group.fee}">
+                            <div class="sc-coo-building-cell">
+                                <span class="sc-coo-detail-name">${escapeHtml(group.name)} <span class="sc-coo-detail-count">×${group.count}</span></span>
+                            </div>
+                            <div class="sc-coo-level-cell">
+                                <span class="sc-coo-level-total">${group.totalLevel}级</span>
+                                ${group.robotLevel > 0 ? `<span class="sc-coo-level-robot">机器人 ${group.robotLevel}级</span>` : ''}
+                            </div>
+                            <div class="sc-coo-money-cell sc-coo-base-cell">
+                                <span class="sc-coo-money-label">费用</span>
+                                <strong>${formatMoney(group.fee)}</strong>
+                            </div>
+                            <div class="sc-coo-money-cell sc-coo-saved-cell">
+                                <span class="sc-coo-money-label">节省</span>
+                                <strong data-coo-saved>${formatMoney(0)}</strong>
+                            </div>
+                            <div class="sc-coo-money-cell sc-coo-remain-cell">
+                                <span class="sc-coo-money-label">实际</span>
+                                <strong data-coo-remain>${formatMoney(group.fee)}</strong>
+                            </div>
+                        </div>
+                    `;
+                }).join('')
+                : '<div class="sc-coo-detail-empty">当前建筑不产生管理费</div>';
+            const detailTotalHtml = `
+                <div class="sc-coo-total-row">
+                    <div class="sc-coo-building-cell sc-coo-total-label">合计</div>
+                    <div class="sc-coo-level-cell">
+                        <span class="sc-coo-level-total">${totalBuildingLevel}级</span>
+                    </div>
+                    <div class="sc-coo-money-cell sc-coo-base-cell">
+                        <span class="sc-coo-money-label">费用</span>
+                        <strong>${formatMoney(totalFee)}</strong>
+                    </div>
+                    <div class="sc-coo-money-cell sc-coo-saved-cell">
+                        <span class="sc-coo-money-label">节省</span>
+                        <strong data-total-coo-saved>${formatMoney(0)}</strong>
+                    </div>
+                    <div class="sc-coo-money-cell sc-coo-remain-cell">
+                        <span class="sc-coo-money-label">实际</span>
+                        <strong data-total-coo-remain>${formatMoney(totalFee)}</strong>
+                    </div>
+                </div>
+            `;
 
             const d17 = DM();
             const bg = d17 ? '#1e1e1e' : '#fff';
@@ -4621,10 +4727,6 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             const border = d17 ? '#555' : '#ccc';
             const inputBg = d17 ? '#333' : '#f5f5f5';
             const inputFg = d17 ? '#efefef' : '#333';
-            const accentBg = d17 ? '#1a3a5c' : '#e3f2fd';
-            const accentBorder = d17 ? '#2a5a8c' : '#bbdefb';
-            const resultBg = d17 ? '#1a3a1a' : '#e8f5e9';
-            const resultBorder = d17 ? '#2a5a2a' : '#c8e6c9';
 
             // 锁定背景滚动
             const origOverflow = document.body.style.overflow;
@@ -4640,24 +4742,265 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             `;
 
             const modal = document.createElement('div');
+            modal.className = 'sc-coo-modal';
             modal.style.cssText = `
                 background: ${bg}; color: ${fg}; border-radius: 12px;
-                width: 440px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+                max-height: 85vh; overflow-y: auto;
                 padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
                 font-family: sans-serif; transform: scale(0.95);
-                transition: transform 0.2s;
             `;
 
             modal.innerHTML = `
+                <style>
+                    .sc-coo-modal {
+                        width: min(440px, 92vw);
+                        box-sizing: border-box;
+                        transition: transform 0.2s;
+                    }
+                    @media (min-width: 720px) {
+                        .sc-coo-modal {
+                            width: min(720px, 94vw);
+                        }
+                    }
+                    .sc-coo-building-details {
+                        margin: 0 0 16px;
+                        padding: 12px;
+                        border: 1px solid ${border};
+                        border-radius: 8px;
+                        background: ${d17 ? '#252525' : '#fafafa'};
+                        --sc-coo-detail-grid: minmax(120px, 1.35fr) 82px minmax(100px, 1fr) minmax(90px, 0.9fr) minmax(90px, 0.9fr);
+                    }
+                    .sc-coo-detail-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: baseline;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        margin-bottom: 8px;
+                        color: ${fg};
+                        font-size: 13px;
+                    }
+                    .sc-coo-detail-header span {
+                        color: ${fg2};
+                        font-size: 11px;
+                        font-weight: normal;
+                    }
+                    .sc-coo-table-head,
+                    .sc-coo-detail-row {
+                        display: grid;
+                        grid-template-columns: var(--sc-coo-detail-grid);
+                        gap: 8px;
+                        align-items: center;
+                    }
+                    .sc-coo-table-head {
+                        position: sticky;
+                        top: 0;
+                        z-index: 2;
+                        padding: 5px 4px 7px;
+                        border-bottom: 1px solid ${border};
+                        background: ${d17 ? '#252525' : '#fafafa'};
+                        color: ${fg2};
+                        font-size: 11px;
+                        text-align: right;
+                    }
+                    .sc-coo-table-head > :first-child {
+                        text-align: left;
+                    }
+                    .sc-coo-detail-scroll {
+                        max-height: clamp(190px, 32vh, 320px);
+                        overflow-y: auto;
+                        overscroll-behavior-y: auto;
+                        scrollbar-gutter: stable;
+                        -webkit-overflow-scrolling: touch;
+                    }
+                    .sc-coo-detail-row {
+                        padding: 9px 4px;
+                        border-bottom: 1px solid ${border};
+                        font-variant-numeric: tabular-nums;
+                    }
+                    .sc-coo-detail-row:last-child {
+                        border-bottom: 0;
+                    }
+                    .sc-coo-detail-row:nth-child(even) {
+                        background: rgba(127, 127, 127, 0.06);
+                    }
+                    .sc-coo-building-cell {
+                        min-width: 0;
+                        text-align: left;
+                    }
+                    .sc-coo-detail-name {
+                        color: ${fg};
+                        font-size: 14px;
+                        font-weight: bold;
+                        overflow-wrap: anywhere;
+                    }
+                    .sc-coo-detail-count {
+                        color: ${fg2};
+                        font-size: 11px;
+                        font-weight: normal;
+                    }
+                    .sc-coo-level-cell {
+                        display: flex;
+                        min-height: 34px;
+                        flex-direction: column;
+                        align-items: flex-end;
+                        justify-content: center;
+                        gap: 1px;
+                        text-align: right;
+                    }
+                    .sc-coo-level-total {
+                        color: ${fg};
+                        font-size: 14px;
+                        font-weight: bold;
+                        white-space: nowrap;
+                    }
+                    .sc-coo-level-robot {
+                        color: ${fg2};
+                        font-size: 12px;
+                        line-height: 1.25;
+                        white-space: nowrap;
+                    }
+                    .sc-coo-money-cell {
+                        display: flex;
+                        min-width: 0;
+                        flex-direction: column;
+                        align-items: flex-end;
+                        gap: 1px;
+                        color: ${fg};
+                        font-size: 14px;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                    }
+                    .sc-coo-money-cell strong {
+                        color: ${fg};
+                        font-weight: bold;
+                    }
+                    .sc-coo-base-cell strong {
+                        color: #2196F3;
+                    }
+                    .sc-coo-money-label {
+                        display: none;
+                        color: ${fg2};
+                        font-size: 11px;
+                        font-weight: normal;
+                    }
+                    .sc-coo-total-row {
+                        position: sticky;
+                        bottom: 0;
+                        z-index: 2;
+                        display: grid;
+                        grid-template-columns: var(--sc-coo-detail-grid);
+                        align-items: center;
+                        gap: 8px;
+                        margin-top: 2px;
+                        padding: 10px 4px 3px;
+                        border-top: 2px solid ${border};
+                        background: ${d17 ? '#252525' : '#fafafa'};
+                        color: ${fg};
+                        font-size: 14px;
+                        font-weight: bold;
+                        font-variant-numeric: tabular-nums;
+                    }
+                    .sc-coo-total-label {
+                        font-size: 14px;
+                    }
+                    .sc-coo-detail-empty {
+                        color: ${fg2};
+                        font-size: 11px;
+                        line-height: 1.55;
+                    }
+                    .sc-coo-detail-empty {
+                        padding: 12px 4px;
+                    }
+                    @media (max-width: 640px) {
+                        .sc-coo-modal {
+                            padding: 18px;
+                        }
+                        .sc-coo-building-details {
+                            padding: 10px;
+                        }
+                        .sc-coo-detail-header span {
+                            flex: 1 1 100%;
+                        }
+                        .sc-coo-detail-scroll {
+                            max-height: clamp(220px, 42vh, 360px);
+                        }
+                        .sc-coo-table-head {
+                            display: none;
+                        }
+                        .sc-coo-detail-row,
+                        .sc-coo-total-row {
+                            grid-template-columns: repeat(2, minmax(0, 1fr));
+                            grid-template-areas:
+                                "building fee"
+                                "level level"
+                                "saved saved"
+                                "remain remain";
+                            gap: 5px 10px;
+                        }
+                        .sc-coo-detail-row {
+                            padding: 10px 2px;
+                        }
+                        .sc-coo-building-cell {
+                            grid-area: building;
+                            align-self: center;
+                        }
+                        .sc-coo-level-cell {
+                            grid-area: level;
+                            min-height: 0;
+                            flex-direction: row;
+                            flex-wrap: wrap;
+                            align-items: baseline;
+                            justify-content: flex-start;
+                            gap: 3px 8px;
+                            text-align: left;
+                        }
+                        .sc-coo-base-cell {
+                            grid-area: fee;
+                        }
+                        .sc-coo-saved-cell {
+                            grid-area: saved;
+                        }
+                        .sc-coo-remain-cell {
+                            grid-area: remain;
+                        }
+                        .sc-coo-money-cell {
+                            flex-direction: row;
+                            flex-wrap: wrap;
+                            align-items: baseline;
+                            gap: 4px;
+                            font-size: 13px;
+                        }
+                        .sc-coo-money-cell strong {
+                            min-width: 0;
+                            white-space: normal;
+                            overflow-wrap: anywhere;
+                        }
+                        .sc-coo-saved-cell {
+                            justify-content: space-between;
+                        }
+                        .sc-coo-remain-cell {
+                            justify-content: space-between;
+                        }
+                        .sc-coo-base-cell {
+                            justify-content: flex-end;
+                        }
+                        .sc-coo-money-label {
+                            display: inline;
+                        }
+                        .sc-coo-total-row {
+                            padding: 10px 2px 3px;
+                            font-size: 13px;
+                        }
+                        .sc-coo-total-row .sc-coo-level-cell {
+                            grid-area: level;
+                        }
+                    }
+                </style>
+
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid ${border}; padding-bottom:12px; margin-bottom:16px;">
                     <h3 style="margin:0; font-size:18px;">💰COO收益计算</h3>
                     <button id="sc-coo-close" style="background:none; border:none; font-size:24px; cursor:pointer; color:${d17 ? '#aaa' : '#999'}; line-height:1;">&times;</button>
-                </div>
-
-                <div style="background:${accentBg}; border:1px solid ${accentBorder}; border-radius:8px; padding:12px; margin-bottom:16px;">
-                    <div style="font-size:13px; color:${fg2}; margin-bottom:4px;">当前地图上所有建筑运行24小时的管理费</div>
-                    <div id="sc-coo-total-fee" style="font-size:24px; font-weight:bold; color:#2196F3;">$${totalFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                    <div style="font-size:11px; color:${d17 ? '#888' : '#999'}; margin-top:4px;">管理费用: ${(((SRC.administration || 1) - 1) * 100).toFixed(1)}% | 建筑数: ${buildings.length}</div>
                 </div>
 
                 <div style="margin-bottom:16px;">
@@ -4667,14 +5010,25 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                         background:${inputBg}; color:${inputFg}; font-size:16px; box-sizing:border-box;">
                 </div>
 
-                <div style="background:${resultBg}; border:1px solid ${resultBorder}; border-radius:8px; padding:12px;">
-                    <div style="font-size:13px; color:${fg2}; margin-bottom:4px;">COO节省的管理费</div>
-                    <div id="sc-coo-saved-fee" style="font-size:24px; font-weight:bold; color:#4CAF50;">$0.00</div>
-                    <div style="font-size:13px; color:${fg2}; margin-top:8px; margin-bottom:4px;">每日实际管理费</div>
-                    <div id="sc-coo-remain-fee" style="font-size:24px; font-weight:bold; color:#FF9800;">$0.00</div>
+                <div id="sc-coo-building-details" class="sc-coo-building-details">
+                    <div class="sc-coo-detail-header">
+                        <strong>建筑管理费明细</strong>
+                        <span>管理费用 ${(adminStats.overheadRate * 100).toFixed(2)}% · 总建筑等级 ${adminStats.totalBuildingLevel} · 计费建筑 ${paidBuildingCount} / ${buildings.length} 栋 · ${feeGroups.length} 种</span>
+                    </div>
+                    <div class="sc-coo-detail-scroll">
+                        <div class="sc-coo-table-head">
+                            <span>建筑</span>
+                            <span>总等级</span>
+                            <span>24h管理费</span>
+                            <span>COO节省</span>
+                            <span>实际</span>
+                        </div>
+                        <div class="sc-coo-detail-list">${detailRowsHtml}</div>
+                        ${detailTotalHtml}
+                    </div>
                 </div>
 
-                <div style="margin-top:16px; font-size:11px; color:${d17 ? '#888' : '#999'}; text-align:center;">
+                <div style="margin-top:16px; font-size:12px; color:${d17 ? '#888' : '#999'}; text-align:center;">
                     计算公式：某建筑管理费 = 一级基本工资*等级*24h*机器人*管理费用 | COO节省的管理费 = 建筑管理费总和 * COO有效点数%
                 </div>
             `;
@@ -4693,10 +5047,19 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 const cooPoints = parseFloat(document.getElementById('sc-coo-input')?.value) || 0;
                 const savedFee = totalFee * (cooPoints / 100);
                 const remainFee = totalFee - savedFee;
-                const savedEl = document.getElementById('sc-coo-saved-fee');
-                const remainEl = document.getElementById('sc-coo-remain-fee');
-                if (savedEl) savedEl.textContent = '$' + savedFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                if (remainEl) remainEl.textContent = '$' + remainFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                document.querySelectorAll('.sc-coo-detail-row').forEach(row => {
+                    const baseFee = Number(row.getAttribute('data-building-fee')) || 0;
+                    const groupSaved = baseFee * (cooPoints / 100);
+                    const groupRemain = baseFee - groupSaved;
+                    const groupSavedEl = row.querySelector('[data-coo-saved]');
+                    const groupRemainEl = row.querySelector('[data-coo-remain]');
+                    if (groupSavedEl) groupSavedEl.textContent = formatMoney(groupSaved);
+                    if (groupRemainEl) groupRemainEl.textContent = formatMoney(groupRemain);
+                });
+                const totalSavedEl = document.querySelector('[data-total-coo-saved]');
+                const totalRemainEl = document.querySelector('[data-total-coo-remain]');
+                if (totalSavedEl) totalSavedEl.textContent = formatMoney(savedFee);
+                if (totalRemainEl) totalRemainEl.textContent = formatMoney(remainFee);
             };
 
             // 绑定输入事件

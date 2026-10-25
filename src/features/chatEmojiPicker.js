@@ -1,4 +1,5 @@
 import { resourceIdNameMap } from '../constants/resourceMap.js';
+import { getBuildingName } from '../constants/buildingMap.js';
 import { DM } from '../utils/ui.js';
 import { registerExportInfo } from '../core/exportInfo.js';
 
@@ -17,41 +18,6 @@ registerExportInfo({
     const BUNDLE_SELECTOR = 'script[type="module"][crossorigin][src^="https://www.simcompanies.com/static/bundle/assets/index-"][src$=".js"]';
     const RECENT_KEY = 'SC_EmojiPicker_Recent';
     const RECENT_MAX = 30;
-
-    const BUILDING_NAMES = {
-        P: '农场',
-        W: '水库',
-        E: '发电厂',
-        O: '油田',
-        R: '炼油厂',
-        S: '运输站',
-        G: '杂货店',
-        C: '电子产品商店',
-        A: '加油站',
-        F: '牧场',
-        M: '矿井',
-        Y: '工厂',
-        L: '电子工厂',
-        T: '时装工厂',
-        B: '销售办公室',
-        d: '五金店',
-        g: '建筑承包商',
-        H: '时装店',
-        i: '磨坊',
-        I: '春季市场',
-        j: '面包房',
-        k: '食品加工厂',
-        m: '餐饮',
-        n: '屠宰场',
-        o: '混凝土厂',
-        p: '推进器工厂',
-        Q: '采石场',
-        r: '餐厅',
-        t: '苗圃',
-        x: '建筑工厂',
-        y: '学院',
-        z: '泳池市场',
-    };
 
     let openPanel = null;
     let openButton = null;
@@ -197,14 +163,14 @@ registerExportInfo({
 
         const buildings = [];
         const seenBuildings = new Set();
-        const buildingRe = /\bdbLetter:\s*"([A-Za-z])",[\s\S]{0,4000}?levelImages:\s*\[\s*\{\s*level:\s*\d+,\s*image:\s*"([^"]+)"/g;
+        const buildingRe = /\bdbLetter:\s*"([A-Za-z0-9])",[\s\S]{0,4000}?levelImages:\s*\[\s*\{\s*level:\s*\d+,\s*image:\s*"([^"]+)"/g;
         while ((match = buildingRe.exec(raw)) !== null) {
             const file = match[2];
             if (!file.startsWith('images/buildings/') || seenBuildings.has(match[1])) continue;
             seenBuildings.add(match[1]);
             buildings.push({
                 code: `:bd-${match[1]}:`,
-                name: BUILDING_NAMES[match[1]] || '',
+                name: getBuildingName(match[1], ''),
                 image: resolveAssetUrl(assets, file),
             });
         }
