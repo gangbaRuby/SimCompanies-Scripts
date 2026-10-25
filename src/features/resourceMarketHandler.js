@@ -3,11 +3,15 @@ import { state } from '../core/state.js';
 import { executiveCustomButton } from './executiveBoardroom.js';
 import { registerExportInfo } from '../core/exportInfo.js';
 
+const BUILDING_LEVEL_KEY = 'sc_building_level';
+const BUILDING_HOURS_KEY = 'sc_building_hours';
+const BUILDING_LEVEL_MODE_KEY = 'sc_building_level_mode';
+
 registerExportInfo({
     name: '交易所计算参数',
     scope: 'global',
     backup: true,
-    keys: ['sc_building_level', 'sc_building_hours']
+    keys: [BUILDING_LEVEL_KEY, BUILDING_HOURS_KEY, BUILDING_LEVEL_MODE_KEY]
 });
 
 const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
@@ -30,6 +34,115 @@ const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" styl
         let _quantityCheckInterval = null; // 数量输入框脏检查定时器ID
         let _formClickHandler = null; // 表单按钮点击处理函数引用
         let _initDone = false; // 标记是否已成功初始化，避免 observer 反复执行 tryInit
+
+        function readConstantsData() {
+            try {
+                const raw = localStorage.getItem('SimcompaniesConstantsData');
+                return raw ? JSON.parse(raw) : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function getManualBuildingLevel() {
+            const storedLevel = localStorage.getItem(BUILDING_LEVEL_KEY);
+            return storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
+        }
+
+        function getBuildingLevelMode() {
+            return localStorage.getItem(BUILDING_LEVEL_MODE_KEY) === 'auto' ? 'auto' : 'manual';
+        }
+
+        function getBuildingKindForResource(SCD) {
+            const resource = parseInt(currentResourceId, 10);
+            const sales = SCD?.data?.SALES;
+            if (!Number.isFinite(resource) || !sales || typeof sales !== 'object') return null;
+            for (const [kind, ids] of Object.entries(sales)) {
+                if (Array.isArray(ids) && ids.some(id => Number(id) === resource)) return kind;
+            }
+            return null;
+        }
+
+        function getCapturedBuildingLevel(buildingKind) {
+            if (!buildingKind || currentRealmId === null || currentRealmId === undefined) {
+                return { available: false, level: 0, count: 0 };
+            }
+            try {
+                const raw = localStorage.getItem(`SimcompaniesRetailCalculation_${currentRealmId}`);
+                const buildings = raw ? JSON.parse(raw)?.buildings : null;
+                if (!Array.isArray(buildings)) return { available: false, level: 0, count: 0 };
+
+                let totalLevel = 0;
+                let count = 0;
+                for (const building of buildings) {
+                    if (String(building?.kind) !== String(buildingKind)) continue;
+                    const level = Number(building?.size);
+                    if (!Number.isFinite(level) || level <= 0) continue;
+                    totalLevel += level;
+                    count++;
+                }
+                const normalizedLevel = Math.floor(totalLevel + Number.EPSILON);
+                return {
+                    available: count > 0 && normalizedLevel >= 1,
+                    level: normalizedLevel,
+                    count
+                };
+            } catch {
+                return { available: false, level: 0, count: 0 };
+            }
+        }
+
+        function getBuildingLevelState() {
+            const mode = getBuildingLevelMode();
+            const manualLevel = getManualBuildingLevel();
+            if (mode !== 'auto') {
+                return {
+                    mode,
+                    manualLevel,
+                    capturedLevel: 0,
+                    capturedCount: 0,
+                    capturedAvailable: false,
+                    effectiveLevel: manualLevel
+                };
+            }
+            const buildingKind = getBuildingKindForResource(readConstantsData());
+            const captured = getCapturedBuildingLevel(buildingKind);
+            return {
+                mode,
+                manualLevel,
+                capturedLevel: captured.level,
+                capturedCount: captured.count,
+                capturedAvailable: captured.available,
+                effectiveLevel: captured.available ? captured.level : manualLevel
+            };
+        }
+
+        function syncBuildingLevelControl(state = getBuildingLevelState(), options = {}) {
+            const levelInput = document.getElementById('sc-building-level');
+            const modeSelect = document.getElementById('sc-building-level-mode-select');
+            if (!levelInput || !modeSelect) return state;
+
+            modeSelect.value = state.mode;
+            modeSelect.setAttribute('aria-label', '建筑等级来源');
+            if (state.mode === 'auto') {
+                modeSelect.title = state.capturedAvailable
+                    ? `自动：已按当前领域 ${state.capturedCount} 栋同类建筑计算，总等级 ${state.capturedLevel}`
+                    : `自动等级暂不可用，已使用你填写的等级 ${state.manualLevel}`;
+                levelInput.readOnly = state.capturedAvailable;
+                levelInput.title = state.capturedAvailable
+                    ? '自动计算的同类建筑总等级'
+                    : `自动等级暂不可用，当前使用手动等级 ${state.manualLevel}`;
+            } else {
+                modeSelect.title = '手动：使用你填写的建筑等级';
+                levelInput.readOnly = false;
+                levelInput.title = '手动填写的建筑等级';
+            }
+
+            if (!(options.preserveFocusedInput && document.activeElement === levelInput)) {
+                levelInput.value = String(state.effectiveLevel);
+            }
+            return state;
+        }
 
         // Worker 代码 —— 批量处理版本：一次接收所有行，共享数据只传一次
         const workerCode = `
@@ -383,6 +496,8 @@ const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" styl
                 return;
             }
 
+            const buildingLevelState = syncBuildingLevelControl(getBuildingLevelState(), { preserveFocusedInput: true });
+
             // ============================================
             // 核心计算分流
             // ============================================
@@ -397,13 +512,10 @@ const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" styl
 
             // 用于展示的状态文本
             let statusText = "";
-            let bldLevel = 1;
+            const bldLevel = buildingLevelState.effectiveLevel;
 
             if (isSimulationMode) {
                 // === 模式 A：真实扫货模拟 (修正：强制 价格升序 + 品质降序) ===
-                const storedLevel = localStorage.getItem('sc_building_level');
-                bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
-
                 // 1. 预提取所有行的数据，并转换为数值对象
                 const processedRows = rawRows.map(item => {
                     const data = extractNumbersFromAriaLabel(item.row.getAttribute('aria-label'));
@@ -518,9 +630,7 @@ const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" styl
                 }
 
                 // 4. 读取建筑等级和运行时长设置（等级整数≥1，时长可小数）
-                const storedLevel = localStorage.getItem('sc_building_level');
-                bldLevel = storedLevel !== null ? Math.max(1, parseInt(storedLevel) || 1) : 100;
-                const storedHours = localStorage.getItem('sc_building_hours');
+                const storedHours = localStorage.getItem(BUILDING_HOURS_KEY);
                 const bldHours = storedHours !== null ? Math.max(0, parseFloat(storedHours) || 0) : 24;
                 const targetSeconds = bldLevel * bldHours * 3600;
                 let remainingTime = targetSeconds; // 秒
@@ -1257,19 +1367,19 @@ const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" styl
                         buildingLevelInput.type = 'number';
                         buildingLevelInput.min = '1';
                         buildingLevelInput.step = '1';
-                        buildingLevelInput.value = localStorage.getItem('sc_building_level') || '100';
+                        buildingLevelInput.value = localStorage.getItem(BUILDING_LEVEL_KEY) || '100';
                         buildingLevelInput.title = '建筑等级';
                         buildingLevelInput.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 2px; width: 36px; text-align: center;`;
                         buildingLevelInput.addEventListener('input', () => {
                             const raw = parseInt(buildingLevelInput.value);
                             const v = (raw >= 1 && Number.isFinite(raw)) ? raw : 1;
-                            localStorage.setItem('sc_building_level', v);
+                            localStorage.setItem(BUILDING_LEVEL_KEY, v);
                             updateGlobalSimulation();
                         });
                         buildingLevelInput.addEventListener('change', () => {
                             const raw = parseInt(buildingLevelInput.value);
                             const v = (raw >= 1 && Number.isFinite(raw)) ? raw : 1;
-                            localStorage.setItem('sc_building_level', v);
+                            localStorage.setItem(BUILDING_LEVEL_KEY, v);
                             updateGlobalSimulation();
                         });
                         extraControls.appendChild(buildingLevelInput);
@@ -1285,19 +1395,19 @@ const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" styl
                         buildingHoursInput.type = 'number';
                         buildingHoursInput.min = '0';
                         buildingHoursInput.step = '0.01';
-                        buildingHoursInput.value = localStorage.getItem('sc_building_hours') || '24';
+                        buildingHoursInput.value = localStorage.getItem(BUILDING_HOURS_KEY) || '24';
                         buildingHoursInput.title = '运行时长（小时）';
                         buildingHoursInput.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 2px; width: 36px; text-align: center;`;
                         buildingHoursInput.addEventListener('input', () => {
                             const raw = parseFloat(buildingHoursInput.value);
                             const v = (raw > 0 && Number.isFinite(raw)) ? Math.round(raw * 100) / 100 : 0;
-                            localStorage.setItem('sc_building_hours', v);
+                            localStorage.setItem(BUILDING_HOURS_KEY, v);
                             updateGlobalSimulation();
                         });
                         buildingHoursInput.addEventListener('change', () => {
                             const raw = parseFloat(buildingHoursInput.value);
                             const v = (raw > 0 && Number.isFinite(raw)) ? Math.round(raw * 100) / 100 : 0;
-                            localStorage.setItem('sc_building_hours', v);
+                            localStorage.setItem(BUILDING_HOURS_KEY, v);
                             updateGlobalSimulation();
                         });
                         extraControls.appendChild(buildingHoursInput);
@@ -1306,6 +1416,21 @@ const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" styl
                         bldLabel2.textContent = 'H';
                         bldLabel2.style.cssText = `font-size: 11px; color: ${d7 ? '#aaa' : '#666'};`;
                         extraControls.appendChild(bldLabel2);
+
+                        const buildingLevelModeSelect = document.createElement('select');
+                        buildingLevelModeSelect.id = 'sc-building-level-mode-select';
+                        buildingLevelModeSelect.title = '建筑等级来源';
+                        buildingLevelModeSelect.innerHTML = `
+                            <option value="manual">手动</option>
+                            <option value="auto">自动</option>
+                        `;
+                        buildingLevelModeSelect.style.cssText = `font-size: 11px; color: ${d7 ? '#efefef' : '#333'}; background: ${d7 ? '#333' : '#fff'}; border: 1px solid ${d7 ? '#555' : '#bbb'}; border-radius: 3px; padding: 1px 1px; width: 46px;`;
+                        buildingLevelModeSelect.addEventListener('change', () => {
+                            localStorage.setItem(BUILDING_LEVEL_MODE_KEY, buildingLevelModeSelect.value);
+                            syncBuildingLevelControl();
+                            updateGlobalSimulation();
+                        });
+                        extraControls.appendChild(buildingLevelModeSelect);
 
                         // --- 小屏视图切换：把基本控件包一层，与 extraControls 互斥显示 ---
                         const basicGroup = document.createElement('span');
@@ -1359,6 +1484,7 @@ const MESSAGE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 512 512" styl
                         summaryDisplay.appendChild(simContent);
 
                         container.appendChild(summaryDisplay);
+                        syncBuildingLevelControl();
 
                         // 小屏幕：通过窗口宽度判断，≤991px 为小屏，需要滚动到表格底部
                         if (window.innerWidth <= 991) {
