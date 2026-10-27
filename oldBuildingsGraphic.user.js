@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SC背景图案替换+换回旧建筑图案
 // @namespace    https://github.com/gangbaRuby
-// @version      3.0.0
+// @version      3.0.1
 // @license      AGPL-3.0
 // @description  SC背景图案替换+换回旧建筑图案
 // @author       Rabbit House
@@ -1133,7 +1133,7 @@
             const isSmallScreen = window.innerWidth <= 640;
             this.panel.innerHTML = `
                 <div class="scobg-header">
-                    <span class="scobg-header-title">SC皮肤管理 <a href="https://showscimg.22-7.top/images" target="_blank" style="margin-left:8px; font-size:13px; color:#3498db; text-decoration:underline;">SC图片一览</a></span>
+                    <span class="scobg-header-title">SC皮肤管理 <a href="https://sc.22-7.top/scimg" target="_blank" style="margin-left:8px; font-size:13px; color:#3498db; text-decoration:underline;">SC图片一览</a></span>
                     <div class="scobg-header-actions">
                         <button id="scobg-import-btn" class="scobg-btn-blue scobg-btn-sm" style="background:#e67e22;">导入配置</button>
                         <input type="file" id="scobg-import-file" accept=".json" style="display:none;">
@@ -1950,7 +1950,7 @@
         async checkUpdate() {
             const scriptUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js?t=' + Date.now();
             const downloadUrl = 'https://sc.22-7.top/scripts/oldBuildingsGraphic.user.js';
-            // @changelog    增加HQ总部替换，优化图片替换方式。
+            // @changelog    SC图片一览改为主站图片浏览页。
 
             fetch(scriptUrl)
                 .then(res => res.text())
