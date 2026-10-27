@@ -1198,7 +1198,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 { type: 'toggle', key: 'salesOfficeHelper', label: '销售办公室优化（测试中）' },
                 { type: 'toggle', key: 'paQuestAnswers', label: 'PA任务答案', defaultEnabled: true },
                 { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
-                { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大', defaultEnabled: true, subContent: createChatInputHeightControls },
+                { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大（测试）', defaultEnabled: true, subContent: createChatInputHeightControls },
                 { type: 'toggle', key: 'chatEmojiPicker', label: '聊天表情选择器', defaultEnabled: true },
             ];
             const ITEMS_PER_PAGE = 5;
@@ -5557,6 +5557,10 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         var MODULE_KEY = 'chatInputExpander';
         var activeSession = null;
         var releaseTimer = null;
+        var KEYBOARD_HEIGHT_DELTA = 60;
+        var KEYBOARD_FALLBACK_DELAY = 450;
+        var restingLayoutHeight = window.innerHeight;
+        var restingViewportHeight = window.visualViewport?.height || window.innerHeight;
 
         function isEnabled() {
             return typeof window.isPageModuleEnabled === 'function' ? window.isPageModuleEnabled(MODULE_KEY) : true;
@@ -5774,14 +5778,15 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             if (!session) return;
             if (session.frame !== null) cancelAnimationFrame(session.frame);
             clearTimeout(session.settleTimer);
+            clearTimeout(session.fallbackTimer);
             session.frame = null;
             session.settleTimer = null;
+            session.fallbackTimer = null;
             session.resizeObserver?.disconnect();
             session.viewport?.removeEventListener('resize', requestLayout);
             session.viewport?.removeEventListener('scroll', requestLayout);
             window.removeEventListener('resize', requestLayout);
             window.removeEventListener('orientationchange', requestLayout);
-            window.removeEventListener('scroll', queueLayout, true);
             session.listening = false;
         }
 
@@ -5794,6 +5799,39 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             if (!element) return;
             if (element.classList.contains('sc-chat-room-constrained')) element.classList.remove('sc-chat-room-constrained');
             if (element.style.getPropertyValue('--sc-chat-room-max-height')) element.style.removeProperty('--sc-chat-room-max-height');
+        }
+
+        function getViewportMetrics() {
+            var viewport = window.visualViewport;
+            var height = viewport?.height || window.innerHeight;
+            var top = viewport?.offsetTop || 0;
+            return {
+                layoutHeight: window.innerHeight,
+                height: height,
+                top: top,
+                bottom: top + height
+            };
+        }
+
+        function refreshRestingViewport() {
+            var active = document.activeElement;
+            if (activeSession || active?.matches('textarea, input, [contenteditable="true"]')) return;
+            var metrics = getViewportMetrics();
+            restingLayoutHeight = metrics.layoutHeight;
+            restingViewportHeight = metrics.height;
+        }
+
+        function keyboardGeometryChanged(session, metrics) {
+            return session.initialLayoutHeight - metrics.layoutHeight > KEYBOARD_HEIGHT_DELTA ||
+                session.initialViewportHeight - metrics.height > KEYBOARD_HEIGHT_DELTA;
+        }
+
+        function getMobileLayoutMode(session, metrics) {
+            // 浏览器已经缩短布局视口时，原生 100% 高度会自行适配；再改外壳会造成双重收缩。
+            if (session.initialLayoutHeight - metrics.layoutHeight > KEYBOARD_HEIGHT_DELTA) return 'native';
+            // 只有 visualViewport 缩小时，才需要把游戏外壳贴到键盘上沿。
+            if (session.initialViewportHeight - metrics.height > KEYBOARD_HEIGHT_DELTA) return 'shell';
+            return 'input-only';
         }
 
         function observeRoomChildren(session) {
@@ -5809,6 +5847,76 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             session.observedChildren = children;
         }
 
+        function applyExpandedClasses(session) {
+            var textarea = session.textarea;
+            var containers = session.containers;
+            textarea.classList.add('sc-chat-textarea-transition');
+            textarea.classList.add('sc-chat-textarea-focused');
+            if (session.parent) session.parent.classList.add('sc-chat-wrap-focused');
+            if (containers.inputGroup) containers.inputGroup.classList.add('sc-chat-input-group-focused');
+            if (containers.btnContainer) containers.btnContainer.classList.add('sc-chat-btn-focused');
+            if (containers.outerContainer) containers.outerContainer.classList.add('sc-chat-outer-focused');
+            session.expanded = true;
+        }
+
+        function installLayoutObservers(session) {
+            if (session.layoutObserversInstalled) return;
+            session.layoutObserversInstalled = true;
+            if (typeof ResizeObserver === 'function') session.resizeObserver = new ResizeObserver(queueLayout);
+            var ancestor = session.containers.chatRoom;
+            while (ancestor) {
+                session.resizeObserver?.observe(ancestor);
+                if (ancestor !== document.body) {
+                    session.observer.observe(ancestor, { attributes: true, attributeFilter: ['class', 'style'] });
+                }
+                ancestor = ancestor.parentElement;
+            }
+            observeRoomChildren(session);
+        }
+
+        function renderLayout(session, metrics) {
+            var desired = readCustomHeight(session.mobile ? 'chatInputExpanderHeightMobile' : 'chatInputExpanderHeight',
+                session.mobile ? 90 : 130);
+            var outer = session.containers.outerContainer || session.containers.inputGroup;
+            if (!outer) return;
+            var room = session.containers.chatRoom;
+            var shell = session.containers.pageShell;
+            var top = metrics.top + 8;
+            var bottom = metrics.bottom - 8;
+            var available = metrics.height - 24;
+
+            if (session.mobile) {
+                if (session.mobileLayout === 'shell' && shell?.isConnected) {
+                    var shellTop = shell.getBoundingClientRect().top;
+                    // 外壳底边直接贴合可见视口，保留小数尺寸，避免菜单下方出现细条。
+                    setLayoutProperty(shell, '--sc-chat-room-max-height', Math.max(0, metrics.bottom - shellTop) + 'px');
+                    if (!shell.classList.contains('sc-chat-room-constrained')) shell.classList.add('sc-chat-room-constrained');
+                    clearLayoutConstraint(room);
+                } else {
+                    clearLayoutConstraint(shell);
+                    clearLayoutConstraint(room);
+                }
+            } else {
+                clearLayoutConstraint(shell);
+            }
+
+            if (room?.isConnected) {
+                var roomTop = room.getBoundingClientRect().top;
+                if (!session.mobile) {
+                    setLayoutProperty(room, '--sc-chat-room-max-height', Math.max(0, Math.floor(bottom - roomTop)) + 'px');
+                    if (!room.classList.contains('sc-chat-room-constrained')) room.classList.add('sc-chat-room-constrained');
+                }
+                var roomRect = room.getBoundingClientRect();
+                var messageArea = session.containers.messageArea;
+                var contentTop = messageArea?.isConnected ? messageArea.getBoundingClientRect().top : roomRect.top;
+                // 扣除标题/置顶区和至少两行消息，避免展开后的输入区覆盖消息。
+                available = Math.min(bottom, roomRect.bottom) - Math.max(top, contentTop) - 8 - 48;
+            }
+
+            var fitted = Math.min(desired, Math.max(40, Math.floor(available)));
+            setLayoutProperty(outer, '--sc-chat-input-height', fitted + 'px');
+        }
+
         function updateLayout() {
             var session = activeSession;
             if (!session) return;
@@ -5819,61 +5927,35 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             }
             if (!session.listening || document.activeElement !== session.textarea || isClickingInside) return;
 
-            var viewport = session.viewport;
-            var height = viewport?.height || window.innerHeight;
-            var viewportTop = viewport?.offsetTop || 0;
-            var viewportBottom = viewportTop + height;
-            var top = viewportTop + 8;
-            var bottom = viewportBottom - 8;
-            var mobile = window.matchMedia('(max-width: 767px)').matches;
-            var desired = readCustomHeight(mobile ? 'chatInputExpanderHeightMobile' : 'chatInputExpanderHeight', mobile ? 90 : 130);
-            var outer = session.containers.outerContainer || session.containers.inputGroup;
-            if (!outer) return;
-            var room = session.containers.chatRoom;
-            var available = height - 24;
-            var shell = session.containers.pageShell;
-            if (mobile && shell?.isConnected) {
-                var shellTop = shell.getBoundingClientRect().top;
-                // 页面外壳直接贴合可见底边；输入区的留白不能变成菜单下方的空白条。
-                // 保留可见视口的小数尺寸，避免缩放/键盘动画后取整留下细缝。
-                setLayoutProperty(shell, '--sc-chat-room-max-height', Math.max(0, viewportBottom - shellTop) + 'px');
-                if (!shell.classList.contains('sc-chat-room-constrained')) shell.classList.add('sc-chat-room-constrained');
-                // 外壳已为底部菜单预留空间，聊天室恢复原生100%填满主内容。
-                clearLayoutConstraint(room);
-            } else {
-                // 横竖屏切换跨过手机断点时，不沿用手机页面外壳的限制。
-                clearLayoutConstraint(shell);
+            session.mobile = window.matchMedia('(max-width: 767px)').matches;
+            var metrics = getViewportMetrics();
+            var geometryChanged = keyboardGeometryChanged(session, metrics);
+            if (!session.expanded) {
+                if (session.mobile && !geometryChanged && !session.allowFallback) return;
+                clearTimeout(session.fallbackTimer);
+                session.fallbackTimer = null;
+                applyExpandedClasses(session);
+                installLayoutObservers(session);
             }
-            if (room?.isConnected) {
-                var roomTop = room.getBoundingClientRect().top;
-                // rect 与 offsetTop 均为布局视口坐标。顶部已被浏览器滚出屏幕时也使用真实 roomTop。
-                // max-height 保留原生 height:100%，父容器随后缩放时不会沿用过期的自然高度。
-                if (!mobile || !shell?.isConnected) {
-                    setLayoutProperty(room, '--sc-chat-room-max-height', Math.max(0, Math.floor(bottom - roomTop)) + 'px');
-                    if (!room.classList.contains('sc-chat-room-constrained')) room.classList.add('sc-chat-room-constrained');
-                }
-                var roomRect = room.getBoundingClientRect();
-                var messageArea = session.containers.messageArea;
-                var contentTop = messageArea?.isConnected ? messageArea.getBoundingClientRect().top : roomRect.top;
-                // 扣除标题/置顶区、输入区外壳与至少两行消息的空间，不覆盖用户保存的高度。
-                available = Math.min(bottom, roomRect.bottom) - Math.max(top, contentTop) - 8 - 48;
-            }
-            var fitted = Math.min(desired, Math.max(40, Math.floor(available)));
-            setLayoutProperty(outer, '--sc-chat-input-height', fitted + 'px');
+            session.allowFallback = false;
+            session.mobileLayout = session.mobile ? getMobileLayoutMode(session, metrics) : 'room';
+            renderLayout(session, metrics);
         }
 
-        function queueLayout() {
-            if (activeSession?.listening && activeSession.frame === null) {
+        function queueLayout(allowFallback) {
+            if (activeSession?.listening) {
+                if (allowFallback === true) activeSession.allowFallback = true;
+                if (activeSession.frame !== null) return;
                 activeSession.frame = requestAnimationFrame(updateLayout);
             }
         }
 
         function requestLayout() {
             if (!activeSession?.listening) return;
-            queueLayout();
+            queueLayout(false);
             clearTimeout(activeSession.settleTimer);
             // 复核键盘动画后的布局；更晚的游戏重排由 ResizeObserver 继续跟踪。
-            activeSession.settleTimer = setTimeout(queueLayout, 250);
+            activeSession.settleTimer = setTimeout(function () { queueLayout(false); }, 250);
         }
 
         function startTracking(textarea, containers) {
@@ -5881,15 +5963,17 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             activeSession = {
                 textarea: textarea, containers: containers, parent: textarea.parentElement,
                 viewport: window.visualViewport, url: location.href,
-                frame: null, settleTimer: null, listening: true, observer: null, resizeObserver: null,
-                observedChildren: new Set()
+                initialLayoutHeight: restingLayoutHeight, initialViewportHeight: restingViewportHeight,
+                mobile: window.matchMedia('(max-width: 767px)').matches,
+                expanded: false, mobileLayout: 'none', allowFallback: false,
+                frame: null, settleTimer: null, fallbackTimer: null, listening: true, observer: null,
+                resizeObserver: null, observedChildren: new Set(), layoutObserversInstalled: false
             };
             var session = activeSession;
             session.viewport?.addEventListener('resize', requestLayout);
             session.viewport?.addEventListener('scroll', requestLayout);
             window.addEventListener('resize', requestLayout);
             window.addEventListener('orientationchange', requestLayout);
-            window.addEventListener('scroll', queueLayout, true);
             // React 移除聚焦节点不一定触发 focusout，保留引用以清理所有原容器。
             // 发送按钮按下后的短暂失焦仍保留此清理观察器，直到点击结束。
             session.observer = new MutationObserver(records => {
@@ -5899,39 +5983,42 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     return;
                 }
                 if (!session.listening) return;
+                var currentContainers = session.containers;
                 if (textarea.parentElement !== session.parent ||
-                    (containers.chatRoom && !containers.chatRoom.contains(textarea))) {
-                    expandInput(textarea);
+                    (currentContainers.chatRoom && !currentContainers.chatRoom.contains(textarea))) {
+                    if (document.activeElement === textarea) {
+                        expandInput(textarea);
+                    } else {
+                        collapseAll();
+                    }
                     return;
                 }
                 if (records.some(record => record.type === 'attributes' ||
-                    record.target.contains(textarea) || containers.chatRoom?.contains(record.target))) {
+                    record.target.contains(textarea) || currentContainers.chatRoom?.contains(record.target))) {
                     var nextContainers = findContainers(textarea);
-                    if (nextContainers.chatRoom !== containers.chatRoom || nextContainers.outerContainer !== containers.outerContainer ||
-                        nextContainers.pageShell !== containers.pageShell) {
+                    if (nextContainers.chatRoom !== currentContainers.chatRoom ||
+                        nextContainers.outerContainer !== currentContainers.outerContainer ||
+                        nextContainers.inputGroup !== currentContainers.inputGroup ||
+                        nextContainers.btnContainer !== currentContainers.btnContainer ||
+                        nextContainers.pageShell !== currentContainers.pageShell) {
                         expandInput(textarea);
                         return;
                     }
-                    containers.messageArea = nextContainers.messageArea;
-                    observeRoomChildren(session);
-                    queueLayout();
+                    currentContainers.messageArea = nextContainers.messageArea;
+                    if (session.layoutObserversInstalled) observeRoomChildren(session);
+                    queueLayout(false);
                 }
             });
             session.observer.observe(document.body, { childList: true, subtree: true });
-            if (typeof ResizeObserver === 'function') session.resizeObserver = new ResizeObserver(queueLayout);
-            // 覆盖父容器尺寸改变与标题/置顶消息增高；不依赖下一次键盘事件。
-            var ancestor = containers.chatRoom;
-            while (ancestor) {
-                session.resizeObserver?.observe(ancestor);
-                if (ancestor !== document.body) {
-                    session.observer.observe(ancestor, { attributes: true, attributeFilter: ['class', 'style'] });
-                }
-                ancestor = ancestor.parentElement;
+            if (session.mobile) {
+                // 不阻塞浏览器默认的软键盘唤起；等键盘真实出现后再改尺寸。
+                session.fallbackTimer = setTimeout(function () {
+                    session.fallbackTimer = null;
+                    queueLayout(true);
+                }, KEYBOARD_FALLBACK_DELAY);
+            } else {
+                queueLayout(false);
             }
-            observeRoomChildren(session);
-            // 首次聚焦立即按当前视口适配，涵盖键盘已经打开后的回复/重新聚焦。
-            updateLayout();
-            requestLayout();
         }
 
         // 收缩单个输入框关联的所有容器
@@ -5948,6 +6035,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 releaseTimer = null;
                 isClickingInside = false;
             }
+            textarea.classList.remove('sc-chat-textarea-transition');
             textarea.classList.remove('sc-chat-textarea-focused');
 
             var parent = session ? session.parent : textarea.parentElement;
@@ -6020,25 +6108,6 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 collapseAll();
                 ensureStyles();
                 var containers = findContainers(target);
-
-                target.classList.add('sc-chat-textarea-transition');
-                target.classList.add('sc-chat-textarea-focused');
-
-                var parent = target.parentElement;
-                if (parent) {
-                    parent.classList.add('sc-chat-wrap-focused');
-                }
-
-                if (containers.inputGroup) {
-                    containers.inputGroup.classList.add('sc-chat-input-group-focused');
-                }
-                if (containers.btnContainer) {
-                    containers.btnContainer.classList.add('sc-chat-btn-focused');
-                }
-                if (containers.outerContainer) {
-                    containers.outerContainer.classList.add('sc-chat-outer-focused');
-                }
-
                 startTracking(target, containers);
             }
         }
@@ -6056,6 +6125,10 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             }
         });
 
+        window.addEventListener('resize', refreshRestingViewport);
+        window.visualViewport?.addEventListener('resize', refreshRestingViewport);
+        window.addEventListener('orientationchange', refreshRestingViewport);
+
         // 立即初始化以注入样式
         init();
 
@@ -6066,7 +6139,12 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 return;
             }
             injectStyles();
-            if (isChatInput(document.activeElement)) expandInput(document.activeElement);
+            var activeEl = document.activeElement;
+            if (activeSession?.textarea === activeEl) {
+                if (activeSession.expanded) queueLayout(false);
+            } else if (isChatInput(activeEl)) {
+                expandInput(activeEl);
+            }
         };
     })();
 
