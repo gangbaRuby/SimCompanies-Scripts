@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.34.3
+// @version      1.34.4
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -1977,7 +1977,10 @@
   // src/features/pageObserver.js
   var ResourceMarketHandler = { init: (...args) => window.SC_Modules?.ResourceMarketHandler?.init(...args) };
   var incomingContractsHandler = { init: (...args) => window.SC_Modules?.incomingContractsHandler?.init(...args) };
-  var outgoingContractMPHandler = { init: (...args) => window.SC_Modules?.outgoingContractMPHandler?.init(...args) };
+  var outgoingContractMPHandler = {
+    init: (...args) => window.SC_Modules?.outgoingContractMPHandler?.init(...args),
+    destroy: () => window.SC_Modules?.outgoingContractMPHandler?.destroy()
+  };
   var ExecutiveTrainingModule = { init: (...args) => window.SC_Modules?.ExecutiveTrainingModule?.init(...args) };
   var FormerExecutivesModule = { forceInject: (...args) => window.SC_Modules?.FormerExecutivesModule?.forceInject(...args) };
   var LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.LandscapeIdleBuildingHighlight?.init(...args) };
@@ -2106,6 +2109,9 @@
     };
     function handlePage() {
       const url = location.href;
+      if (!PAGE_ACTIONS.outgoingContractPage.pattern.test(url) || !isPageModuleEnabled("outgoingMP")) {
+        outgoingContractMPHandler.destroy();
+      }
       if (!/\/b\/\d+\/?$/.test(url)) {
         BuildingUpgradeMaterialCopyLifecycle.destroy();
         SalesOfficeHelper.destroy();
@@ -5175,7 +5181,20 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     const USE_INPUT_KEY = "SC_OutgoingMP_UseInput";
     const DEFAULT_PRESETS = "MP-4%";
     let initTimer = null;
-    let _qualityCache = {};
+    let _activeUrl = null;
+    let _generation = 0;
+    let _buttonsRevision = 0;
+    let _buttonsKey = "";
+    let _buttonsInput = null;
+    let _skipInputTimer = null;
+    const _marketRequests = /* @__PURE__ */ new Set();
+    const PAGE_PATTERN = /\/headquarters\/warehouse\/[^/]+\/(?:sell|contract)\/?$/;
+    function isEnabled3() {
+      return window.isPageModuleEnabled?.("outgoingMP") !== false;
+    }
+    function isActive() {
+      return _activeUrl === location.href && PAGE_PATTERN.test(location.href) && isEnabled3();
+    }
     const VWAP_CACHE_KEY = "SC_OutgoingVWAP_Cache";
     const VWAP_CACHE_MS = 10 * 60 * 1e3;
     async function getVWAPData(realmId, resourceId, quality) {
@@ -5196,8 +5215,21 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       try {
         const url = `https://api.simcotools.com/v1/realms/${realmId}/market/vwaps/${resourceId}/${quality}`;
         const vwap = await new Promise((resolve) => {
+          const controller = new AbortController();
+          _marketRequests.add(controller);
+          let request;
+          const finish = (value) => {
+            clearTimeout(timeout);
+            _marketRequests.delete(controller);
+            resolve(value);
+          };
+          const timeout = setTimeout(() => controller.abort(), 1e4);
+          controller.signal.addEventListener("abort", () => {
+            request?.abort();
+            finish(null);
+          }, { once: true });
           if (typeof GM_xmlhttpRequest === "function") {
-            GM_xmlhttpRequest({
+            request = GM_xmlhttpRequest({
               method: "GET",
               url,
               onload: function(resp) {
@@ -5205,30 +5237,33 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                   const data2 = JSON.parse(resp.responseText);
                   const v = typeof data2 === "number" ? data2 : data2.vwap || data2.price || data2.value || Array.isArray(data2.vwaps) && data2.vwaps[0]?.vwap || Array.isArray(data2) && data2[0]?.vwap;
                   console.log("[VWAP] API\u8FD4\u56DE:", { status: resp.status, raw: resp.responseText?.substring(0, 100), parsed: v });
-                  resolve(typeof v === "number" && v > 0 ? v : null);
+                  finish(typeof v === "number" && v > 0 ? v : null);
                 } catch (e) {
                   console.warn("[VWAP] \u89E3\u6790\u5931\u8D25:", e);
-                  resolve(null);
+                  finish(null);
                 }
               },
               onerror: function(e) {
                 console.warn("[VWAP] GM_xmlhttpRequest \u9519\u8BEF:", e);
-                resolve(null);
+                finish(null);
               },
               ontimeout: function() {
                 console.warn("[VWAP] \u8BF7\u6C42\u8D85\u65F6");
-                resolve(null);
+                finish(null);
+              },
+              onabort: function() {
+                finish(null);
               },
               timeout: 1e4
             });
           } else {
-            fetch(url).then((r) => r.json()).then((data2) => {
+            fetch(url, { signal: controller.signal }).then((r) => r.json()).then((data2) => {
               const v = typeof data2 === "number" ? data2 : data2.vwap || data2.price || data2.value || Array.isArray(data2.vwaps) && data2.vwaps[0]?.vwap || Array.isArray(data2) && data2[0]?.vwap;
               console.log("[VWAP] fetch\u8FD4\u56DE:", v);
-              resolve(typeof v === "number" && v > 0 ? v : null);
+              finish(typeof v === "number" && v > 0 ? v : null);
             }).catch((e) => {
               console.warn("[VWAP] fetch\u5931\u8D25:", e);
-              resolve(null);
+              finish(null);
             });
           }
         });
@@ -5347,141 +5382,94 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         modal.remove();
       });
     }
-    function parseResourceId() {
-      const link = document.querySelector('a[href*="/encyclopedia/"][href*="/resource/"]');
-      if (!link) return null;
-      const match2 = link.href.match(/\/resource\/(\d+)\//);
-      return match2 ? parseInt(match2[1], 10) : null;
+    function getCurrentFiber(element) {
+      const key = Object.keys(element).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+      let fiber = key ? element[key] : null;
+      if (!fiber) return null;
+      let root = fiber;
+      while (root.return) root = root.return;
+      if (root.stateNode?.current && root.stateNode.current !== root) {
+        fiber = fiber.alternate;
+        if (!fiber) return null;
+        root = fiber;
+        while (root.return) root = root.return;
+        if (root.stateNode?.current !== root) return null;
+      }
+      return fiber;
     }
-    async function parseQuality() {
-      const resourceId = parseResourceId();
-      if (resourceId === null) return 0;
-      if (_qualityCache[resourceId] !== void 0 && _qualityCache[resourceId] >= 0) {
-        mpLog("parseQuality \u7F13\u5B58\u547D\u4E2D:", _qualityCache[resourceId]);
-        return _qualityCache[resourceId];
+    function validResource(resource) {
+      return resource && resource.id != null && Number.isInteger(resource.kind) && resource.kind > 0 && Number.isInteger(resource.quality) && resource.quality >= 0;
+    }
+    function readFormContext() {
+      const priceInput = document.querySelector('input[name="price"]');
+      const form = priceInput?.closest("form");
+      if (!form) return null;
+      const qtyInput = form.querySelector('input[name="amount"], input[name="quantity"]');
+      if (!qtyInput) return null;
+      let props = null;
+      let store = null;
+      for (let node = getCurrentFiber(priceInput); node; node = node.return) {
+        const candidate = node.memoizedProps;
+        if (!props && validResource(candidate?.resource) && Number.isFinite(candidate.transportation)) props = candidate;
+        const candidateStore = candidate?.store || candidate?.value?.store;
+        if (!store && typeof candidateStore?.getState === "function") store = candidateStore;
       }
-      const startUrl = location.href;
-      const MAX_WAIT = 3e3;
-      const RETRY_INTERVAL = 200;
-      const startTime = Date.now();
-      let loopCount = 0;
-      const SELL_ORDER_TEXTS = ["\u5F53\u524D\u4EA4\u6613\u6240\u5356\u5355", "Current exchange orders", "\u7576\u524D\u4EA4\u6613\u6240\u8CE3\u55AE"];
-      const FILTER_BTN_TEXTS = ["\u6309\u54C1\u8D28\u8FC7\u6EE4", "Filter by quality", "\u6309\u54C1\u8CEA\u904E\u6FFE"];
-      const SHOW_ALL_TEXTS = ["Show all", "\u663E\u793A\u6240\u6709", "\u986F\u793A\u6240\u6709"];
-      const AVG_PRICE_TITLES = ["\u5E73\u5747\u96F6\u552E\u4EF7\u683C", "Average retail price", "\u5E73\u5747\u96F6\u552E\u50F9\u683C"];
-      while (Date.now() - startTime < MAX_WAIT) {
-        if (location.href !== startUrl) return 0;
-        let s1Quality = null;
-        let s1FilterBtn = false;
-        let s1ShowAllBtn = false;
-        let s1Found = false;
-        let s1RawText = "";
-        let s1BtnRaw = "";
-        const allSpans = document.querySelectorAll("span");
-        for (const span of allSpans) {
-          const b = span.querySelector("b");
-          if (!b) continue;
-          const text = b.textContent?.trim() || "";
-          if (SELL_ORDER_TEXTS.some((t) => text.includes(t))) {
-            s1Found = true;
-            s1RawText = text;
-            const qMatch = text.match(/Q(\d+)\+/);
-            if (qMatch) {
-              s1Quality = parseInt(qMatch[1], 10);
-            }
-            const btnText = span.querySelector("button")?.textContent || "";
-            s1BtnRaw = btnText;
-            s1ShowAllBtn = SHOW_ALL_TEXTS.some((t) => btnText.includes(t));
-            s1FilterBtn = FILTER_BTN_TEXTS.some((t) => btnText.includes(t));
-            break;
-          }
-        }
-        const extractQualityFromEl = (el) => {
-          const txt = el.textContent?.trim() || "";
-          const numMatch = txt.match(/^(\d+)/);
-          if (numMatch) return parseInt(numMatch[1], 10);
-          const svgCount = el.querySelectorAll(".svg-inline--fa.fa-star").length;
-          return svgCount > 0 ? svgCount : null;
-        };
-        let s2Quality = null;
-        let s2RawTxt = "";
-        const titleSelector = AVG_PRICE_TITLES.map((t) => `[title="${t}"]`).join(", ");
-        const avgPriceEl = document.querySelector(titleSelector);
-        if (avgPriceEl) {
-          const sibling = avgPriceEl.nextElementSibling;
-          if (sibling) {
-            s2RawTxt = sibling.textContent?.trim() || "";
-            s2Quality = extractQualityFromEl(sibling);
-          }
-        } else {
-          let qualityEl = null;
-          const allEls = document.querySelectorAll("*");
-          for (const el of allEls) {
-            for (const node of el.childNodes) {
-              if (node.nodeType === 3 && node.textContent?.includes("\u5408\u5E76\u6210\u672C")) {
-                let next = node.nextSibling;
-                while (next) {
-                  if (next.nodeType === 1) {
-                    qualityEl = next;
-                    break;
-                  }
-                  next = next.nextSibling;
-                }
-                if (qualityEl) {
-                  let q = extractQualityFromEl(qualityEl);
-                  let fallback = qualityEl.nextElementSibling;
-                  while (q === null && fallback) {
-                    qualityEl = fallback;
-                    q = extractQualityFromEl(fallback);
-                    if (q !== null) break;
-                    fallback = fallback.nextElementSibling;
-                  }
-                }
-                break;
-              }
-            }
-            if (qualityEl) break;
-          }
-          if (qualityEl) {
-            s2RawTxt = qualityEl.textContent?.trim() || "";
-            s2Quality = extractQualityFromEl(qualityEl);
-            if (s2Quality !== null) {
-              mpLog("\u7B56\u75652 \u4ECE\u5408\u5E76\u6210\u672C\u540E\u5144\u5F1F\u5143\u7D20:", s2Quality, "txt:", s2RawTxt.substring(0, 30));
-            }
-          }
-        }
-        mpLog("parseQuality \u8F6E\u8BE2#" + loopCount + " s1Found=" + s1Found + ' rawText="' + (s1RawText || "").substring(0, 80) + '" qMatch=' + s1Quality + ' btn="' + (s1BtnRaw || "").substring(0, 30) + '" showAll=' + s1ShowAllBtn + " filter=" + s1FilterBtn + " s2El=" + (avgPriceEl ? "avgprice" : "cost") + ' s2Txt="' + (s2RawTxt || "").substring(0, 30) + '" s2Q=' + s2Quality);
-        if (s1Found || s2Quality !== null) {
-          if (s1Quality !== null && s1ShowAllBtn) {
-            _qualityCache[resourceId] = s1Quality;
-            mpLog("parseQuality \u60C5\u51B51(\u53EF\u4FE1Q):", s1Quality);
-            return s1Quality;
-          }
-          if (s1Found && s1Quality === null && !s1FilterBtn && !s1ShowAllBtn) {
-            _qualityCache[resourceId] = 0;
-            mpLog("parseQuality \u60C5\u51B53(\u53EF\u4FE1Q0)");
-            return 0;
-          }
-          if (s1FilterBtn && s2Quality !== null) {
-            _qualityCache[resourceId] = s2Quality;
-            mpLog("parseQuality \u60C5\u51B52(\u5E73\u5747\u96F6\u552E\u4EF7\u683C):", s2Quality);
-            return s2Quality;
-          }
-          if (!s1Found && s2Quality !== null) {
-            _qualityCache[resourceId] = s2Quality;
-            mpLog("parseQuality \u60C5\u51B54(\u7EAF\u5E73\u5747\u96F6\u552E\u4EF7\u683C):", s2Quality);
-            return s2Quality;
-          }
-          if (s1Found) {
-            mpLog("parseQuality \u8F6E\u8BE2#" + loopCount + " \u672A\u5339\u914D: s1Q=" + s1Quality + " showAll=" + s1ShowAllBtn + " filter=" + s1FilterBtn + " s2Q=" + s2Quality);
-          }
-        }
-        await new Promise((r) => setTimeout(r, RETRY_INTERVAL));
-        loopCount++;
+      if (!props) return null;
+      let state3 = null;
+      try {
+        state3 = store?.getState();
+      } catch (e) {
       }
-      mpLog("parseQuality \u8D85\u65F6\u9000\u51FA, loopCount:", loopCount);
-      _qualityCache[resourceId] = 0;
-      return 0;
+      const realmId = state3?.user?.authCompany?.realmId ?? getRealmIdFromLink();
+      if (realmId !== 0 && realmId !== 1) return null;
+      const stock = state3?.warehouse?.resources;
+      const resource = Array.isArray(stock) ? stock.find((entry) => String(entry.id) === String(props.resource.id) && entry.kind === props.resource.kind && entry.quality === props.resource.quality) : props.resource;
+      if (!validResource(resource)) return null;
+      return { priceInput, qtyInput, form, props, resource, stock, realmId };
+    }
+    function getContextKey(context) {
+      return context ? `${context.realmId}_${context.resource.id}_${context.resource.kind}_${context.resource.quality}` : "";
+    }
+    function sumCost(resource) {
+      if (!resource.cost || typeof resource.cost !== "object" || Array.isArray(resource.cost)) return null;
+      const values = Object.values(resource.cost);
+      if (!values.length || values.some((v) => !Number.isFinite(v) || v < 0)) return null;
+      const total = values.reduce((sum, value) => sum + value, 0);
+      return Number.isFinite(total) ? total : null;
+    }
+    function getRemainingAmount(resource, constants, now) {
+      if (!Number.isFinite(resource.amount) || resource.amount <= 0) return null;
+      const decay = constants?.[resource.kind]?.decay;
+      if (!Number.isFinite(decay) || decay < 0 || decay >= 1) return null;
+      if (decay === 0) return resource.amount;
+      const time = Date.parse(resource.datetime);
+      if (!Number.isFinite(time)) return null;
+      const hours = Math.round(Math.abs(now - time) / 6e4 / 4) * 4 / 60;
+      return Math.floor(resource.amount * Math.pow(1 - decay, hours));
+    }
+    function getProductUnitCost(context, constants, now) {
+      const total = sumCost(context.resource);
+      if (total === null || !Number.isFinite(context.resource.amount) || context.resource.amount <= 0) return null;
+      const amount = getRemainingAmount(context.resource, constants, now);
+      if (amount !== null) return amount > 0 ? total / amount : null;
+      const nativeCost = context.props.unitSourceCost;
+      return context.resource === context.props.resource && Number.isFinite(nativeCost) && nativeCost >= 0 ? nativeCost : null;
+    }
+    function getTransportUnitCost(context) {
+      if (Array.isArray(context.stock)) {
+        const entries = context.stock.filter((e) => e.kind === 13 && !e.blocked && e.amount > 0);
+        if (!entries.length) return null;
+        let total = 0, amount = 0;
+        for (const entry of entries) {
+          const cost = sumCost(entry);
+          if (cost === null || !Number.isFinite(entry.amount)) return null;
+          total += cost;
+          amount += entry.amount;
+        }
+        return Number.isFinite(total) && Number.isFinite(amount) && amount > 0 ? total / amount : null;
+      }
+      const nativeCost = context.props.transportationUnitPrice;
+      return Number.isFinite(nativeCost) && nativeCost >= 0 ? nativeCost : null;
     }
     function getCachedMarketData(realmId, resourceId) {
       const keys = [`market_all_${realmId}_${resourceId}`, `market_${realmId}_${resourceId}`];
@@ -5508,9 +5496,12 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     async function refreshMarketData(realmId, resourceId) {
       mpLog("refreshMarketData \u5F00\u59CB\u8BF7\u6C42...");
       const tStart = Date.now();
+      const controller = new AbortController();
+      _marketRequests.add(controller);
+      const timeout = setTimeout(() => controller.abort(), 1e4);
       try {
         const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
-        const resp = await fetch(url);
+        const resp = await fetch(url, { signal: controller.signal });
         const json = await resp.json();
         mpLog("refreshMarketData \u5B8C\u6210, \u8017\u65F6:", Date.now() - tStart, "ms, \u72B6\u6001:", resp.status, "\u6761\u6570:", Array.isArray(json) ? json.length : "\u975E\u6570\u7EC4");
         if (Array.isArray(json)) {
@@ -5519,6 +5510,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }
       } catch (e) {
         mpLog("refreshMarketData \u5931\u8D25:", e.message);
+      } finally {
+        clearTimeout(timeout);
+        _marketRequests.delete(controller);
       }
       return null;
     }
@@ -5608,7 +5602,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       event.simulated = true;
       if (input._valueTracker) input._valueTracker.setValue(lastValue);
       input.dispatchEvent(event);
-      setTimeout(() => {
+      clearTimeout(_skipInputTimer);
+      _skipInputTimer = setTimeout(() => {
         _skipInputRefresh = false;
       }, 100);
       if (count > 0) return setInputValue(input, value, --count);
@@ -5619,38 +5614,33 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     }
     async function initButtons() {
       mpLog("initButtons \u5F00\u59CB");
+      if (!isActive()) return;
+      const context = readFormContext();
+      if (!context) return;
+      const { priceInput, realmId, resource } = context;
+      const resourceId = resource.kind;
+      const quality = resource.quality;
+      const targetKey = getContextKey(context);
+      const generation2 = _generation;
+      const revision = ++_buttonsRevision;
+      const isCurrent = () => {
+        if (!isActive() || generation2 !== _generation || revision !== _buttonsRevision || !priceInput.isConnected || !btnRow.isConnected) return false;
+        const current = readFormContext();
+        return current?.priceInput === priceInput && getContextKey(current) === targetKey;
+      };
+      _buttonsKey = getButtonsKey(context);
+      _buttonsInput = priceInput;
       document.querySelectorAll(".outgoingmp-btn-row").forEach((r) => r.remove());
       document.querySelectorAll(".outgoingmp-info").forEach((e) => e.remove());
       const prevParent = document.querySelector("[data-outgoing-mp-added]");
       if (prevParent) delete prevParent.dataset.outgoingMpAdded;
-      const resourceId = parseResourceId();
-      const realmId = getRealmIdFromLink();
-      if (!resourceId || realmId === null) {
-        mpLog("initButtons \u9000\u51FA: \u65E0resourceId\u6216realmId");
-        return;
-      }
       mpLog("initButtons resourceId:", resourceId, "realmId:", realmId);
-      const priceInput = document.querySelector('input[name="price"]');
-      if (!priceInput) {
-        mpLog("initButtons \u9000\u51FA: \u65E0priceInput");
-        return;
-      }
       const parentDiv = priceInput.parentElement;
       if (!parentDiv || parentDiv.dataset.outgoingMpAdded) {
         mpLog("initButtons \u9000\u51FA: \u5DF2\u6CE8\u5165\u6216\u65E0parentDiv");
         return;
       }
       parentDiv.dataset.outgoingMpAdded = "true";
-      if (!priceInput.hasAttribute("data-outgoingmp-listener")) {
-        priceInput.setAttribute("data-outgoingmp-listener", "true");
-        let _refreshTimer;
-        priceInput.addEventListener("input", () => {
-          if (_skipInputRefresh) return;
-          if (!isUseInputEnabled()) return;
-          clearTimeout(_refreshTimer);
-          _refreshTimer = setTimeout(() => initButtons(), 300);
-        });
-      }
       const isContract = /\/contract\/?$/.test(location.href);
       mpLog("isContract:", isContract);
       const allBtn = parentDiv.parentElement?.querySelector("button.btn-secondary");
@@ -5677,10 +5667,6 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       btnRow.appendChild(infoSpan);
       parentDiv.appendChild(btnRow);
       mpLog("\u6309\u94AE\u884C\u5DF2\u63D2\u5165DOM");
-      mpLog("\u5F00\u59CB parseQuality...");
-      const quality = await parseQuality();
-      _qualityCache[resourceId] = quality;
-      mpLog("parseQuality \u5B8C\u6210, quality:", quality);
       mpLog("\u8BFB\u53D6\u7F13\u5B58...");
       const cacheResult = getCachedMarketData(realmId, resourceId);
       const cachedData = cacheResult.data;
@@ -5717,6 +5703,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         infoSpan.textContent = "\u231B \u8BF7\u6C42\u5E02\u573A\u6570\u636E...";
       }
       const renderButtons = (marketData, mpBasePrice, source) => {
+        if (!isCurrent()) return;
         mpLog("renderButtons \u8C03\u7528, source:", source, "mpBasePrice:", mpBasePrice, "data:", marketData ? `${marketData.length}\u6761` : "null");
         btnRow.querySelectorAll(".outgoingmp-mpbtn").forEach((b) => b.remove());
         const currentVal2 = parseFloat(priceInput.value);
@@ -5737,7 +5724,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             btn.onclick = (e) => {
               e.preventDefault();
               e.stopPropagation();
-              setInputValue(priceInput, rounded);
+              if (isCurrent()) setInputValue(priceInput, rounded);
             };
             btnRow.appendChild(btn);
           });
@@ -5764,7 +5751,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             btnMP.onclick = (e) => {
               e.preventDefault();
               e.stopPropagation();
-              setInputValue(priceInput, mpRounded);
+              if (isCurrent()) setInputValue(priceInput, mpRounded);
             };
             btnRow.appendChild(btnMP);
             const oneDown = roundToStep(mpBasePrice - step, false);
@@ -5776,7 +5763,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
               btn1s.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setInputValue(priceInput, oneDown);
+                if (isCurrent()) setInputValue(priceInput, oneDown);
               };
               btnRow.appendChild(btn1s);
             }
@@ -5791,6 +5778,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         mpLog("\u65E0\u7F13\u5B58, \u8BF7\u6C42\u7F51\u7EDC...");
         const tStart = Date.now();
         const freshData = await refreshMarketData(realmId, resourceId);
+        if (!isCurrent()) return;
         mpLog("\u7F51\u7EDC\u8BF7\u6C42\u5B8C\u6210, \u8017\u65F6:", Date.now() - tStart, "ms, \u7ED3\u679C:", freshData ? `${freshData.length}\u6761` : "null");
         const freshMpInfo = freshData ? findLowestMP(freshData, resourceId, quality) : null;
         if (freshMpInfo) {
@@ -5813,6 +5801,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (cacheAge > CACHE_MAX_AGE) {
           infoSpan.textContent = (infoSpan.textContent || "") + " \u231B\u66F4\u65B0\u4E2D...";
           refreshMarketData(realmId, resourceId).then((freshData) => {
+            if (!isCurrent()) return;
             if (freshData) {
               const freshMpInfo = findLowestMP(freshData, resourceId, quality);
               if (freshMpInfo) {
@@ -5839,6 +5828,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (hasVWAPPreset) {
           mpLog("\u542F\u52A8 VWAP \u83B7\u53D6...");
           getVWAPData(realmId, resourceId, quality).then((vwap) => {
+            if (!isCurrent()) return;
             mpLog("VWAP \u7ED3\u679C:", vwap);
             if (vwap !== null && vwap > 0) {
               infoSpan.textContent = (infoSpan.textContent || "") + ` | VWAP $${vwap.toFixed(2)}`;
@@ -5858,7 +5848,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                   btn.onclick = (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setInputValue(priceInput, rounded);
+                    if (isCurrent()) setInputValue(priceInput, rounded);
                   };
                   btnRow.appendChild(btn);
                 });
@@ -5876,138 +5866,269 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     }
     let _profitObserver = null;
     let _profitCalcTimer = null;
-    let _inputListenerBound = false;
     let _profitDetailExpanded = false;
     let _lastProfitKey = "";
-    function startProfitObserver() {
-      if (_profitObserver) _profitObserver.disconnect();
-      const schedule = () => {
-        clearTimeout(_profitCalcTimer);
-        _profitCalcTimer = setTimeout(calcAndDisplayProfit, 200);
-      };
-      _profitObserver = new MutationObserver((mutations) => {
-        const isOwnMutation = mutations.some((m) => {
-          let el = m.target;
-          while (el) {
-            if (el.classList && el.classList.contains("sc-profit-display")) return true;
-            el = el.parentElement;
-          }
-          return false;
-        });
-        const hasRelevantNode = mutations.some(
-          (m) => m.type === "childList" && m.addedNodes.length > 0
-        );
-        if (!isOwnMutation && hasRelevantNode) schedule();
-      });
-      _profitObserver.observe(document.body, { childList: true, subtree: true });
-      if (!_inputListenerBound) {
-        _inputListenerBound = true;
-        document.addEventListener("input", (e) => {
-          if (e.target.matches('input[name="price"], input[name="amount"], input[name="quantity"]')) {
-            schedule();
-          }
-        });
-      }
-      setTimeout(calcAndDisplayProfit, 300);
+    let _assumedTransportPrice = "";
+    let _assumedTransportRealm = null;
+    function getButtonsKey(context) {
+      const inputPrice = isUseInputEnabled() ? context.priceInput.value : "";
+      return `${getContextKey(context)}_${inputPrice}_${isUseInputEnabled()}`;
     }
-    async function calcAndDisplayProfit() {
-      mpLog("calcAndDisplayProfit \u89E6\u53D1");
-      const onPage = /\/headquarters\/warehouse\/(?:[^\/]+)\/(?:sell|contract)\/?$/.test(location.href);
-      if (!onPage) {
-        mpLog("calcAndDisplayProfit: \u4E0D\u5728\u76EE\u6807\u9875\u9762");
+    function removeButtons2() {
+      ++_buttonsRevision;
+      _buttonsKey = "";
+      _buttonsInput = null;
+      document.querySelectorAll(".outgoingmp-btn-row, .outgoingmp-info").forEach((e) => e.remove());
+      document.querySelectorAll("[data-outgoing-mp-added]").forEach((e) => delete e.dataset.outgoingMpAdded);
+    }
+    function refreshPage() {
+      if (!isActive()) {
+        destroy4();
+        return;
+      }
+      const context = readFormContext();
+      if (!context) {
+        if (_buttonsInput) removeButtons2();
+      } else if (!_skipInputRefresh && (_buttonsInput !== context.priceInput || _buttonsKey !== getButtonsKey(context) || !context.priceInput.parentElement.querySelector(".outgoingmp-btn-row"))) {
+        initButtons();
+      }
+      calcAndDisplayProfit(context);
+    }
+    function scheduleRefresh() {
+      clearTimeout(_profitCalcTimer);
+      _profitCalcTimer = setTimeout(refreshPage, 200);
+    }
+    function handleInput(event) {
+      if (event.target.id === "sc-profit-transport-price") {
+        _assumedTransportPrice = event.target.value;
+        scheduleRefresh();
+        return;
+      }
+      if (!event.target.matches?.('input[name="price"], input[name="amount"], input[name="quantity"]')) return;
+      const context = _skipInputRefresh ? readFormContext() : null;
+      if (context) _buttonsKey = getButtonsKey(context);
+      scheduleRefresh();
+    }
+    function setProfitHelpOpen(help, open) {
+      help.classList.toggle("sc-profit-help-open", open);
+      help.querySelector("button").setAttribute("aria-expanded", String(open));
+    }
+    function handleProfitHelpDismiss(event) {
+      const help = document.querySelector(".sc-profit-help-open");
+      if (!help) return;
+      if (event.type === "keydown") {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+      } else if (help.contains(event.target)) return;
+      help.classList.remove("sc-profit-help-pinned");
+      setProfitHelpOpen(help, false);
+    }
+    function bindProfitHelp(display) {
+      const help = display.querySelector(".sc-profit-help");
+      if (!help) return;
+      const button = help.querySelector("button");
+      button.addEventListener("mouseenter", () => setProfitHelpOpen(help, true));
+      button.addEventListener("focus", () => setProfitHelpOpen(help, true));
+      const hideUnpinned = () => {
+        if (!help.classList.contains("sc-profit-help-pinned")) setProfitHelpOpen(help, false);
+      };
+      help.addEventListener("mouseleave", hideUnpinned);
+      button.addEventListener("blur", hideUnpinned);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const pinned = help.classList.toggle("sc-profit-help-pinned");
+        setProfitHelpOpen(help, pinned);
+      });
+    }
+    function startProfitObserver() {
+      _profitObserver = new MutationObserver((mutations) => {
+        const isOwnNode = (node) => node.nodeType === 1 && (node.matches(".sc-profit-display, .outgoingmp-btn-row, .outgoingmp-info") || node.closest(".sc-profit-display, .outgoingmp-btn-row, .outgoingmp-info"));
+        const relevant = mutations.some((m) => {
+          const target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+          if (target && isOwnNode(target)) return false;
+          return m.type === "characterData" || [...m.addedNodes, ...m.removedNodes].some((node) => !isOwnNode(node));
+        });
+        if (relevant) scheduleRefresh();
+      });
+      _profitObserver.observe(document.body, { childList: true, characterData: true, subtree: true });
+      document.addEventListener("input", handleInput);
+      document.addEventListener("pointerdown", handleProfitHelpDismiss);
+      document.addEventListener("keydown", handleProfitHelpDismiss);
+      initTimer = setInterval(refreshPage, 1e3);
+      refreshPage();
+    }
+    function showProfitUnavailable(priceInput, message) {
+      _lastProfitKey = "";
+      let display = document.querySelector(".sc-profit-display");
+      if (display?.dataset.state === "unavailable" && display.textContent === message) return;
+      if (display && display.dataset.state !== "unavailable") {
+        _profitDetailExpanded = display.dataset.expanded === "true";
+      }
+      display?.remove();
+      if (!priceInput) return;
+      display = document.createElement("div");
+      display.className = "sc-profit-display";
+      display.dataset.state = "unavailable";
+      display.setAttribute("role", "status");
+      display.style.cssText = "margin:8px 0;padding:8px 10px;font-size:13px;line-height:1.6;";
+      display.textContent = message;
+      priceInput.closest(".row")?.after(display);
+    }
+    function updateTransportEstimate(display, context, mode, message, dark) {
+      let editor = display.querySelector(".sc-profit-transport-estimate");
+      if (mode === "actual") {
+        editor?.remove();
+        return;
+      }
+      if (!editor) {
+        editor = document.createElement("div");
+        editor.className = "sc-profit-transport-estimate";
+        editor.style.cssText = "margin-top:6px;font-size:12px;line-height:1.5;";
+        const status = document.createElement("div");
+        status.className = "sc-profit-transport-status";
+        status.id = "sc-profit-transport-status";
+        status.setAttribute("role", "status");
+        editor.appendChild(status);
+        const label = document.createElement("label");
+        label.style.cssText = "display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px;font-weight:normal;";
+        label.htmlFor = "sc-profit-transport-price";
+        label.appendChild(document.createTextNode("\u5047\u5B9A\u8FD0\u8F93\u5355\u4EF7 $/\u5355\u4F4D"));
+        const input2 = document.createElement("input");
+        input2.id = "sc-profit-transport-price";
+        input2.type = "text";
+        input2.inputMode = "decimal";
+        input2.placeholder = "\u7559\u7A7A\u5219\u4E0D\u6263\u8FD0\u8F93\u8D39";
+        input2.setAttribute("aria-describedby", status.id);
+        input2.className = context.priceInput.className;
+        input2.style.cssText = `width:170px;max-width:100%;height:auto;padding:4px 6px;font-size:12px;box-sizing:border-box;background:${dark ? "#263326" : "#fff"};color:${dark ? "#eee" : "#333"};border:1px solid ${dark ? "#647064" : "#a4b6a4"};border-radius:4px;`;
+        input2.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        });
+        label.appendChild(input2);
+        editor.appendChild(label);
+        display.querySelector("#sc-profit-summary").after(editor);
+      }
+      editor.querySelector(".sc-profit-transport-status").textContent = message;
+      const input = editor.querySelector("input");
+      if (input.value !== _assumedTransportPrice) input.value = _assumedTransportPrice;
+      input.setAttribute("aria-invalid", _assumedTransportPrice.trim() !== "" && (!Number.isFinite(Number(_assumedTransportPrice)) || Number(_assumedTransportPrice) < 0) ? "true" : "false");
+    }
+    function calcAndDisplayProfit(context) {
+      if (!isActive()) return;
+      const priceInput = context?.priceInput || document.querySelector('input[name="price"]');
+      const qtyInput = priceInput?.closest("form")?.querySelector('input[name="amount"], input[name="quantity"]');
+      const price = Number(priceInput?.value);
+      const quantity = Number(qtyInput?.value);
+      if (!Number.isFinite(price) || !Number.isFinite(quantity) || price <= 0 || quantity <= 0) {
+        const display = document.querySelector(".sc-profit-display");
+        if (display && display.dataset.state !== "unavailable") _profitDetailExpanded = display.dataset.expanded === "true";
+        display?.remove();
+        _lastProfitKey = "";
+        return;
+      }
+      if (!context) {
+        showProfitUnavailable(priceInput, "\u65E0\u6CD5\u8BFB\u53D6\u5F53\u524D\u5E93\u5B58\uFF0C\u6682\u4E0D\u80FD\u8BA1\u7B97\u5229\u6DA6\uFF1B\u6570\u636E\u5C31\u7EEA\u540E\u81EA\u52A8\u91CD\u8BD5\u3002");
         return;
       }
       const isContract = /\/contract\/?$/.test(location.href);
-      const priceInput = document.querySelector('input[name="price"]');
-      const qtyInput = document.querySelector('input[name="amount"], input[name="quantity"]');
-      if (!priceInput || !qtyInput) {
+      let constants = null;
+      try {
+        constants = JSON.parse(localStorage.getItem("SimcompaniesConstantsData"))?.constantsResources;
+      } catch (e) {
+      }
+      if (_assumedTransportRealm !== context.realmId) {
+        _assumedTransportRealm = context.realmId;
+        _assumedTransportPrice = "";
+      }
+      const perUnitTransport = context.props.transportation;
+      const productUnitCost = getProductUnitCost(context, constants, Date.now());
+      let transportUnitCost = perUnitTransport === 0 ? 0 : getTransportUnitCost(context);
+      if (productUnitCost === null || !Number.isFinite(productUnitCost)) {
+        showProfitUnavailable(priceInput, "\u65E0\u6CD5\u8BFB\u53D6\u5546\u54C1\u6210\u672C\uFF0C\u6682\u4E0D\u80FD\u8BA1\u7B97\u5229\u6DA6\uFF1B\u6570\u636E\u5C31\u7EEA\u540E\u81EA\u52A8\u91CD\u8BD5\u3002");
         return;
       }
-      const price = parseFloat(priceInput.value) || 0;
-      const quantity = parseFloat(qtyInput.value) || 0;
-      if (price <= 0 || quantity <= 0) {
+      if (!Number.isFinite(perUnitTransport) || perUnitTransport < 0) {
+        showProfitUnavailable(priceInput, "\u65E0\u6CD5\u8BFB\u53D6\u5546\u54C1\u7684\u8FD0\u8F93\u9700\u6C42\uFF0C\u6682\u4E0D\u80FD\u8BA1\u7B97\u5229\u6DA6\uFF1B\u6570\u636E\u5C31\u7EEA\u540E\u81EA\u52A8\u91CD\u8BD5\u3002");
         return;
       }
-      const profitKey = `${parseResourceId()}_${price}_${quantity}`;
-      if (profitKey === _lastProfitKey) {
-        mpLog("calcAndDisplayProfit \u8DF3\u8FC7: \u503C\u672A\u53D8");
-        return;
-      }
-      _lastProfitKey = profitKey;
-      const resourceId = parseResourceId();
-      const quality = await parseQuality();
-      if (!resourceId) {
-        return;
-      }
-      const SCD = (() => {
-        try {
-          return JSON.parse(localStorage.getItem("SimcompaniesConstantsData"));
-        } catch (e) {
-          return null;
+      let transportMode = "actual";
+      let transportMessage = "";
+      if (transportUnitCost === null) {
+        const noStock = Array.isArray(context.stock) && !context.stock.some((e) => e.kind === 13 && !e.blocked && e.amount > 0);
+        const reason = noStock ? "\u5E93\u5B58\u65E0\u53EF\u7528\u8FD0\u8F93\u5355\u4F4D" : "\u6682\u65F6\u65E0\u6CD5\u8BFB\u53D6\u8FD0\u8F93\u5E93\u5B58\u6210\u672C";
+        const assumedPrice = Number(_assumedTransportPrice);
+        if (_assumedTransportPrice.trim() !== "" && Number.isFinite(assumedPrice) && assumedPrice >= 0) {
+          transportUnitCost = assumedPrice;
+          transportMode = "assumed";
+          transportMessage = `${reason}\uFF0C\u5F53\u524D\u6309\u5047\u5B9A\u5355\u4EF7\u4F30\u7B97\u8FD0\u8F93\u8D39\u7528\u3002`;
+        } else {
+          transportMode = "excluded";
+          transportMessage = `${reason}\uFF0C\u4EE5\u4E0B\u5229\u6DA6\u672A\u6263\u8FD0\u8F93\u8D39\u3002` + (_assumedTransportPrice.trim() === "" ? "\u586B\u5199\u5047\u5B9A\u8FD0\u8F93\u5355\u4EF7\u540E\u53EF\u8BA1\u5165\u4F30\u7B97\u3002" : "\u5047\u5B9A\u8FD0\u8F93\u5355\u4EF7\u987B\u4E3A\u4E0D\u5C0F\u4E8E 0 \u7684\u6709\u6548\u6570\u5B57\u3002");
         }
-      })();
-      if (!SCD) {
-        return;
       }
-      const resourceInfo = SCD?.constantsResources?.[resourceId];
-      const perUnitTransport = resourceInfo?.transportation ?? 0;
+      const profitSuffix = transportMode === "excluded" ? "\u5229\u6DA6\uFF08\u672A\u6263\u8FD0\u8F93\u8D39\uFF09" : "\u5229\u6DA6";
+      const profitKey = JSON.stringify([
+        getContextKey(context),
+        isContract,
+        price,
+        quantity,
+        productUnitCost,
+        transportUnitCost,
+        perUnitTransport,
+        transportMode,
+        transportMessage,
+        _assumedTransportPrice,
+        DM(),
+        window.innerWidth <= 576
+      ]);
+      const previous = document.querySelector(".sc-profit-display");
+      if (previous && (previous.dataset.state === "unavailable" || previous.closest("form") !== context.form)) previous.remove();
+      if (profitKey === _lastProfitKey && previous?.isConnected) return;
       const contractExactTransport = perUnitTransport * quantity * 0.5;
       const contractTransportTotal = Math.ceil(contractExactTransport);
-      const sellExactTransport = perUnitTransport * quantity * 1;
+      const sellExactTransport = perUnitTransport * quantity;
       const sellTransportTotal = Math.ceil(sellExactTransport);
-      const realmId = getRealmIdFromLink();
-      if (realmId === null) {
-        return;
-      }
-      const SRC = (() => {
-        try {
-          return JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
-        } catch (e) {
-          return null;
-        }
-      })();
-      const warehouse = SRC?.warehouseResources;
-      if (!warehouse || !Array.isArray(warehouse)) {
-        return;
-      }
-      let productUnitCost = 0;
-      const productEntries = warehouse.filter((e) => e.kind === resourceId && e.quality === quality);
-      if (productEntries.length > 0) {
-        const e = productEntries[0];
-        const costSum = Object.values(e.cost || {}).reduce((s, v) => s + (typeof v === "number" ? v : 0), 0);
-        productUnitCost = e.amount > 0 ? costSum / e.amount : 0;
-      }
-      let transportUnitCost = 0;
-      const transportEntries = warehouse.filter((e) => e.kind === 13);
-      if (transportEntries.length > 0) {
-        const e = transportEntries[0];
-        const costSum = Object.values(e.cost || {}).reduce((s, v) => s + (typeof v === "number" ? v : 0), 0);
-        transportUnitCost = e.amount > 0 ? costSum / e.amount : 0;
-      }
       const revenue = price * quantity;
       const productCost = productUnitCost * quantity;
-      const contractTransportCost = contractTransportTotal * transportUnitCost;
-      const sellTransportCost = sellTransportTotal * transportUnitCost;
-      const contractNet = revenue - productCost - contractTransportCost;
-      const marketNet = revenue * 0.96 - productCost - sellTransportCost;
+      const contractTransportCost = transportUnitCost === null ? null : contractTransportTotal * transportUnitCost;
+      const sellTransportCost = transportUnitCost === null ? null : sellTransportTotal * transportUnitCost;
+      const contractNet = revenue - productCost - (contractTransportCost ?? 0);
+      const marketNet = revenue * 0.96 - productCost - (sellTransportCost ?? 0);
+      if (![revenue, productCost, contractTransportCost ?? 0, sellTransportCost ?? 0, contractNet, marketNet].every(Number.isFinite)) {
+        showProfitUnavailable(priceInput, "\u8F93\u5165\u6570\u503C\u8FC7\u5927\uFF0C\u6682\u4E0D\u80FD\u8BA1\u7B97\u5229\u6DA6\u3002");
+        return;
+      }
       const sellWasteTransport = sellTransportTotal - sellExactTransport;
       const transportWasteNote = sellWasteTransport > 1e-3 && perUnitTransport > 0 ? `\u8FD0\u8F93\u5411\u4E0A\u53D6\u6574\uFF1A\u6D88\u8017 ${sellTransportTotal} \u8FD0\u8F93\u5355\u4F4D\uFF0C\u6D6A\u8D39 ${sellWasteTransport.toFixed(2)} \u5355\u4F4D` : "";
-      const grossProfit = revenue - productCost;
       const marketFee = revenue * 0.04;
       const d = DM();
       const profitColor = (v) => v >= 0 ? "#4CAF50" : "#f44336";
       const fmt = (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const existingDisplay = document.querySelector(".sc-profit-display");
+      const fmtTransport = (v) => v === null ? "\u672A\u8BA1\u5165" : "-" + fmt(v);
+      const roundingNote = "\u6536\u5165\u548C\u624B\u7EED\u8D39\u6309\u672A\u53D6\u6574\u91D1\u989D\u8BA1\u7B97\uFF0C\u91D1\u989D\u663E\u793A\u4FDD\u7559 2 \u4F4D\u5C0F\u6570\u3002\u6E38\u620F\u539F\u751F\u4EA4\u6613\u6240\u5229\u6DA6\u9884\u89C8\u5C06\u6536\u5165\u5411\u4E0B\u53D6\u6574\u3001\u624B\u7EED\u8D39\u5411\u4E0A\u53D6\u6574\u81F3\u6574\u6570\uFF0C\u56E0\u6B64\u7ED3\u679C\u53EF\u80FD\u7565\u6709\u5DEE\u5F02\u3002\u8FD0\u8F93\u5355\u4F4D\u4ECD\u6309\u5B9E\u9645\u6D88\u8017\u5411\u4E0A\u53D6\u6574\u3002";
+      let existingDisplay = document.querySelector(".sc-profit-display");
+      const viewKey = `${d}_${window.innerWidth <= 576}_${isContract}`;
+      if (existingDisplay && existingDisplay.dataset.view !== viewKey) {
+        _profitDetailExpanded = existingDisplay.dataset.expanded === "true";
+        existingDisplay.remove();
+        existingDisplay = null;
+      }
       if (existingDisplay) {
         _profitDetailExpanded = existingDisplay.getAttribute("data-expanded") === "true";
         const summary = existingDisplay.querySelector("#sc-profit-summary");
         if (summary) {
           if (isContract) {
-            summary.innerHTML = `<span>\u5408\u540C\u5229\u6DA6: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
+            summary.innerHTML = `<span>\u5408\u540C${profitSuffix}: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
           } else {
-            summary.innerHTML = `<span>\u5E02\u573A\u5229\u6DA6: <b style="color:${profitColor(marketNet)};">${fmt(marketNet)}</b></span><span>\u5408\u540C\u5229\u6DA6: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
+            summary.innerHTML = `<span>\u5E02\u573A${profitSuffix}: <b style="color:${profitColor(marketNet)};">${fmt(marketNet)}</b></span><span>\u5408\u540C${profitSuffix}: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
           }
         }
+        updateTransportEstimate(existingDisplay, context, transportMode, transportMessage, d);
         const setVal = (id, text, color) => {
           const el = existingDisplay.querySelector("#" + id);
           if (el) {
@@ -6019,7 +6140,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           setVal("sc-pd-revenue", fmt(revenue));
           setVal("sc-pd-cost", "-" + fmt(productCost));
           setVal("sc-pd-fee", fmt(0));
-          setVal("sc-pd-transport", "-" + fmt(contractTransportCost));
+          setVal("sc-pd-transport", fmtTransport(contractTransportCost));
           const pEl = existingDisplay.querySelector("#sc-pd-profit");
           if (pEl) {
             pEl.textContent = fmt(contractNet);
@@ -6032,8 +6153,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           setVal("sc-pd-c-cost", "-" + fmt(productCost));
           setVal("sc-pd-m-fee", "-" + fmt(marketFee));
           setVal("sc-pd-c-fee", fmt(0));
-          setVal("sc-pd-m-transport", "-" + fmt(sellTransportCost));
-          setVal("sc-pd-c-transport", "-" + fmt(contractTransportCost));
+          setVal("sc-pd-m-transport", fmtTransport(sellTransportCost));
+          setVal("sc-pd-c-transport", fmtTransport(contractTransportCost));
           const mpEl = existingDisplay.querySelector("#sc-pd-m-profit");
           if (mpEl) {
             mpEl.textContent = fmt(marketNet);
@@ -6047,12 +6168,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }
         const wasteEl = existingDisplay.querySelector("#sc-pd-waste");
         if (wasteEl) {
-          if (transportWasteNote) {
-            wasteEl.textContent = "\u26A0\uFE0F " + transportWasteNote;
-            wasteEl.style.display = "";
-          } else {
-            wasteEl.style.display = "none";
-          }
+          wasteEl.classList.toggle("sc-profit-collapsed", !transportWasteNote);
+          if (transportWasteNote) wasteEl.textContent = "\u26A0\uFE0F " + transportWasteNote;
         } else if (transportWasteNote) {
           const w = document.createElement("div");
           w.id = "sc-pd-waste";
@@ -6061,12 +6178,15 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           const detail = existingDisplay.querySelector("#sc-profit-detail");
           if (detail) detail.after(w);
         }
+        _lastProfitKey = profitKey;
         return;
       }
       const isNarrow = window.innerWidth <= 576;
       const displayDiv = document.createElement("div");
       displayDiv.className = "sc-profit-display";
+      displayDiv.dataset.view = viewKey;
       displayDiv.style.cssText = `
+                position: relative;
                 margin: ${isNarrow ? "4px 0" : "8px 0"};
                 padding: ${isNarrow ? "6px 10px" : "10px 14px"};
                 border-radius: 8px;
@@ -6077,53 +6197,60 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
                 font-family: sans-serif;
                 user-select: none;
             `;
-      let html = `<div id="sc-profit-header" style="font-weight:bold;cursor:pointer;display:flex;align-items:center;gap:4px;">
+      let html = `<div id="sc-profit-header" style="font-weight:bold;cursor:pointer;display:flex;align-items:center;gap:4px;padding-right:28px;">
                 <span id="sc-profit-arrow">${_profitDetailExpanded ? "\u25BC" : "\u25B6"}</span> \u{1F4CA} \u5229\u6DA6\u660E\u7EC6
+            </div>`;
+      if (!isContract) html += `<div class="sc-profit-help" style="--sc-profit-help-bg:${d ? "#263326" : "#fff"};--sc-profit-help-border:${d ? "#647064" : "#a4b6a4"};">
+                <button type="button" class="sc-profit-help-button" aria-label="\u5229\u6DA6\u8BA1\u7B97\u8BF4\u660E" aria-expanded="false" aria-controls="sc-profit-rounding-note" aria-describedby="sc-profit-rounding-note">?</button>
+                <div id="sc-profit-rounding-note" class="sc-profit-rounding-note" role="tooltip">${roundingNote}</div>
             </div>`;
       html += `<div id="sc-profit-summary" style="display:flex;flex-wrap:wrap;gap:${isNarrow ? "4px" : "16px"};margin-top:4px;">`;
       if (isContract) {
-        html += `<span>\u5408\u540C\u5229\u6DA6: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
+        html += `<span>\u5408\u540C${profitSuffix}: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
       } else {
-        html += `<span>\u5E02\u573A\u5229\u6DA6: <b style="color:${profitColor(marketNet)};">${fmt(marketNet)}</b></span>`;
-        html += `<span>\u5408\u540C\u5229\u6DA6: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
+        html += `<span>\u5E02\u573A${profitSuffix}: <b style="color:${profitColor(marketNet)};">${fmt(marketNet)}</b></span>`;
+        html += `<span>\u5408\u540C${profitSuffix}: <b style="color:${profitColor(contractNet)};">${fmt(contractNet)}</b></span>`;
       }
       html += `</div>`;
       const thStyle = `padding:2px 6px;text-align:right;font-weight:bold;color:${d ? "#aaa" : "#666"};`;
       const tdStyle = `padding:2px 6px;text-align:right;white-space:nowrap;`;
       const rowStyle = `border-bottom:1px solid ${d ? "#333" : "#e0e0e0"};`;
       const labelTd = (t, bold) => `<td style="${thStyle}text-align:left;${bold ? "font-weight:bold;" : ""}">${t}</td>`;
-      html += `<div id="sc-profit-detail" style="display:${_profitDetailExpanded ? "block" : "none"};margin-top:6px;">
+      html += `<div id="sc-profit-detail" class="${_profitDetailExpanded ? "" : "sc-profit-collapsed"}" style="margin-top:6px;">
                 <table style="border-collapse:collapse;width:100%;">`;
       if (isContract) {
         html += `<tr>${labelTd("")}<th style="${thStyle}">\u5408\u540C</th></tr>
                     <tr style="${rowStyle}">${labelTd("\u6536\u5165")}<td id="sc-pd-revenue" style="${tdStyle}">${fmt(revenue)}</td></tr>
                     <tr style="${rowStyle}">${labelTd("\u6210\u672C")}<td id="sc-pd-cost" style="${tdStyle};color:#f44336;">-${fmt(productCost)}</td></tr>
                     <tr style="${rowStyle}">${labelTd("\u624B\u7EED\u8D39")}<td id="sc-pd-fee" style="${tdStyle}">${fmt(0)}</td></tr>
-                    <tr style="${rowStyle}">${labelTd("\u8FD0\u8F93\u8D39\u7528")}<td id="sc-pd-transport" style="${tdStyle};color:#f44336;">-${fmt(contractTransportCost)}</td></tr>
+                    <tr style="${rowStyle}">${labelTd("\u8FD0\u8F93\u8D39\u7528")}<td id="sc-pd-transport" style="${tdStyle};color:#f44336;">${fmtTransport(contractTransportCost)}</td></tr>
                     <tr>${labelTd("\u5229\u6DA6", true)}<td id="sc-pd-profit" style="${tdStyle};font-weight:bold;color:${profitColor(contractNet)};">${fmt(contractNet)}</td></tr>`;
       } else {
         html += `<tr>${labelTd("")}<th style="${thStyle}">\u5E02\u573A</th><th style="${thStyle}">\u5408\u540C</th></tr>
                     <tr style="${rowStyle}">${labelTd("\u6536\u5165")}<td id="sc-pd-m-revenue" style="${tdStyle}">${fmt(revenue)}</td><td id="sc-pd-c-revenue" style="${tdStyle}">${fmt(revenue)}</td></tr>
                     <tr style="${rowStyle}">${labelTd("\u6210\u672C")}<td id="sc-pd-m-cost" style="${tdStyle};color:#f44336;">-${fmt(productCost)}</td><td id="sc-pd-c-cost" style="${tdStyle};color:#f44336;">-${fmt(productCost)}</td></tr>
                     <tr style="${rowStyle}">${labelTd("\u624B\u7EED\u8D39")}<td id="sc-pd-m-fee" style="${tdStyle};color:#f44336;">-${fmt(marketFee)}</td><td id="sc-pd-c-fee" style="${tdStyle}">${fmt(0)}</td></tr>
-                    <tr style="${rowStyle}">${labelTd("\u8FD0\u8F93\u8D39\u7528")}<td id="sc-pd-m-transport" style="${tdStyle};color:#f44336;">-${fmt(sellTransportCost)}</td><td id="sc-pd-c-transport" style="${tdStyle};color:#f44336;">-${fmt(contractTransportCost)}</td></tr>
+                    <tr style="${rowStyle}">${labelTd("\u8FD0\u8F93\u8D39\u7528")}<td id="sc-pd-m-transport" style="${tdStyle};color:#f44336;">${fmtTransport(sellTransportCost)}</td><td id="sc-pd-c-transport" style="${tdStyle};color:#f44336;">${fmtTransport(contractTransportCost)}</td></tr>
                     <tr>${labelTd("\u5229\u6DA6", true)}<td id="sc-pd-m-profit" style="${tdStyle};font-weight:bold;color:${profitColor(marketNet)};">${fmt(marketNet)}</td><td id="sc-pd-c-profit" style="${tdStyle};font-weight:bold;color:${profitColor(contractNet)};">${fmt(contractNet)}</td></tr>`;
       }
-      html += `</table></div>`;
+      html += `</table>`;
+      html += `</div>`;
       if (transportWasteNote) {
         html += `<div id="sc-pd-waste" style="color:#FF9800;margin-top:4px;">\u26A0\uFE0F ${transportWasteNote}</div>`;
       }
       displayDiv.innerHTML = html;
       displayDiv.setAttribute("data-expanded", _profitDetailExpanded ? "true" : "false");
+      updateTransportEstimate(displayDiv, context, transportMode, transportMessage, d);
+      bindProfitHelp(displayDiv);
       displayDiv.querySelector("#sc-profit-header").addEventListener("click", () => {
         const detail = displayDiv.querySelector("#sc-profit-detail");
         const arrow = displayDiv.querySelector("#sc-profit-arrow");
-        if (detail.style.display === "none") {
-          detail.style.display = "block";
+        if (detail.classList.contains("sc-profit-collapsed")) {
+          detail.classList.remove("sc-profit-collapsed");
           arrow.textContent = "\u25BC";
           _profitDetailExpanded = true;
         } else {
-          detail.style.display = "none";
+          detail.classList.add("sc-profit-collapsed");
           arrow.textContent = "\u25B6";
           _profitDetailExpanded = false;
         }
@@ -6132,46 +6259,56 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       const rowContainer = priceInput.closest(".row");
       if (rowContainer && rowContainer.parentNode) {
         rowContainer.parentNode.insertBefore(displayDiv, rowContainer.nextSibling);
+        _lastProfitKey = profitKey;
       }
+    }
+    function destroy4() {
+      _activeUrl = null;
+      ++_generation;
+      if (initTimer) clearInterval(initTimer);
+      initTimer = null;
+      clearTimeout(_profitCalcTimer);
+      _profitCalcTimer = null;
+      clearTimeout(_skipInputTimer);
+      _skipInputTimer = null;
+      _skipInputRefresh = false;
+      _profitObserver?.disconnect();
+      _profitObserver = null;
+      document.removeEventListener("input", handleInput);
+      document.removeEventListener("pointerdown", handleProfitHelpDismiss);
+      document.removeEventListener("keydown", handleProfitHelpDismiss);
+      _marketRequests.forEach((controller) => controller.abort());
+      _marketRequests.clear();
+      removeButtons2();
+      const display = document.querySelector(".sc-profit-display");
+      if (display && display.dataset.state !== "unavailable") _profitDetailExpanded = display.dataset.expanded === "true";
+      document.querySelectorAll(".sc-profit-display").forEach((e) => e.remove());
+      document.getElementById("outgoingmp-config-modal")?.remove();
+      document.getElementById("sc-outgoing-profit-style")?.remove();
+      _lastProfitKey = "";
+      _assumedTransportPrice = "";
+      _assumedTransportRealm = null;
     }
     function init5() {
-      mpLog("init \u88AB\u8C03\u7528");
-      _qualityCache = {};
-      _lastProfitKey = "";
-      if (initTimer) {
-        clearInterval(initTimer);
-        initTimer = null;
-      }
-      document.querySelectorAll(".outgoingmp-btn-row").forEach((r) => r.remove());
-      document.querySelectorAll(".outgoingmp-info").forEach((e) => e.remove());
-      document.querySelectorAll(".sc-profit-display").forEach((e) => e.remove());
-      const prev = document.querySelector("[data-outgoing-mp-added]");
-      if (prev) delete prev.dataset.outgoingMpAdded;
-      mpLog("\u542F\u52A8 startProfitObserver");
+      destroy4();
+      if (!PAGE_PATTERN.test(location.href) || !isEnabled3()) return;
+      const realmId = getRealmIdFromLink();
+      if (realmId !== null && realmId !== 0 && realmId !== 1) return;
+      _activeUrl = location.href;
+      const style2 = document.createElement("style");
+      style2.id = "sc-outgoing-profit-style";
+      style2.textContent = `
+                .sc-profit-display .sc-profit-collapsed { display: none; }
+                .sc-profit-help { position:absolute; top:6px; left:8px; right:8px; height:24px; z-index:2; pointer-events:none; }
+                .sc-profit-help-button { display:block; margin-left:auto; width:24px; height:24px; padding:0; border:1px solid var(--sc-profit-help-border); border-radius:50%; background:var(--sc-profit-help-bg); color:inherit; font: bold 14px/22px sans-serif; text-align:center; cursor:help; pointer-events:auto; }
+                .sc-profit-help-button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+                .sc-profit-help .sc-profit-rounding-note { display:none; position:absolute; top:100%; right:0; width:340px; max-width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--sc-profit-help-border); border-radius:6px; background:var(--sc-profit-help-bg); box-shadow:0 3px 12px rgba(0,0,0,.2); font-size:12px; line-height:1.6; white-space:normal; overflow-wrap:anywhere; user-select:text; pointer-events:auto; }
+                .sc-profit-help-open .sc-profit-rounding-note { display:block; }
+            `;
+      document.head.appendChild(style2);
       startProfitObserver();
-      if (document.querySelector('input[name="price"]')) {
-        mpLog("priceInput \u5DF2\u5B58\u5728, \u76F4\u63A5\u8C03\u7528 initButtons");
-        initButtons();
-        return;
-      }
-      mpLog("priceInput \u672A\u627E\u5230, \u542F\u52A8\u8F6E\u8BE2");
-      initTimer = setInterval(() => {
-        const onPage = /\/headquarters\/warehouse\/(?:[^\/]+)\/(?:sell|contract)\/?$/.test(location.href);
-        if (!onPage) {
-          mpLog("\u8F6E\u8BE2: \u79BB\u5F00\u9875\u9762, \u505C\u6B62");
-          clearInterval(initTimer);
-          initTimer = null;
-          return;
-        }
-        if (document.querySelector('input[name="price"]')) {
-          mpLog("\u8F6E\u8BE2: \u53D1\u73B0 priceInput, \u8C03\u7528 initButtons");
-          clearInterval(initTimer);
-          initTimer = null;
-          initButtons();
-        }
-      }, 500);
     }
-    return { init: init5 };
+    return { init: init5, destroy: destroy4 };
   })();
   window.SC_Modules = window.SC_Modules || {};
   window.SC_Modules.outgoingContractMPHandler = outgoingContractMPHandler2;
@@ -6180,7 +6317,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.3",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.4",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -15915,6 +16052,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             if (key === "salesOfficeHelper") {
               window.SC_Modules?.salesOfficeHelper?.init();
             }
+            if (key === "outgoingMP") {
+              window.SC_Modules?.outgoingContractMPHandler?.init();
+            }
             if (key === "chatInputExpander" && typeof window.scChatInputExpanderApplyStyles === "function") {
               window.scChatInputExpanderApplyStyles();
             }
@@ -16368,7 +16508,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           { type: "toggle", key: "salesOfficeHelper", label: "\u9500\u552E\u529E\u516C\u5BA4\u4F18\u5316\uFF08\u6D4B\u8BD5\u4E2D\uFF09" },
           { type: "toggle", key: "paQuestAnswers", label: "PA\u4EFB\u52A1\u7B54\u6848", defaultEnabled: true },
           { type: "toggle", key: "snipboardPreview", label: "Snipboard\u56FE\u7247\u9884\u89C8", defaultEnabled: true },
-          { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927", defaultEnabled: true, subContent: createChatInputHeightControls },
+          { type: "toggle", key: "chatInputExpander", label: "\u804A\u5929\u8F93\u5165\u6846\u81EA\u52A8\u6269\u5927\uFF08\u6D4B\u8BD5\uFF09", defaultEnabled: true, subContent: createChatInputHeightControls },
           { type: "toggle", key: "chatEmojiPicker", label: "\u804A\u5929\u8868\u60C5\u9009\u62E9\u5668", defaultEnabled: true }
         ];
         const ITEMS_PER_PAGE = 5;
@@ -20219,6 +20359,10 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       var MODULE_KEY3 = "chatInputExpander";
       var activeSession = null;
       var releaseTimer = null;
+      var KEYBOARD_HEIGHT_DELTA = 60;
+      var KEYBOARD_FALLBACK_DELAY = 450;
+      var restingLayoutHeight = window.innerHeight;
+      var restingViewportHeight = window.visualViewport?.height || window.innerHeight;
       function isEnabled3() {
         return typeof window.isPageModuleEnabled === "function" ? window.isPageModuleEnabled(MODULE_KEY3) : true;
       }
@@ -20386,14 +20530,15 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (!session) return;
         if (session.frame !== null) cancelAnimationFrame(session.frame);
         clearTimeout(session.settleTimer);
+        clearTimeout(session.fallbackTimer);
         session.frame = null;
         session.settleTimer = null;
+        session.fallbackTimer = null;
         session.resizeObserver?.disconnect();
         session.viewport?.removeEventListener("resize", requestLayout);
         session.viewport?.removeEventListener("scroll", requestLayout);
         window.removeEventListener("resize", requestLayout);
         window.removeEventListener("orientationchange", requestLayout);
-        window.removeEventListener("scroll", queueLayout, true);
         session.listening = false;
       }
       function setLayoutProperty(element, name, value) {
@@ -20403,6 +20548,32 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (!element) return;
         if (element.classList.contains("sc-chat-room-constrained")) element.classList.remove("sc-chat-room-constrained");
         if (element.style.getPropertyValue("--sc-chat-room-max-height")) element.style.removeProperty("--sc-chat-room-max-height");
+      }
+      function getViewportMetrics() {
+        var viewport = window.visualViewport;
+        var height = viewport?.height || window.innerHeight;
+        var top = viewport?.offsetTop || 0;
+        return {
+          layoutHeight: window.innerHeight,
+          height,
+          top,
+          bottom: top + height
+        };
+      }
+      function refreshRestingViewport() {
+        var active = document.activeElement;
+        if (activeSession || active?.matches('textarea, input, [contenteditable="true"]')) return;
+        var metrics = getViewportMetrics();
+        restingLayoutHeight = metrics.layoutHeight;
+        restingViewportHeight = metrics.height;
+      }
+      function keyboardGeometryChanged(session, metrics) {
+        return session.initialLayoutHeight - metrics.layoutHeight > KEYBOARD_HEIGHT_DELTA || session.initialViewportHeight - metrics.height > KEYBOARD_HEIGHT_DELTA;
+      }
+      function getMobileLayoutMode(session, metrics) {
+        if (session.initialLayoutHeight - metrics.layoutHeight > KEYBOARD_HEIGHT_DELTA) return "native";
+        if (session.initialViewportHeight - metrics.height > KEYBOARD_HEIGHT_DELTA) return "shell";
+        return "input-only";
       }
       function observeRoomChildren(session) {
         var room = session.containers.chatRoom;
@@ -20416,39 +20587,59 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         });
         session.observedChildren = children;
       }
-      function updateLayout() {
-        var session = activeSession;
-        if (!session) return;
-        session.frame = null;
-        if (!isEnabled3() || !session.textarea.isConnected || session.url !== location.href) {
-          collapseAll();
-          return;
+      function applyExpandedClasses(session) {
+        var textarea = session.textarea;
+        var containers = session.containers;
+        textarea.classList.add("sc-chat-textarea-transition");
+        textarea.classList.add("sc-chat-textarea-focused");
+        if (session.parent) session.parent.classList.add("sc-chat-wrap-focused");
+        if (containers.inputGroup) containers.inputGroup.classList.add("sc-chat-input-group-focused");
+        if (containers.btnContainer) containers.btnContainer.classList.add("sc-chat-btn-focused");
+        if (containers.outerContainer) containers.outerContainer.classList.add("sc-chat-outer-focused");
+        session.expanded = true;
+      }
+      function installLayoutObservers(session) {
+        if (session.layoutObserversInstalled) return;
+        session.layoutObserversInstalled = true;
+        if (typeof ResizeObserver === "function") session.resizeObserver = new ResizeObserver(queueLayout);
+        var ancestor = session.containers.chatRoom;
+        while (ancestor) {
+          session.resizeObserver?.observe(ancestor);
+          if (ancestor !== document.body) {
+            session.observer.observe(ancestor, { attributes: true, attributeFilter: ["class", "style"] });
+          }
+          ancestor = ancestor.parentElement;
         }
-        if (!session.listening || document.activeElement !== session.textarea || isClickingInside) return;
-        var viewport = session.viewport;
-        var height = viewport?.height || window.innerHeight;
-        var viewportTop = viewport?.offsetTop || 0;
-        var viewportBottom = viewportTop + height;
-        var top = viewportTop + 8;
-        var bottom = viewportBottom - 8;
-        var mobile = window.matchMedia("(max-width: 767px)").matches;
-        var desired = readCustomHeight(mobile ? "chatInputExpanderHeightMobile" : "chatInputExpanderHeight", mobile ? 90 : 130);
+        observeRoomChildren(session);
+      }
+      function renderLayout(session, metrics) {
+        var desired = readCustomHeight(
+          session.mobile ? "chatInputExpanderHeightMobile" : "chatInputExpanderHeight",
+          session.mobile ? 90 : 130
+        );
         var outer = session.containers.outerContainer || session.containers.inputGroup;
         if (!outer) return;
         var room = session.containers.chatRoom;
-        var available = height - 24;
         var shell = session.containers.pageShell;
-        if (mobile && shell?.isConnected) {
-          var shellTop = shell.getBoundingClientRect().top;
-          setLayoutProperty(shell, "--sc-chat-room-max-height", Math.max(0, viewportBottom - shellTop) + "px");
-          if (!shell.classList.contains("sc-chat-room-constrained")) shell.classList.add("sc-chat-room-constrained");
-          clearLayoutConstraint(room);
+        var top = metrics.top + 8;
+        var bottom = metrics.bottom - 8;
+        var available = metrics.height - 24;
+        if (session.mobile) {
+          if (session.mobileLayout === "shell" && shell?.isConnected) {
+            var shellTop = shell.getBoundingClientRect().top;
+            setLayoutProperty(shell, "--sc-chat-room-max-height", Math.max(0, metrics.bottom - shellTop) + "px");
+            if (!shell.classList.contains("sc-chat-room-constrained")) shell.classList.add("sc-chat-room-constrained");
+            clearLayoutConstraint(room);
+          } else {
+            clearLayoutConstraint(shell);
+            clearLayoutConstraint(room);
+          }
         } else {
           clearLayoutConstraint(shell);
         }
         if (room?.isConnected) {
           var roomTop = room.getBoundingClientRect().top;
-          if (!mobile || !shell?.isConnected) {
+          if (!session.mobile) {
             setLayoutProperty(room, "--sc-chat-room-max-height", Math.max(0, Math.floor(bottom - roomTop)) + "px");
             if (!room.classList.contains("sc-chat-room-constrained")) room.classList.add("sc-chat-room-constrained");
           }
@@ -20460,16 +20651,43 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         var fitted = Math.min(desired, Math.max(40, Math.floor(available)));
         setLayoutProperty(outer, "--sc-chat-input-height", fitted + "px");
       }
-      function queueLayout() {
-        if (activeSession?.listening && activeSession.frame === null) {
+      function updateLayout() {
+        var session = activeSession;
+        if (!session) return;
+        session.frame = null;
+        if (!isEnabled3() || !session.textarea.isConnected || session.url !== location.href) {
+          collapseAll();
+          return;
+        }
+        if (!session.listening || document.activeElement !== session.textarea || isClickingInside) return;
+        session.mobile = window.matchMedia("(max-width: 767px)").matches;
+        var metrics = getViewportMetrics();
+        var geometryChanged = keyboardGeometryChanged(session, metrics);
+        if (!session.expanded) {
+          if (session.mobile && !geometryChanged && !session.allowFallback) return;
+          clearTimeout(session.fallbackTimer);
+          session.fallbackTimer = null;
+          applyExpandedClasses(session);
+          installLayoutObservers(session);
+        }
+        session.allowFallback = false;
+        session.mobileLayout = session.mobile ? getMobileLayoutMode(session, metrics) : "room";
+        renderLayout(session, metrics);
+      }
+      function queueLayout(allowFallback) {
+        if (activeSession?.listening) {
+          if (allowFallback === true) activeSession.allowFallback = true;
+          if (activeSession.frame !== null) return;
           activeSession.frame = requestAnimationFrame(updateLayout);
         }
       }
       function requestLayout() {
         if (!activeSession?.listening) return;
-        queueLayout();
+        queueLayout(false);
         clearTimeout(activeSession.settleTimer);
-        activeSession.settleTimer = setTimeout(queueLayout, 250);
+        activeSession.settleTimer = setTimeout(function() {
+          queueLayout(false);
+        }, 250);
       }
       function startTracking(textarea, containers) {
         if (!document.body || !textarea.isConnected) return;
@@ -20479,19 +20697,26 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           parent: textarea.parentElement,
           viewport: window.visualViewport,
           url: location.href,
+          initialLayoutHeight: restingLayoutHeight,
+          initialViewportHeight: restingViewportHeight,
+          mobile: window.matchMedia("(max-width: 767px)").matches,
+          expanded: false,
+          mobileLayout: "none",
+          allowFallback: false,
           frame: null,
           settleTimer: null,
+          fallbackTimer: null,
           listening: true,
           observer: null,
           resizeObserver: null,
-          observedChildren: /* @__PURE__ */ new Set()
+          observedChildren: /* @__PURE__ */ new Set(),
+          layoutObserversInstalled: false
         };
         var session = activeSession;
         session.viewport?.addEventListener("resize", requestLayout);
         session.viewport?.addEventListener("scroll", requestLayout);
         window.addEventListener("resize", requestLayout);
         window.addEventListener("orientationchange", requestLayout);
-        window.addEventListener("scroll", queueLayout, true);
         session.observer = new MutationObserver((records) => {
           if (activeSession !== session) return;
           if (!textarea.isConnected || session.url !== location.href) {
@@ -20499,34 +20724,35 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             return;
           }
           if (!session.listening) return;
-          if (textarea.parentElement !== session.parent || containers.chatRoom && !containers.chatRoom.contains(textarea)) {
-            expandInput(textarea);
+          var currentContainers = session.containers;
+          if (textarea.parentElement !== session.parent || currentContainers.chatRoom && !currentContainers.chatRoom.contains(textarea)) {
+            if (document.activeElement === textarea) {
+              expandInput(textarea);
+            } else {
+              collapseAll();
+            }
             return;
           }
-          if (records.some((record) => record.type === "attributes" || record.target.contains(textarea) || containers.chatRoom?.contains(record.target))) {
+          if (records.some((record) => record.type === "attributes" || record.target.contains(textarea) || currentContainers.chatRoom?.contains(record.target))) {
             var nextContainers = findContainers(textarea);
-            if (nextContainers.chatRoom !== containers.chatRoom || nextContainers.outerContainer !== containers.outerContainer || nextContainers.pageShell !== containers.pageShell) {
+            if (nextContainers.chatRoom !== currentContainers.chatRoom || nextContainers.outerContainer !== currentContainers.outerContainer || nextContainers.inputGroup !== currentContainers.inputGroup || nextContainers.btnContainer !== currentContainers.btnContainer || nextContainers.pageShell !== currentContainers.pageShell) {
               expandInput(textarea);
               return;
             }
-            containers.messageArea = nextContainers.messageArea;
-            observeRoomChildren(session);
-            queueLayout();
+            currentContainers.messageArea = nextContainers.messageArea;
+            if (session.layoutObserversInstalled) observeRoomChildren(session);
+            queueLayout(false);
           }
         });
         session.observer.observe(document.body, { childList: true, subtree: true });
-        if (typeof ResizeObserver === "function") session.resizeObserver = new ResizeObserver(queueLayout);
-        var ancestor = containers.chatRoom;
-        while (ancestor) {
-          session.resizeObserver?.observe(ancestor);
-          if (ancestor !== document.body) {
-            session.observer.observe(ancestor, { attributes: true, attributeFilter: ["class", "style"] });
-          }
-          ancestor = ancestor.parentElement;
+        if (session.mobile) {
+          session.fallbackTimer = setTimeout(function() {
+            session.fallbackTimer = null;
+            queueLayout(true);
+          }, KEYBOARD_FALLBACK_DELAY);
+        } else {
+          queueLayout(false);
         }
-        observeRoomChildren(session);
-        updateLayout();
-        requestLayout();
       }
       function collapseContainers(textarea) {
         var session = activeSession?.textarea === textarea ? activeSession : null;
@@ -20541,6 +20767,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           releaseTimer = null;
           isClickingInside = false;
         }
+        textarea.classList.remove("sc-chat-textarea-transition");
         textarea.classList.remove("sc-chat-textarea-focused");
         var parent = session ? session.parent : textarea.parentElement;
         if (parent) {
@@ -20603,21 +20830,6 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           collapseAll();
           ensureStyles();
           var containers = findContainers(target);
-          target.classList.add("sc-chat-textarea-transition");
-          target.classList.add("sc-chat-textarea-focused");
-          var parent = target.parentElement;
-          if (parent) {
-            parent.classList.add("sc-chat-wrap-focused");
-          }
-          if (containers.inputGroup) {
-            containers.inputGroup.classList.add("sc-chat-input-group-focused");
-          }
-          if (containers.btnContainer) {
-            containers.btnContainer.classList.add("sc-chat-btn-focused");
-          }
-          if (containers.outerContainer) {
-            containers.outerContainer.classList.add("sc-chat-outer-focused");
-          }
           startTracking(target, containers);
         }
       }
@@ -20632,6 +20844,9 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           collapseContainers(target);
         }
       });
+      window.addEventListener("resize", refreshRestingViewport);
+      window.visualViewport?.addEventListener("resize", refreshRestingViewport);
+      window.addEventListener("orientationchange", refreshRestingViewport);
       init5();
       window.scChatInputExpanderApplyStyles = function() {
         if (!isEnabled3()) {
@@ -20639,7 +20854,12 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           return;
         }
         injectStyles();
-        if (isChatInput(document.activeElement)) expandInput(document.activeElement);
+        var activeEl = document.activeElement;
+        if (activeSession?.textarea === activeEl) {
+          if (activeSession.expanded) queueLayout(false);
+        } else if (isChatInput(activeEl)) {
+          expandInput(activeEl);
+        }
       };
     })();
     const UPDATE_IGNORE_KEY = "sc_autoMaxPPHPL_ignored_version";
@@ -20797,4 +21017,4 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
   })();
 })();
 
-// @changelog 入库合同：显示更多改为详细显示设置、增加显示上次合同接受时间；新增反推收购价功能；自定义高管数据增加按有效点数计算；COO收益计算增加明细；交易所建筑等级增加按实际建筑等级计算；适配未来新零售ui。
+// @changelog 再次修改“聊天室输入框自动扩大”引起的问题；优化“出库合同MP-?%”逻辑
