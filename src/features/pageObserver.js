@@ -1,6 +1,9 @@
 const ResourceMarketHandler = { init: (...args) => window.SC_Modules?.ResourceMarketHandler?.init(...args) };
 const incomingContractsHandler = { init: (...args) => window.SC_Modules?.incomingContractsHandler?.init(...args) };
-const outgoingContractMPHandler = { init: (...args) => window.SC_Modules?.outgoingContractMPHandler?.init(...args) };
+const outgoingContractMPHandler = {
+    init: (...args) => window.SC_Modules?.outgoingContractMPHandler?.init(...args),
+    destroy: () => window.SC_Modules?.outgoingContractMPHandler?.destroy()
+};
 const ExecutiveTrainingModule = { init: (...args) => window.SC_Modules?.ExecutiveTrainingModule?.init(...args) };
 const FormerExecutivesModule = { forceInject: (...args) => window.SC_Modules?.FormerExecutivesModule?.forceInject(...args) };
 const LandscapeIdleBuildingHighlight = { init: (...args) => window.SC_Modules?.LandscapeIdleBuildingHighlight?.init(...args) };
@@ -134,6 +137,9 @@ const BuildingAuctionLevelFilterLifecycle = { destroy: (...args) => window.SC_Mo
 
         function handlePage() {
             const url = location.href;
+            if (!PAGE_ACTIONS.outgoingContractPage.pattern.test(url) || !isPageModuleEnabled('outgoingMP')) {
+                outgoingContractMPHandler.destroy();
+            }
             if (!/\/b\/\d+\/?$/.test(url)) {
                 BuildingUpgradeMaterialCopyLifecycle.destroy();
                 SalesOfficeHelper.destroy();
