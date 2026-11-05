@@ -713,6 +713,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     if (key === 'salesOfficeHelper') {
                         window.SC_Modules?.salesOfficeHelper?.init();
                     }
+                    if (key === 'outgoingMP') {
+                        window.SC_Modules?.outgoingContractMPHandler?.init();
+                    }
                     if (key === 'chatInputExpander' && typeof window.scChatInputExpanderApplyStyles === 'function') {
                         window.scChatInputExpanderApplyStyles();
                     }
