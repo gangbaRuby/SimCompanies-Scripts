@@ -20,6 +20,8 @@
 
 模块通过 `window.SC_Modules` 通信，`pageObserver` 经由该桥接层初始化页面功能。新增功能时必须保留此方式。模块地图与高风险模块见 `.codex/skills/simcompanies-maintenance/references/project-map.md`。
 
+领域 API 响应截取的字段、公司/领域隔离和原有主动更新边界，见 [领域数据响应截取](region-data-capture.md)。
+
 ## 修改流程
 
 1. 确认页面 URL，并从 `index.js` 启动流程追踪到 `pageObserver`。

@@ -1,5 +1,8 @@
 import { getRealmIdFromLink } from './storage.js';
 import { RegionData } from '../features/regionData.js';
+import { installRegionDataCapture } from './regionDataCapture.js';
+
+installRegionDataCapture();
 
 // ======================
 // 模块2-1：领域数据模块的补充，处理学院升级中学徒无效的情况
