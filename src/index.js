@@ -136,9 +136,10 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
         let intendedBottom = null; // 用户拖拽/存储的预期 bottom
 
         const typeDisplayNames = {
-            r1: 'R1',
-            r2: 'R2',
-            constants: '基本'
+            r1: 'R1数据',
+            r2: 'R2数据',
+            challenge: '挑战领域',
+            constants: '基本数据'
         };
 
         // 插入样式（使用CSS变量，在面板首次打开时由refreshPanelTheme动态更新）
@@ -630,7 +631,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 const label = document.createElement('span');
                 label.className = 'SimcompaniesRetailCalculation-region-label';
                 // 使用映射后的显示名称
-                label.textContent = `${typeDisplayNames[type]}数据：`;
+                label.textContent = `${typeDisplayNames[type]}：`;
 
                 const status = document.createElement('span');
                 status.className = 'SimcompaniesRetailCalculation-region-status';
@@ -1066,6 +1067,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             mainMenu.append(
                 createStatusRow('r1'),
                 createStatusRow('r2'),
+                createStatusRow('challenge'),
                 createStatusRow('constants')
             );
 
@@ -1546,7 +1548,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
 
         // 刷新状态显示
         const refreshStatus = () => {
-            ['r1', 'r2', 'constants'].forEach(type => {
+            ['r1', 'r2', 'challenge', 'constants'].forEach(type => {
                 const { text, className } = Storage.getFormattedStatus(type);
                 statusElements[type].textContent = text;
                 statusElements[type].className = `SimcompaniesRetailCalculation-region-status ${className}`;

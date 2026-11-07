@@ -58,6 +58,9 @@ export const Storage = (() => {
                     case 'r2':
                         data = localStorage.getItem(KEYS.region(1));
                         break;
+                    case 'challenge':
+                        data = localStorage.getItem(KEYS.region(2));
+                        break;
                     case 'constants':
                         data = localStorage.getItem(KEYS.constants);
                         break;
@@ -65,7 +68,7 @@ export const Storage = (() => {
 
                 const parsedData = data ? JSON.parse(data) : null;
                 return {
-                    text: parsedData ? formatTime(parsedData.timestamp) : '无数据',
+                    text: parsedData ? (parsedData.timestamp === null ? '已获取' : formatTime(parsedData.timestamp)) : '无数据',
                     className: parsedData
                         ? 'SimcompaniesRetailCalculation-has-data'
                         : 'SimcompaniesRetailCalculation-no-data'
