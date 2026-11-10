@@ -88,7 +88,10 @@ export function installRegionDataCapture() {
             identityEpoch++;
             lastIdentitySequence = order;
         }
-        if (route.type === 'sync' || route.type === 'restart') pendingSwitches.add(order);
+        if (route.type === 'sync' || route.type === 'restart') {
+            pendingSwitches.add(order);
+            RegionData.setUpdateSuspended(true);
+        }
         const owner = readIdentity();
         const realmId = route.realmId ?? owner?.realmId;
         return { ...route, order, epoch: identityEpoch, owner, duringSwitch,
@@ -243,7 +246,9 @@ export function installRegionDataCapture() {
     function finishRequest(request, data) {
         if (!request || request.finished) return;
         request.finished = true;
-        pendingSwitches.delete(request.order);
+        if (pendingSwitches.delete(request.order)) {
+            RegionData.setUpdateSuspended(pendingSwitches.size > 0);
+        }
         if (data !== undefined) handleResponse(request, data);
     }
 

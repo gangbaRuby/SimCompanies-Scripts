@@ -1,4 +1,24 @@
 export const RegionData = (() => {
+    let updateGeneration = 0;
+    let pendingUpdate = null;
+    let pendingStartedAt = 0;
+    let updateSuspended = false;
+
+    // 切换领域/重开时由既有响应捕获器通知，只作废插件在途更新，不发请求。
+    const invalidatePendingUpdate = () => {
+        updateGeneration++;
+        pendingUpdate = null;
+    };
+
+    const setUpdateSuspended = (suspended) => {
+        updateSuspended = suspended;
+        invalidatePendingUpdate();
+    };
+
+    const assertCurrentUpdate = (generation) => {
+        if (generation !== updateGeneration) throw new Error('领域数据更新已失效，请重新更新。');
+    };
+
     // 公司信息
     const getAuthInfo = async () => {
         const Network = window.__SC_Network;
@@ -157,14 +177,17 @@ export const RegionData = (() => {
     };
 
     // 完整领域数据获取
-    const fetchFullRegionData = async () => {
+    const loadFullRegionData = async (generation) => {
         const auth = await getAuthInfo();
+        assertCurrentUpdate(generation);
         const companies_by_company = await getCompanies_by_company(auth.realmId, auth.company);
+        assertCurrentUpdate(generation);
         const [executives, resourcesRetailInfo, sellingSpeedMultiplier, weatherUntil] = await Promise.all([
             getExecutives(),
             getResourcesRetailInfo(auth.realmId),
             getWeather(auth.realmId)
         ]);
+        assertCurrentUpdate(generation);
 
         return {
             ...auth,
@@ -175,6 +198,19 @@ export const RegionData = (() => {
             weatherUntil,
             timestamp: new Date().toISOString()
         };
+    };
+
+    const fetchFullRegionData = () => {
+        if (updateSuspended) return Promise.reject(new Error('正在切换领域，请稍后更新。'));
+        // 只合并在途任务，不缓存成功结果；超过 30 秒允许后续调用重新尝试。
+        if (pendingUpdate && Date.now() - pendingStartedAt < 30 * 1000) return pendingUpdate;
+        if (pendingUpdate) invalidatePendingUpdate();
+        pendingStartedAt = Date.now();
+        const request = loadFullRegionData(updateGeneration).finally(() => {
+            if (pendingUpdate === request) pendingUpdate = null;
+        });
+        pendingUpdate = request;
+        return request;
     };
 
     // 截取到不完整高管数据时保留旧值，不把缺失技能误算为零。
@@ -192,6 +228,7 @@ export const RegionData = (() => {
     };
 
     return {
+        setUpdateSuspended,
         getExecutiveBonusesFromResponse,
         fetchFullRegionData,
         getCurrentRealmId: async () => (await getAuthInfo()).realmId

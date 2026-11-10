@@ -1454,7 +1454,8 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                         if (network && typeof network.requestJson === 'function') {
                             data = await network.requestJson(`/api/v2/companies/me/note/${relayId}/`);
                         } else {
-                            const res = await fetch(`/api/v2/companies/me/note/${relayId}/`);
+                            const url = `/api/v2/companies/me/note/${relayId}/`;
+                            const res = await fetch(url, Network.getRequestOptions(url));
                             if (!res.ok) throw new Error(`HTTP ${res.status}`);
                             data = await res.json();
                         }
@@ -1900,7 +1901,6 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
             const updateConfigs = {
                 'region': {
                     action: async () => {
-                        await RegionData.getCurrentRealmId();
                         return await RegionData.fetchFullRegionData();
                     },
                     statusKey: 'r1',
@@ -3365,7 +3365,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 }
 
                 const url = `https://www.simcompanies.com/api/v3/resources/${SRC.companyId}/`;
-                const response = await fetch(url);
+                const response = await fetch(url, Network.getRequestOptions(url));
                 const data = await response.json();
                 const now = Date.now();
 
@@ -3473,7 +3473,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 }
 
                 const url = `https://www.simcompanies.com/api/v2/contracts-outgoing/`;
-                const response = await fetch(url);
+                const response = await fetch(url, Network.getRequestOptions(url));
                 const data = await response.json();
                 const now = Date.now();
 
@@ -3582,7 +3582,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 }
 
                 const url = `https://www.simcompanies.com/api/v2/contracts-incoming/`;
-                const response = await fetch(url);
+                const response = await fetch(url, Network.getRequestOptions(url));
                 const json = await response.json();
                 const data = json.incomingContracts;
                 const now = Date.now();
@@ -3691,7 +3691,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 }
 
                 const url = `https://www.simcompanies.com/api/v2/companies/${SRC.companyId}/market-orders/`;
-                const response = await fetch(url);
+                const response = await fetch(url, Network.getRequestOptions(url));
                 const data = await response.json();
                 const now = Date.now();
 

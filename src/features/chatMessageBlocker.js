@@ -377,7 +377,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
     window.scChatBlockImportFromGame = async () => {
         let ids;
         try {
-            const resp = await fetch('/api/v2/contacts/', { credentials: 'same-origin' });
+            const url = '/api/v2/contacts/';
+            const resp = await fetch(url, window.__SC_Network.getRequestOptions(url, { credentials: 'same-origin' }));
             if (!resp.ok) return { ok: false, error: 'HTTP ' + resp.status };
             const data = await resp.json();
             ids = Array.isArray(data && data.ignoringCompanies) ? data.ignoringCompanies : [];
