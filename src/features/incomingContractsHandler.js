@@ -1332,7 +1332,7 @@ const { SCXXCS, PROFIT_PER_BUILDING_LEVEL, RETAIL_ADJUSTMENT } = state;
 
                 try {
                     const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
-                    const response = await fetch(url, { signal: controller.signal });
+                    const response = await fetch(url, Network.getRequestOptions(url, { signal: controller.signal }));
                     if (response.status === 429) {
                         const retryAt = Date.now() + MARKET_RATE_LIMIT_COOLDOWN_MS;
                         marketRateLimitUntil = retryAt;

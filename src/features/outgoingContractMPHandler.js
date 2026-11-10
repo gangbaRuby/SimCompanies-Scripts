@@ -357,7 +357,7 @@ registerExportInfo({
             const timeout = setTimeout(() => controller.abort(), 10000);
             try {
                 const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
-                const resp = await fetch(url, { signal: controller.signal });
+                const resp = await fetch(url, window.__SC_Network.getRequestOptions(url, { signal: controller.signal }));
                 const json = await resp.json();
                 mpLog('refreshMarketData 完成, 耗时:', Date.now() - tStart, 'ms, 状态:', resp.status, '条数:', Array.isArray(json) ? json.length : '非数组');
                 if (Array.isArray(json)) {

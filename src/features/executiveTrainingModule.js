@@ -474,7 +474,10 @@ import { registerExportInfo } from '../core/exportInfo.js';
                 const o = offers.find(x => x.slotPosition === internalSlot);
                 if (o) {
                     const f = found.find(x => x.offerId === o.id);
-                    if (f) { _fetch(`/api/v4/executives/${f.executiveId}/`).then(r => r.json()).then(renderSkillPanel); }
+                    if (f) {
+                        const url = `/api/v4/executives/${f.executiveId}/`;
+                        _fetch(url, window.__SC_Network.getRequestOptions(url)).then(r => r.json()).then(renderSkillPanel);
+                    }
                     else { renderSkillPanel(null, true); }
                 } else { renderSkillPanel(null, true); }
             }

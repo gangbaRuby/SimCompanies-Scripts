@@ -155,7 +155,8 @@ import { registerExportInfo } from '../core/exportInfo.js';
             document.addEventListener('keydown', handleEsc);
 
             // 4. 发起按需数据请求
-            fetch(EXEC_DETAIL_API(executiveId))
+            const url = EXEC_DETAIL_API(executiveId);
+            fetch(url, window.__SC_Network.getRequestOptions(url))
                 .then(res => res.json())
                 .then(data => {
                     // const workHistory = data.workHistory || [];
