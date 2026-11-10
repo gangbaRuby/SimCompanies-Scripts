@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动计算最大时利润
 // @namespace    https://github.com/gangbaRuby
-// @version      1.34.4
+// @version      1.35.0
 // @license      AGPL-3.0
 // @description  在商店计算自动计算最大时利润，在合同、交易所展示最大时利润
 // @author       Rabbit House
@@ -59,6 +59,21 @@
 
   // src/features/regionData.js
   var RegionData = /* @__PURE__ */ (() => {
+    let updateGeneration = 0;
+    let pendingUpdate = null;
+    let pendingStartedAt = 0;
+    let updateSuspended = false;
+    const invalidatePendingUpdate = () => {
+      updateGeneration++;
+      pendingUpdate = null;
+    };
+    const setUpdateSuspended = (suspended) => {
+      updateSuspended = suspended;
+      invalidatePendingUpdate();
+    };
+    const assertCurrentUpdate = (generation2) => {
+      if (generation2 !== updateGeneration) throw new Error("\u9886\u57DF\u6570\u636E\u66F4\u65B0\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u66F4\u65B0\u3002");
+    };
     const getAuthInfo = async () => {
       const Network3 = window.__SC_Network;
       const data2 = await Network3.requestJson("https://www.simcompanies.com/api/v3/companies/auth-data/");
@@ -86,11 +101,65 @@
       const Network3 = window.__SC_Network;
       const response = await Network3.requestJson("https://www.simcompanies.com/api/v3/companies/me/executives/");
       const data2 = response.executives;
+      return filterExecutives(data2);
+    };
+    const filterExecutives = (data2) => {
       const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1e3;
       const targetPositions = ["o", "f", "m", "t", "v", "y"];
       return data2.filter(
         (exec) => exec.currentWorkHistory && targetPositions.includes(exec.currentWorkHistory.position) && (!exec.strikeUntil || new Date(exec.strikeUntil) < /* @__PURE__ */ new Date()) && new Date(exec.currentWorkHistory.start) < threeHoursAgo && !exec.currentTraining
       );
+    };
+    const calculateExecutiveBonus = (executives, realmId) => {
+      let academyActive = 15;
+      let COO_Apprentice, CMO_Apprentice;
+      try {
+        const stored = localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && typeof parsed.academyActive === "number") {
+            academyActive = parsed.academyActive;
+          }
+        }
+      } catch (e) {
+        console.warn("\u26A0\uFE0F \u65E0\u6CD5\u89E3\u6790 SimcompaniesRetailCalculation \u6570\u636E\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u503C 15:", e);
+      }
+      const skills = executives.reduce((acc, exec) => {
+        if (exec.currentWorkHistory) {
+          acc[exec.currentWorkHistory.position] = exec.skills;
+        }
+        return acc;
+      }, {});
+      const safeSkill = (position, skillName) => skills[position]?.[skillName] || 0;
+      if (academyActive >= 15) {
+        COO_Apprentice = safeSkill("v", "coo") / 2;
+        CMO_Apprentice = safeSkill("y", "cmo") / 2;
+      } else if (academyActive >= 5) {
+        COO_Apprentice = safeSkill("v", "coo") / 2;
+        CMO_Apprentice = 0;
+      } else {
+        COO_Apprentice = 0;
+        CMO_Apprentice = 0;
+      }
+      let adminBonus = Math.floor(safeSkill("o", "coo") + COO_Apprentice + (safeSkill("f", "coo") + safeSkill("m", "coo") + safeSkill("t", "coo")) / 4);
+      if (adminBonus > 80) {
+        adminBonus = 80 + Math.floor((adminBonus - 80) / 2);
+      }
+      if (adminBonus > 60) {
+        adminBonus = 60 + Math.floor((adminBonus - 60) / 2);
+      }
+      let saleBonus = Math.floor(safeSkill("m", "cmo") + CMO_Apprentice + (safeSkill("o", "cmo") + safeSkill("f", "cmo") + safeSkill("t", "cmo")) / 4);
+      if (saleBonus > 80) {
+        saleBonus = 80 + Math.floor((saleBonus - 80) / 2);
+      }
+      if (saleBonus > 60) {
+        saleBonus = 60 + Math.floor((saleBonus - 60) / 2);
+      }
+      saleBonus = Math.floor(saleBonus / 3);
+      return {
+        saleBonus,
+        adminBonus
+      };
     };
     const getResourcesRetailInfo = async (realmId) => {
       const Network3 = window.__SC_Network;
@@ -124,82 +193,353 @@
         };
       }
     };
-    const fetchFullRegionData = async () => {
+    const loadFullRegionData = async (generation2) => {
       const auth = await getAuthInfo();
+      assertCurrentUpdate(generation2);
       const companies_by_company = await getCompanies_by_company(auth.realmId, auth.company);
+      assertCurrentUpdate(generation2);
       const [executives, resourcesRetailInfo, sellingSpeedMultiplier, weatherUntil] = await Promise.all([
         getExecutives(),
         getResourcesRetailInfo(auth.realmId),
         getWeather(auth.realmId)
       ]);
-      const calculateExecutiveBonus = (executives2) => {
-        let academyActive = 15;
-        let COO_Apprentice, CMO_Apprentice;
-        try {
-          const stored = localStorage.getItem(`SimcompaniesRetailCalculation_${auth.realmId}`);
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (parsed && typeof parsed.academyActive === "number") {
-              academyActive = parsed.academyActive;
-            }
-          }
-        } catch (e) {
-          console.warn("\u26A0\uFE0F \u65E0\u6CD5\u89E3\u6790 SimcompaniesRetailCalculation \u6570\u636E\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u503C 15:", e);
-        }
-        const skills = executives2.reduce((acc, exec) => {
-          if (exec.currentWorkHistory) {
-            acc[exec.currentWorkHistory.position] = exec.skills;
-          }
-          return acc;
-        }, {});
-        const safeSkill = (position, skillName) => skills[position]?.[skillName] || 0;
-        if (academyActive >= 15) {
-          COO_Apprentice = safeSkill("v", "coo") / 2;
-          CMO_Apprentice = safeSkill("y", "cmo") / 2;
-        } else if (academyActive >= 5) {
-          COO_Apprentice = safeSkill("v", "coo") / 2;
-          CMO_Apprentice = 0;
-        } else {
-          COO_Apprentice = 0;
-          CMO_Apprentice = 0;
-        }
-        let adminBonus = Math.floor(safeSkill("o", "coo") + COO_Apprentice + (safeSkill("f", "coo") + safeSkill("m", "coo") + safeSkill("t", "coo")) / 4);
-        if (adminBonus > 80) {
-          adminBonus = 80 + Math.floor((adminBonus - 80) / 2);
-        }
-        if (adminBonus > 60) {
-          adminBonus = 60 + Math.floor((adminBonus - 60) / 2);
-        }
-        let saleBonus = Math.floor(safeSkill("m", "cmo") + CMO_Apprentice + (safeSkill("o", "cmo") + safeSkill("f", "cmo") + safeSkill("t", "cmo")) / 4);
-        if (saleBonus > 80) {
-          saleBonus = 80 + Math.floor((saleBonus - 80) / 2);
-        }
-        if (saleBonus > 60) {
-          saleBonus = 60 + Math.floor((saleBonus - 60) / 2);
-        }
-        saleBonus = Math.floor(saleBonus / 3);
-        return {
-          saleBonus,
-          adminBonus
-        };
-      };
+      assertCurrentUpdate(generation2);
       return {
         ...auth,
         ...companies_by_company,
-        ...calculateExecutiveBonus(executives),
+        ...calculateExecutiveBonus(executives, auth.realmId),
         ResourcesRetailInfo: resourcesRetailInfo,
         sellingSpeedMultiplier,
         weatherUntil,
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
       };
     };
+    const fetchFullRegionData = () => {
+      if (updateSuspended) return Promise.reject(new Error("\u6B63\u5728\u5207\u6362\u9886\u57DF\uFF0C\u8BF7\u7A0D\u540E\u66F4\u65B0\u3002"));
+      if (pendingUpdate && Date.now() - pendingStartedAt < 30 * 1e3) return pendingUpdate;
+      if (pendingUpdate) invalidatePendingUpdate();
+      pendingStartedAt = Date.now();
+      const request = loadFullRegionData(updateGeneration).finally(() => {
+        if (pendingUpdate === request) pendingUpdate = null;
+      });
+      pendingUpdate = request;
+      return request;
+    };
+    const getExecutiveBonusesFromResponse = (response, realmId) => {
+      const list = response?.executives;
+      if (!Array.isArray(list) || list.some((exec) => !exec || typeof exec !== "object" || !Object.prototype.hasOwnProperty.call(exec, "currentWorkHistory") || exec.currentWorkHistory != null && (typeof exec.currentWorkHistory.position !== "string" || !Number.isFinite(Date.parse(exec.currentWorkHistory.start))))) return null;
+      const executives = filterExecutives(list);
+      if (executives.some((exec) => !Number.isFinite(exec.skills?.coo) || !Number.isFinite(exec.skills?.cmo))) return null;
+      return calculateExecutiveBonus(executives, realmId);
+    };
     return {
+      setUpdateSuspended,
+      getExecutiveBonusesFromResponse,
       fetchFullRegionData,
       getCurrentRealmId: async () => (await getAuthInfo()).realmId
     };
   })();
 
+  // src/core/regionDataCapture.js
+  function installRegionDataCapture() {
+    const marker = "__scRegionDataCaptureInstalled";
+    if (window[marker]) return;
+    window[marker] = true;
+    let sequence = 0;
+    let identity = null;
+    let identityEpoch = 0;
+    let lastIdentitySequence = 0;
+    const latestChallengeStarts = /* @__PURE__ */ new Map();
+    let pendingData = null;
+    const pendingSwitches = /* @__PURE__ */ new Set();
+    const lastApplied = /* @__PURE__ */ new Map();
+    const xhrRequests = /* @__PURE__ */ new WeakMap();
+    const validRealm = (realm) => realm === 0 || realm === 1 || realm === 2;
+    const validId = (id) => Number.isSafeInteger(id) && id > 0;
+    const object = (value) => value && typeof value === "object" && !Array.isArray(value);
+    function readCache(realmId) {
+      if (!validRealm(realmId)) return null;
+      try {
+        const data2 = JSON.parse(localStorage.getItem(`SimcompaniesRetailCalculation_${realmId}`));
+        return object(data2) ? data2 : null;
+      } catch {
+        return null;
+      }
+    }
+    function initialized(data2, realmId) {
+      return data2?.realmId === realmId && validId(data2.companyId) && typeof data2.company === "string" && (data2.timestamp === null || typeof data2.timestamp === "string" && Number.isFinite(Date.parse(data2.timestamp))) && ["salesModifier", "acceleration", "recreationBonus", "administration", "adminBonus", "saleBonus"].every((key) => Number.isFinite(data2[key])) && data2.economyState != null && Array.isArray(data2.ResourcesRetailInfo) && object(data2.sellingSpeedMultiplier);
+    }
+    function readIdentity() {
+      return pendingSwitches.size === 0 ? identity : null;
+    }
+    function classify(input, method) {
+      try {
+        const raw = typeof input === "string" ? input : input?.url || input?.href;
+        const url = new URL(raw, location.href);
+        if (url.origin !== location.origin) return null;
+        const path = url.pathname;
+        const verb = String(method || input?.method || "GET").toUpperCase();
+        const route2 = (fields) => ({ ...fields, path: path.replace(/\/$/, "") });
+        let match2;
+        if (verb === "POST" && (match2 = path.match(/^\/api\/v1\/realm\/(\d+)\/sync\/?$/))) {
+          return route2({ type: "sync", realmId: Number(match2[1]) });
+        }
+        if (verb === "POST" && /^\/api\/v1\/challenges\/restart\/?$/.test(path)) {
+          return route2({ type: "restart", realmId: 2 });
+        }
+        if (verb !== "GET") return null;
+        if (/^\/api\/v3\/companies\/auth-data\/?$/.test(path)) return route2({ type: "auth" });
+        if (match2 = path.match(/^\/api\/v3\/companies-by-company\/([012])\/[^/]+\/?$/)) {
+          return route2({ type: "company", realmId: Number(match2[1]) });
+        }
+        if (match2 = path.match(/^\/api\/v3\/companies\/(me|\d+)\/executives\/?$/)) {
+          return route2({ type: "executives", companyId: match2[1] === "me" ? null : Number(match2[1]) });
+        }
+        if (match2 = path.match(/^\/api\/v4\/([012])\/resources-retail-info\/?$/)) {
+          return route2({ type: "retail", realmId: Number(match2[1]) });
+        }
+        if (match2 = path.match(/^\/api\/v2\/weather\/([012])\/?$/)) {
+          return route2({ type: "weather", realmId: Number(match2[1]) });
+        }
+      } catch {
+      }
+      return null;
+    }
+    function beginRequest(input, method) {
+      const route2 = classify(input, method);
+      if (!route2) return null;
+      const order = ++sequence;
+      const duringSwitch = pendingSwitches.size > 0;
+      if (route2.type === "sync" || route2.type === "auth" || route2.type === "restart") {
+        identity = null;
+        pendingData = null;
+        identityEpoch++;
+        lastIdentitySequence = order;
+      }
+      if (route2.type === "sync" || route2.type === "restart") {
+        pendingSwitches.add(order);
+        RegionData.setUpdateSuspended(true);
+      }
+      const owner = readIdentity();
+      const realmId = route2.realmId ?? owner?.realmId;
+      return {
+        ...route2,
+        order,
+        epoch: identityEpoch,
+        owner,
+        duringSwitch,
+        // 完整刷新已保存更新快照时，不再用更早发出的局部响应覆盖它。
+        cacheTimestamp: readCache(realmId)?.timestamp,
+        authTimestamps: route2.type === "auth" ? [0, 1, 2].map((realm) => readCache(realm)?.timestamp) : null
+      };
+    }
+    function merge(request, realmId, fields, companyId = null) {
+      if (!validRealm(realmId)) return;
+      const owner = request.type === "auth" ? identity : request.owner;
+      const ownsRealm = owner?.realmId === realmId && request.epoch === identityEpoch;
+      if (realmId === 2 && (!ownsRealm || !owner.challengeStart)) return;
+      const data2 = readCache(realmId);
+      if (realmId === 2 && data2?.companyId === owner.companyId && Date.parse(data2.challengeStart) > Date.parse(owner.challengeStart)) return;
+      const timestamp = request.type === "auth" ? request.authTimestamps[realmId] : request.cacheTimestamp;
+      if (data2?.timestamp !== timestamp) {
+        pendingData = null;
+        return;
+      }
+      const sameCompany = data2?.realmId === realmId && data2.companyId === (companyId ?? owner?.companyId);
+      const sameAttempt = realmId !== 2 || sameCompany && data2.challengeStart === owner.challengeStart;
+      const zeroBonuses = ownsRealm && owner.executivesUnavailable ? { adminBonus: 0, saleBonus: 0 } : {};
+      if (realmId === 2) zeroBonuses.recreationBonus = 0;
+      const patch = Object.fromEntries(Object.entries({ ...fields, ...sameCompany ? zeroBonuses : {} }).filter(([, value]) => value !== void 0));
+      if (!Object.keys(patch).length) return;
+      const ready = initialized({ ...data2, ...sameCompany ? zeroBonuses : {} }, realmId) && sameAttempt && (companyId === null || sameCompany);
+      if (!ready) {
+        if (!ownsRealm || !owner.executivesUnavailable || realmId !== 2 && validId(data2?.companyId) && !sameCompany) return;
+        if (!pendingData) pendingData = {
+          realmId,
+          companyId: owner.companyId,
+          company: owner.company,
+          ...realmId === 2 ? { challengeStart: owner.challengeStart } : {},
+          ...zeroBonuses,
+          // 尚无完整更新时间；原更新器将 null 视为过期，不推迟主动更新。
+          timestamp: null
+        };
+        const key2 = `${realmId}:${owner.companyId}:${request.type}`;
+        if ((lastApplied.get(key2) || 0) > request.order) return;
+        Object.assign(pendingData, patch, zeroBonuses);
+        lastApplied.set(key2, request.order);
+        if (!initialized(pendingData, realmId)) return;
+        const existing = sameCompany && sameAttempt ? data2 : {};
+        const complete = { ...existing, ...pendingData };
+        if (typeof existing.timestamp === "string" && Number.isFinite(Date.parse(existing.timestamp))) {
+          complete.timestamp = existing.timestamp;
+        }
+        localStorage.setItem(`SimcompaniesRetailCalculation_${realmId}`, JSON.stringify(complete));
+        pendingData = null;
+        return;
+      }
+      const key = `${realmId}:${data2.companyId}:${request.type}`;
+      if ((lastApplied.get(key) || 0) > request.order) return;
+      localStorage.setItem(`SimcompaniesRetailCalculation_${realmId}`, JSON.stringify({ ...data2, ...patch }));
+      lastApplied.set(key, request.order);
+    }
+    function handleResponse(request, data2) {
+      try {
+        if (request.type === "auth" || request.type === "sync") {
+          const auth = data2?.authCompany;
+          if (request.order !== lastIdentitySequence || request.epoch !== identityEpoch || request.duringSwitch || pendingSwitches.size > 0) return;
+          if (!validRealm(auth?.realmId) || !validId(auth.companyId) || typeof auth.company !== "string" || !auth.company) return;
+          if (request.type === "sync" && auth.realmId !== request.realmId) return;
+          const challengeStart = typeof auth.challengeStart === "string" && Number.isFinite(Date.parse(auth.challengeStart)) ? new Date(auth.challengeStart).toISOString() : null;
+          if (auth.realmId === 2 && !challengeStart) return;
+          if (auth.realmId === 2) {
+            const cached = readCache(2);
+            const latest = Math.max(
+              latestChallengeStarts.get(auth.companyId) || 0,
+              cached?.companyId === auth.companyId ? Date.parse(cached.challengeStart) || 0 : 0
+            );
+            if (Date.parse(challengeStart) < latest) return;
+            latestChallengeStarts.set(auth.companyId, Date.parse(challengeStart));
+          }
+          identity = {
+            realmId: auth.realmId,
+            companyId: auth.companyId,
+            company: auth.company,
+            challengeStart,
+            executivesUnavailable: auth.realmId === 2 || data2.levelInfo?.capabilities?.executives === false
+          };
+          lastIdentitySequence = request.order;
+          if (request.type === "sync") return;
+          merge(request, auth.realmId, {
+            company: auth.company,
+            salesModifier: Number.isFinite(auth.salesModifier) ? auth.salesModifier : void 0,
+            economyState: Number.isInteger(data2.temporals?.economyState) ? data2.temporals.economyState : void 0,
+            acceleration: Number.isFinite(data2.levelInfo?.acceleration?.multiplier) ? data2.levelInfo.acceleration.multiplier : void 0
+          }, auth.companyId);
+        } else if (request.type === "company") {
+          const info = data2?.companyPublicInfo;
+          const owner = request.owner;
+          if (!owner || request.epoch !== identityEpoch || owner.realmId !== request.realmId || info?.id !== owner.companyId || info.realmId != null && info.realmId !== request.realmId) return;
+          merge(request, request.realmId, {
+            recreationBonus: Number.isFinite(data2.infrastructure?.recreationBonus) ? data2.infrastructure.recreationBonus : void 0,
+            administration: Number.isFinite(data2.infrastructure?.administrationOverhead) ? data2.infrastructure.administrationOverhead : void 0
+          }, owner.companyId);
+        } else if (request.type === "executives") {
+          const owner = request.owner;
+          if (!owner || request.epoch !== identityEpoch || request.companyId !== null && request.companyId !== owner.companyId) return;
+          const list = data2?.executives;
+          if (owner.executivesUnavailable) return;
+          if (!Array.isArray(list)) return;
+          const employed = list.filter((exec) => exec?.currentWorkHistory != null);
+          if (employed.some((exec) => exec.currentWorkHistory.employerId != null && exec.currentWorkHistory.employerId !== owner.companyId)) return;
+          if (request.companyId === null && (!employed.length || employed.some((exec) => exec.currentWorkHistory.employerId !== owner.companyId))) return;
+          const bonuses = RegionData.getExecutiveBonusesFromResponse(data2, owner.realmId);
+          if (bonuses) merge(request, owner.realmId, bonuses, owner.companyId);
+        } else if (request.type === "retail") {
+          if (!Array.isArray(data2) || !data2.length || data2.some((item) => !object(item) || !Number.isInteger(item.dbLetter) || !Number.isFinite(item.averagePrice) || !Number.isFinite(item.saturation) || item.quality != null && !Number.isInteger(item.quality))) return;
+          merge(request, request.realmId, {
+            ResourcesRetailInfo: data2.map(({ quality, dbLetter, averagePrice, saturation }) => ({ quality, dbLetter, averagePrice, saturation }))
+          });
+        } else if (request.type === "weather") {
+          if (!object(data2) || !Number.isFinite(Date.parse(data2.until)) || !Number.isFinite(data2.sellingSpeedMultiplier) || data2.sellingSpeedMultiplier <= 0 || data2.realm != null && data2.realm !== request.realmId) return;
+          merge(request, request.realmId, {
+            sellingSpeedMultiplier: { Until: data2.until, sellingSpeedMultiplier: data2.sellingSpeedMultiplier }
+          });
+        }
+      } catch {
+      }
+    }
+    function matchesResponse(request, responseUrl) {
+      try {
+        if (!responseUrl) return false;
+        const url = new URL(responseUrl, location.href);
+        return url.origin === location.origin && url.pathname.replace(/\/$/, "") === request.path;
+      } catch {
+        return false;
+      }
+    }
+    function finishRequest(request, data2) {
+      if (!request || request.finished) return;
+      request.finished = true;
+      if (pendingSwitches.delete(request.order)) {
+        RegionData.setUpdateSuspended(pendingSwitches.size > 0);
+      }
+      if (data2 !== void 0) handleResponse(request, data2);
+    }
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      let request = null;
+      try {
+        request = beginRequest(args[0], args[1]?.method);
+      } catch {
+      }
+      let pending2;
+      try {
+        pending2 = originalFetch.apply(this, args);
+      } catch (error) {
+        finishRequest(request);
+        throw error;
+      }
+      if (!request) return pending2;
+      return pending2.then((response) => {
+        if (response.ok && matchesResponse(request, response.url)) {
+          try {
+            response.clone().json().then((data2) => finishRequest(request, data2), () => finishRequest(request));
+          } catch {
+            finishRequest(request);
+          }
+        } else finishRequest(request);
+        return response;
+      }, (error) => {
+        finishRequest(request);
+        throw error;
+      });
+    };
+    const originalOpen = window.XMLHttpRequest.prototype.open;
+    const originalSend = window.XMLHttpRequest.prototype.send;
+    window.XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      xhrRequests.get(this)?.cleanup?.();
+      const result = originalOpen.call(this, method, url, ...rest);
+      xhrRequests.set(this, { method, url });
+      return result;
+    };
+    window.XMLHttpRequest.prototype.send = function(...args) {
+      const entry = xhrRequests.get(this);
+      let request = null;
+      try {
+        if (entry && !entry.cleanup) request = beginRequest(entry.url, entry.method);
+      } catch {
+      }
+      if (request) {
+        const cleanup = () => {
+          for (const type of ["load", "error", "abort", "timeout", "loadend"]) this.removeEventListener(type, onEnd);
+          entry.cleanup = null;
+          finishRequest(request);
+        };
+        const onEnd = (event) => {
+          try {
+            if (event.type === "load" && xhrRequests.get(this) === entry && this.status >= 200 && this.status < 300 && matchesResponse(request, this.responseURL)) {
+              if (this.responseType === "json") finishRequest(request, this.response);
+              else if (!this.responseType || this.responseType === "text") finishRequest(request, JSON.parse(this.responseText));
+            }
+          } catch {
+          } finally {
+            cleanup();
+          }
+        };
+        entry.cleanup = cleanup;
+        for (const type of ["load", "error", "abort", "timeout", "loadend"]) this.addEventListener(type, onEnd);
+      }
+      try {
+        return originalSend.apply(this, args);
+      } catch (error) {
+        entry?.cleanup?.();
+        throw error;
+      }
+    };
+  }
+
   // src/core/requestHooks.js
+  installRegionDataCapture();
   (function() {
     const buildings_URL = "/api/v2/companies/me/buildings/";
     const uc = "l";
@@ -4555,7 +4895,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (e.key === "Escape") closeModal();
       };
       document.addEventListener("keydown", handleEsc);
-      fetch(EXEC_DETAIL_API(executiveId)).then((res) => res.json()).then((data2) => {
+      const url = EXEC_DETAIL_API(executiveId);
+      fetch(url, window.__SC_Network.getRequestOptions(url)).then((res) => res.json()).then((data2) => {
         const trainings = data2.trainings || [];
         let total = { coo: 0, cfo: 0, cmo: 0, cto: 0 };
         const d15r = DM();
@@ -5146,7 +5487,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         if (o) {
           const f = found.find((x) => x.offerId === o.id);
           if (f) {
-            _fetch(`/api/v4/executives/${f.executiveId}/`).then((r) => r.json()).then(renderSkillPanel);
+            const url = `/api/v4/executives/${f.executiveId}/`;
+            _fetch(url, window.__SC_Network.getRequestOptions(url)).then((r) => r.json()).then(renderSkillPanel);
           } else {
             renderSkillPanel(null, true);
           }
@@ -5501,7 +5843,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       const timeout = setTimeout(() => controller.abort(), 1e4);
       try {
         const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
-        const resp = await fetch(url, { signal: controller.signal });
+        const resp = await fetch(url, window.__SC_Network.getRequestOptions(url, { signal: controller.signal }));
         const json = await resp.json();
         mpLog("refreshMarketData \u5B8C\u6210, \u8017\u65F6:", Date.now() - tStart, "ms, \u72B6\u6001:", resp.status, "\u6761\u6570:", Array.isArray(json) ? json.length : "\u975E\u6570\u7EC4");
         if (Array.isArray(json)) {
@@ -6317,7 +6659,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
   var state2 = {
     hasNewVersion: void 0,
     latestVersion: void 0,
-    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.34.4",
+    localVersion: typeof GM_info !== "undefined" ? GM_info.script.version : "1.35.0",
     SCXXCS: 0,
     PROFIT_PER_BUILDING_LEVEL: 370,
     RETAIL_ADJUSTMENT: {
@@ -6376,13 +6718,16 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             case "r2":
               data2 = localStorage.getItem(KEYS.region(1));
               break;
+            case "challenge":
+              data2 = localStorage.getItem(KEYS.region(2));
+              break;
             case "constants":
               data2 = localStorage.getItem(KEYS.constants);
               break;
           }
           const parsedData = data2 ? JSON.parse(data2) : null;
           return {
-            text: parsedData ? formatTime(parsedData.timestamp) : "\u65E0\u6570\u636E",
+            text: parsedData ? parsedData.timestamp === null ? "\u5DF2\u83B7\u53D6" : formatTime(parsedData.timestamp) : "\u65E0\u6570\u636E",
             className: parsedData ? "SimcompaniesRetailCalculation-has-data" : "SimcompaniesRetailCalculation-no-data"
           };
         } catch (error) {
@@ -6397,28 +6742,94 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
 
   // src/core/network.js
   var Network2 = /* @__PURE__ */ (() => {
+    const protectionDigest = (value) => {
+      const input = new TextEncoder().encode(value + "a");
+      const bytes = new Uint8Array(Math.ceil((input.length + 9) / 64) * 64);
+      bytes.set(input);
+      bytes[input.length] = 128;
+      const view = new DataView(bytes.buffer);
+      view.setUint32(bytes.length - 8, input.length * 8, true);
+      view.setUint32(bytes.length - 4, Math.floor(input.length / 536870912), true);
+      const state3 = [1732584193, 4023233417, 2562383102, 271733878];
+      const shifts = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+      for (let offset = 0; offset < bytes.length; offset += 64) {
+        let [a, b, c, d] = state3;
+        for (let step = 0; step < 64; step++) {
+          const round = step >>> 4;
+          const mix = round === 0 ? b & c | ~b & d : round === 1 ? d & b | ~d & c : round === 2 ? b ^ c ^ d : c ^ (b | ~d);
+          const word = round === 0 ? step : round === 1 ? (5 * step + 1) % 16 : round === 2 ? (3 * step + 5) % 16 : 7 * step % 16;
+          const sum = a + mix + Math.floor(Math.abs(Math.sin(step + 1)) * 4294967296) + view.getUint32(offset + word * 4, true) | 0;
+          const shift = shifts[round * 4 + step % 4];
+          const next = b + (sum << shift | sum >>> 32 - shift) | 0;
+          [a, b, c, d] = [d, next, b, c];
+        }
+        [a, b, c, d].forEach((value2, index) => {
+          state3[index] = state3[index] + value2 | 0;
+        });
+      }
+      const alphabet = "0123456789abceef";
+      return state3.map((word) => [0, 8, 16, 24].map((shift) => {
+        const byte = word >>> shift & 255;
+        return alphabet[byte >>> 4] + alphabet[byte & 15];
+      }).join("")).join("");
+    };
+    const getRequestOptions = (url, options = {}) => {
+      const target = new URL(url, location.href);
+      const method = String(options.method || "GET").toUpperCase();
+      if (method === "GET" && target.origin === location.origin && target.pathname.startsWith("/api/")) {
+        const timestamp = Date.now();
+        const relative = String(url).replace(/^(?:https?:)?\/\/[^/?#]+/i, "").split("#")[0];
+        const requestPath = relative.startsWith("/") ? relative : target.pathname + target.search;
+        const headers = new Headers(options.headers);
+        if (!headers.has("Accept")) headers.set("Accept", "application/json, text/plain, */*");
+        headers.set("X-Ts", String(timestamp));
+        headers.set("X-Prot", protectionDigest(timestamp + requestPath));
+        headers.set("X-tz-offset", String((/* @__PURE__ */ new Date()).getTimezoneOffset()));
+        return {
+          ...options,
+          method: "GET",
+          credentials: options.credentials ?? "same-origin",
+          headers
+        };
+      }
+      return options;
+    };
     const makeRequest = async (url, responseType, retryCount) => {
       try {
-        const res = await fetch(url, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" }
-        });
-        if (!res.ok) throw new Error(`HTTP\u9519\u8BEF ${res.status}`);
+        const options = getRequestOptions(url, { method: "GET" });
+        if (!options.headers) options.headers = { "Content-Type": "application/json" };
+        const res = await fetch(url, options);
+        const cfMitigated = res.headers.get("cf-mitigated");
+        if (!res.ok || cfMitigated?.toLowerCase() === "challenge") {
+          throw Object.assign(new Error(`HTTP\u9519\u8BEF ${res.status}`), {
+            status: res.status,
+            contentType: res.headers.get("content-type"),
+            cfMitigated,
+            cfRay: res.headers.get("cf-ray")
+          });
+        }
         if (responseType === "json") {
           return await res.json();
         } else {
           return await res.text();
         }
       } catch (err) {
-        if (retryCount > 0) {
+        if (retryCount > 0 && err.status !== 401 && err.status !== 403 && err.cfMitigated?.toLowerCase() !== "challenge") {
           console.warn(`\u8BF7\u6C42\u9519\u8BEF\u6216\u89E3\u6790\u5931\u8D25 ${url}, \u91CD\u8BD5\u4E2D... (${retryCount})`);
           return makeRequest(url, responseType, retryCount - 1);
         } else {
-          throw new Error(`\u6700\u7EC8\u8BF7\u6C42\u5931\u8D25: ${err}`);
+          throw Object.assign(new Error(`\u6700\u7EC8\u8BF7\u6C42\u5931\u8D25: ${err}`), {
+            cause: err,
+            status: err.status,
+            contentType: err.contentType,
+            cfMitigated: err.cfMitigated,
+            cfRay: err.cfRay
+          });
         }
       }
     };
     return {
+      getRequestOptions,
       // 获取JSON数据
       requestJson: (url, retryCount = 3) => makeRequest(url, "json", retryCount),
       // 获取原始文本
@@ -10716,7 +11127,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         }, MARKET_FETCH_TIMEOUT_MS);
         try {
           const url = `https://www.simcompanies.com/api/v3/market/all/${realmId}/${resourceId}/`;
-          const response = await fetch(url, { signal: controller.signal });
+          const response = await fetch(url, Network2.getRequestOptions(url, { signal: controller.signal }));
           if (response.status === 429) {
             const retryAt = Date.now() + MARKET_RATE_LIMIT_COOLDOWN_MS;
             marketRateLimitUntil = retryAt;
@@ -12969,7 +13380,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
     window.scChatBlockImportFromGame = async () => {
       let ids;
       try {
-        const resp = await fetch("/api/v2/contacts/", { credentials: "same-origin" });
+        const url = "/api/v2/contacts/";
+        const resp = await fetch(url, window.__SC_Network.getRequestOptions(url, { credentials: "same-origin" }));
         if (!resp.ok) return { ok: false, error: "HTTP " + resp.status };
         const data2 = await resp.json();
         ids = Array.isArray(data2 && data2.ignoringCompanies) ? data2.ignoringCompanies : [];
@@ -15555,9 +15967,10 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
       let intendedLeft = null;
       let intendedBottom = null;
       const typeDisplayNames = {
-        r1: "R1",
-        r2: "R2",
-        constants: "\u57FA\u672C"
+        r1: "R1\u6570\u636E",
+        r2: "R2\u6570\u636E",
+        challenge: "\u6311\u6218\u9886\u57DF",
+        constants: "\u57FA\u672C\u6570\u636E"
       };
       const injectStyles = () => {
         const style2 = document.createElement("style");
@@ -15987,7 +16400,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
           row.className = "SimcompaniesRetailCalculation-data-row";
           const label = document.createElement("span");
           label.className = "SimcompaniesRetailCalculation-region-label";
-          label.textContent = `${typeDisplayNames[type]}\u6570\u636E\uFF1A`;
+          label.textContent = `${typeDisplayNames[type]}\uFF1A`;
           const status = document.createElement("span");
           status.className = "SimcompaniesRetailCalculation-region-status";
           statusElements[type] = status;
@@ -16383,6 +16796,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         mainMenu.append(
           createStatusRow("r1"),
           createStatusRow("r2"),
+          createStatusRow("challenge"),
           createStatusRow("constants")
         );
         const btnGroup = document.createElement("div");
@@ -16764,7 +17178,8 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
               if (network && typeof network.requestJson === "function") {
                 data2 = await network.requestJson(`/api/v2/companies/me/note/${relayId}/`);
               } else {
-                const res = await fetch(`/api/v2/companies/me/note/${relayId}/`);
+                const url = `/api/v2/companies/me/note/${relayId}/`;
+                const res = await fetch(url, Network2.getRequestOptions(url));
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 data2 = await res.json();
               }
@@ -16840,7 +17255,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         content.style.visibility = "visible";
       };
       const refreshStatus = () => {
-        ["r1", "r2", "constants"].forEach((type) => {
+        ["r1", "r2", "challenge", "constants"].forEach((type) => {
           const { text, className } = Storage.getFormattedStatus(type);
           statusElements[type].textContent = text;
           statusElements[type].className = `SimcompaniesRetailCalculation-region-status ${className}`;
@@ -17123,7 +17538,6 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
         const updateConfigs = {
           "region": {
             action: async () => {
-              await RegionData.getCurrentRealmId();
               return await RegionData.fetchFullRegionData();
             },
             statusKey: "r1",
@@ -18403,7 +18817,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             return;
           }
           const url = `https://www.simcompanies.com/api/v3/resources/${SRC.companyId}/`;
-          const response = await fetch(url);
+          const response = await fetch(url, Network2.getRequestOptions(url));
           const data2 = await response.json();
           const now = Date.now();
           const workerCode = `
@@ -18503,7 +18917,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             return;
           }
           const url = `https://www.simcompanies.com/api/v2/contracts-outgoing/`;
-          const response = await fetch(url);
+          const response = await fetch(url, Network2.getRequestOptions(url));
           const data2 = await response.json();
           const now = Date.now();
           const workerCode = `
@@ -18604,7 +19018,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             return;
           }
           const url = `https://www.simcompanies.com/api/v2/contracts-incoming/`;
-          const response = await fetch(url);
+          const response = await fetch(url, Network2.getRequestOptions(url));
           const json = await response.json();
           const data2 = json.incomingContracts;
           const now = Date.now();
@@ -18706,7 +19120,7 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
             return;
           }
           const url = `https://www.simcompanies.com/api/v2/companies/${SRC.companyId}/market-orders/`;
-          const response = await fetch(url);
+          const response = await fetch(url, Network2.getRequestOptions(url));
           const data2 = await response.json();
           const now = Date.now();
           const workerCode = `
@@ -21017,4 +21431,4 @@ ${shortage.map((entry) => `:re-${entry.kind}: x${entry.amount.toLocaleString("en
   })();
 })();
 
-// @changelog 再次修改“聊天室输入框自动扩大”引起的问题；优化“出库合同MP-?%”逻辑
+// @changelog 优化数据请求
