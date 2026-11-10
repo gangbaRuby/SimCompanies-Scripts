@@ -10,6 +10,6 @@
     "release": "node scripts/release.js"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.2"
   }
 }
