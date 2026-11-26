@@ -17,6 +17,7 @@ import './features/warehouseRetailProfit.js';
 import './features/chatAccessibility.js';
 import './features/chatMessageBlocker.js';
 import './features/chatEmojiPicker.js';
+import './features/chatHistoryScroll.js';
 import './features/executiveBoardroom.js';
 import './features/reversePurchasePrice.js';
 import { Network } from './core/network.js';
@@ -729,6 +730,9 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                     if (typeof window.scChatBlockRefresh === 'function') {
                         window.scChatBlockRefresh();
                     }
+                    if (key === 'chatHistoryScroll') {
+                        window.SC_Modules?.chatHistoryScroll?.refresh();
+                    }
                 };
 
                 // 初始状态下手动更新一次文字，避免显示空白
@@ -1205,6 +1209,7 @@ import { registerExportInfo, downloadExportData, downloadSettingsData, parseSett
                 { type: 'toggle', key: 'snipboardPreview', label: 'Snipboard图片预览', defaultEnabled: true },
                 { type: 'toggle', key: 'chatInputExpander', label: '聊天输入框自动扩大（测试）', defaultEnabled: true, subContent: createChatInputHeightControls },
                 { type: 'toggle', key: 'chatEmojiPicker', label: '聊天表情选择器', defaultEnabled: true },
+                { type: 'toggle', key: 'chatHistoryScroll', label: '上滚加载聊天历史' },
             ];
             const ITEMS_PER_PAGE = 5;
             let currentPage = 0;
